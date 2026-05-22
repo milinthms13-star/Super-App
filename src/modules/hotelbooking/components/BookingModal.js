@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import "../HotelBooking.css";
 
 const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) => {
@@ -9,11 +9,9 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
     roomType: hotel?.rooms?.[0]?.type || "",
     specialRequests: "",
   });
-
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Calculate pricing details
   const nights = useMemo(() => {
     if (checkIn && checkOut) {
       return Math.max(1, Math.ceil((new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60 * 24)));
@@ -22,8 +20,9 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
   }, [checkIn, checkOut]);
 
   const selectedRoom = useMemo(() => {
-    return hotel?.rooms?.find(r => r.type === formData.roomType);
+    return hotel?.rooms?.find((room) => room.type === formData.roomType);
   }, [hotel, formData.roomType]);
+
   const selectedRoomAvailable = useMemo(() => {
     if (!selectedRoom) return true;
     if (typeof selectedRoom.available === "boolean") return selectedRoom.available;
@@ -31,12 +30,11 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
     return true;
   }, [selectedRoom]);
 
-  const pricePerNight = selectedRoom?.price || hotel?.price || 0;
+  const pricePerNight = Number(selectedRoom?.price ?? selectedRoom?.basePrice ?? hotel?.price ?? 0);
   const totalPrice = pricePerNight * nights;
-  const gst = Math.round(totalPrice * 0.05); // 5% GST
+  const gst = Math.round(totalPrice * 0.05);
   const finalTotal = totalPrice + gst;
 
-  // Validation logic
   const validateForm = () => {
     const newErrors = {};
 
@@ -69,13 +67,13 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
-    // Clear error for this field when user starts typing
+
     if (errors[name]) {
-      setErrors(prev => ({
+      setErrors((prev) => ({
         ...prev,
         [name]: "",
       }));
@@ -114,13 +112,10 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
         createdAt: new Date().toISOString(),
       };
 
-      // Call the parent's onSubmit handler
       await onSubmit(bookingData);
-      
       onClose();
     } catch (error) {
-      console.error("Booking submission error:", error);
-      setErrors(prev => ({
+      setErrors((prev) => ({
         ...prev,
         submit: error.message || "Failed to submit booking. Please try again.",
       }));
@@ -136,21 +131,15 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
       <div className="hotel-booking-modal">
         <div className="hotel-booking-modal-header">
           <h2>Book {hotel.name}</h2>
-          <button
-            type="button"
-            className="hotel-booking-modal-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ✕
+          <button type="button" className="hotel-booking-modal-close" onClick={onClose} aria-label="Close">
+            x
           </button>
         </div>
 
         <div className="hotel-booking-modal-body">
           <form onSubmit={handleSubmit}>
-            {/* Booking Summary */}
             <div className="hotel-booking-booking-summary">
-              <h3>📅 Booking Details</h3>
+              <h3>Booking Details</h3>
               <div className="hotel-booking-summary-row">
                 <span>Check-in:</span>
                 <strong>{new Date(checkIn).toLocaleDateString()}</strong>
@@ -169,9 +158,8 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
               </div>
             </div>
 
-            {/* Guest Information */}
             <div className="hotel-booking-form-section">
-              <h3>👤 Guest Information</h3>
+              <h3>Guest Information</h3>
 
               <div className="hotel-booking-form-group">
                 <label htmlFor="guestName">Full Name *</label>
@@ -217,9 +205,8 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
               </div>
             </div>
 
-            {/* Room Selection */}
             <div className="hotel-booking-form-section">
-              <h3>🏠 Room Selection</h3>
+              <h3>Room Selection</h3>
 
               <div className="hotel-booking-form-group">
                 <label htmlFor="roomType">Room Type *</label>
@@ -231,19 +218,22 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
                   className={errors.roomType ? "hotel-booking-input-error" : ""}
                 >
                   <option value="">Select a room type</option>
-                  {hotel.rooms?.map(room => (
-                    <option key={room.type} value={room.type}>
-                      {room.type} - ₹{room.price.toLocaleString()}/night {(typeof room.availableRooms === "number" ? room.availableRooms > 0 : room.available) ? "✓ Available" : "⚠ Unavailable"}
-                    </option>
-                  ))}
+                  {hotel.rooms?.map((room) => {
+                    const roomPrice = Number(room?.price ?? room?.basePrice ?? 0);
+                    const roomAvailable = typeof room.availableRooms === "number" ? room.availableRooms > 0 : room.available;
+                    return (
+                      <option key={room.type} value={room.type}>
+                        {room.type} - INR {roomPrice.toLocaleString()}/night {roomAvailable ? "Available" : "Unavailable"}
+                      </option>
+                    );
+                  })}
                 </select>
                 {errors.roomType && <span className="hotel-booking-error-text">{errors.roomType}</span>}
               </div>
             </div>
 
-            {/* Special Requests */}
             <div className="hotel-booking-form-section">
-              <h3>📝 Special Requests (Optional)</h3>
+              <h3>Special Requests (Optional)</h3>
 
               <div className="hotel-booking-form-group">
                 <label htmlFor="specialRequests">Any special requirements?</label>
@@ -258,45 +248,29 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
               </div>
             </div>
 
-            {/* Price Breakdown */}
             <div className="hotel-booking-price-breakdown">
-              <h3>💰 Price Breakdown</h3>
+              <h3>Price Breakdown</h3>
               <div className="hotel-booking-price-row">
-                <span>₹{pricePerNight.toLocaleString()} × {nights} night(s)</span>
-                <strong>₹{totalPrice.toLocaleString()}</strong>
+                <span>INR {pricePerNight.toLocaleString()} x {nights} night(s)</span>
+                <strong>INR {totalPrice.toLocaleString()}</strong>
               </div>
               <div className="hotel-booking-price-row">
                 <span>GST (5%)</span>
-                <strong>₹{gst.toLocaleString()}</strong>
+                <strong>INR {gst.toLocaleString()}</strong>
               </div>
               <div className="hotel-booking-price-row hotel-booking-price-total">
                 <span>Total Amount</span>
-                <strong>₹{finalTotal.toLocaleString()}</strong>
+                <strong>INR {finalTotal.toLocaleString()}</strong>
               </div>
             </div>
 
-            {/* Error Message */}
-            {errors.submit && (
-              <div className="hotel-booking-error-banner">
-                {errors.submit}
-              </div>
-            )}
+            {errors.submit && <div className="hotel-booking-error-banner">{errors.submit}</div>}
 
-            {/* Submit Button */}
             <div className="hotel-booking-modal-actions">
-              <button
-                type="button"
-                className="hotel-booking-secondary-button"
-                onClick={onClose}
-                disabled={isSubmitting}
-              >
+              <button type="button" className="hotel-booking-secondary-button" onClick={onClose} disabled={isSubmitting}>
                 Cancel
               </button>
-              <button
-                type="submit"
-                className="hotel-booking-primary-button"
-                disabled={isSubmitting}
-              >
+              <button type="submit" className="hotel-booking-primary-button" disabled={isSubmitting}>
                 {isSubmitting ? "Submitting..." : "Confirm Booking"}
               </button>
             </div>

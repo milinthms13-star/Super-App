@@ -2,7 +2,7 @@ import React from "react";
 
 const HealthcareHero = ({ onBookDoctor, onBookLab }) => {
   return (
-    <section className="healthcare-hero">
+    <section className="healthcare-hero" data-testid="healthcare-hero">
       <div className="healthcare-hero-copy">
         <h1>NilaCare Complete Digital Healthcare Ecosystem</h1>
         <p>

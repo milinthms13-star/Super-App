@@ -26,6 +26,8 @@ const GulfModalShell = ({
   submitAttestation,
   attestationForm,
   setAttestationForm,
+  requestAttestationPayment,
+  paymentIntentInfo,
   submitLead,
   leadForm,
   setLeadForm,
@@ -33,13 +35,14 @@ const GulfModalShell = ({
   submitFraudReport,
   fraudForm,
   setFraudForm,
+  modalContainerRef,
 }) => {
   if (!activeModal) return null;
 
   if (activeModal === "visa") {
     return (
       <GulfModal activeModal={activeModal}>
-        <div className="gulf-services-modal-content">
+        <div className="gulf-services-modal-content" ref={modalContainerRef} role="dialog" aria-modal="true" tabIndex="-1">
           <button
             type="button"
             className="gulf-services-modal-close"
@@ -129,7 +132,7 @@ const GulfModalShell = ({
   if (activeModal === "jobs") {
     return (
       <GulfModal activeModal={activeModal} size="large">
-        <div className="gulf-services-modal-content gulf-services-modal-large">
+        <div className="gulf-services-modal-content gulf-services-modal-large" ref={modalContainerRef} role="dialog" aria-modal="true" tabIndex="-1">
           <button
             type="button"
             className="gulf-services-modal-close"
@@ -339,7 +342,7 @@ const GulfModalShell = ({
   if (activeModal === "attestation") {
     return (
       <GulfModal activeModal={activeModal}>
-        <div className="gulf-services-modal-content">
+        <div className="gulf-services-modal-content" ref={modalContainerRef} role="dialog" aria-modal="true" tabIndex="-1">
           <button
             type="button"
             className="gulf-services-modal-close"
@@ -409,6 +412,20 @@ const GulfModalShell = ({
                 />
               </label>
             </div>
+            {attestationForm.urgency !== "standard" ? (
+              <div className="gulf-services-payment-card">
+                <p>Expedited processing incurs an additional fee.</p>
+                <button type="button" className="btn btn-secondary" onClick={requestAttestationPayment} disabled={loading}>
+                  Create payment intent
+                </button>
+                {paymentIntentInfo ? (
+                  <div className="gulf-services-payment-info">
+                    <strong>Payment intent created.</strong>
+                    <pre>{JSON.stringify(paymentIntentInfo, null, 2)}</pre>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="gulf-services-form-actions">
               <button type="submit" className="btn btn-primary" disabled={loading}>
                 Submit request
@@ -426,7 +443,7 @@ const GulfModalShell = ({
   if (activeModal === "lead") {
     return (
       <GulfModal activeModal={activeModal}>
-        <div className="gulf-services-modal-content">
+        <div className="gulf-services-modal-content" ref={modalContainerRef} role="dialog" aria-modal="true" tabIndex="-1">
           <button
             type="button"
             className="gulf-services-modal-close"
@@ -501,7 +518,7 @@ const GulfModalShell = ({
   if (activeModal === "fraud") {
     return (
       <GulfModal activeModal={activeModal}>
-        <div className="gulf-services-modal-content">
+        <div className="gulf-services-modal-content" ref={modalContainerRef} role="dialog" aria-modal="true" tabIndex="-1">
           <button
             type="button"
             className="gulf-services-modal-close"

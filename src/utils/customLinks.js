@@ -44,6 +44,10 @@ export const normalizeCustomLink = (link = {}) => {
     title: String(link.title || preset.title || "").trim(),
     url: ensureProtocol(link.url || preset.url || ""),
     description: String(link.description || preset.description || "").trim(),
+    category: String(link.category || preset.category || "general").trim(),
+    pinned: Boolean(link.pinned),
+    usageCount: typeof link.usageCount === "number" ? link.usageCount : 0,
+    lastOpened: link.lastOpened || null,
   };
 };
 

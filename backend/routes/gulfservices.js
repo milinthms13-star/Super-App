@@ -212,6 +212,17 @@ const isMongoObjectId = (value = '') => /^[a-f\d]{24}$/i.test(String(value || ''
 const resolveUserId = (req) => String(req?.user?._id || req?.user?.id || '').trim();
 const resolveUserEmail = (req) => String(req?.user?.email || '').trim().toLowerCase();
 const resolveUserRole = (req) => String(req?.user?.role || req?.user?.registrationType || '').trim().toLowerCase();
+const parsePagination = (query = {}, defaults = {}) => {
+  const parsedPage = Number.parseInt(String(query.page || defaults.page || '1'), 10);
+  const parsedLimit = Number.parseInt(String(query.limit || defaults.limit || '25'), 10);
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const maxLimit = Number.isFinite(Number(defaults.maxLimit)) ? Number(defaults.maxLimit) : 200;
+  const fallbackLimit = Number.isFinite(Number(defaults.limit)) ? Number(defaults.limit) : 25;
+  const boundedLimit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : fallbackLimit;
+  const limit = Math.min(Math.max(boundedLimit, 1), maxLimit);
+  const skip = (page - 1) * limit;
+  return { page, limit, skip };
+};
 const averageHours = (records = [], startField, endField) => {
   const durations = records
     .map((item) => {
@@ -799,6 +810,7 @@ router.get('/applications/my', authenticate, async (req, res) => {
 router.get('/admin/applications', authenticate, verifyAdmin, async (req, res) => {
   try {
     const { visaStatus, country, search } = req.query;
+    const { page, limit, skip } = parsePagination(req.query, { page: 1, limit: 50, maxLimit: 500 });
     const filter = {};
     if (visaStatus) filter.visaStatus = String(visaStatus).trim();
     if (country) filter.country = String(country).trim();
@@ -807,8 +819,22 @@ router.get('/admin/applications', authenticate, verifyAdmin, async (req, res) =>
       filter.$or = [{ name: rx }, { phone: rx }, { passportNo: rx }, { jobTitle: rx }, { company: rx }];
     }
 
-    const applications = await GulfApplication.find(filter).sort({ createdAt: -1 }).limit(500).lean();
-    return res.json({ success: true, data: applications });
+    const [applications, totalCount] = await Promise.all([
+      GulfApplication.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      GulfApplication.countDocuments(filter),
+    ]);
+    const totalPages = Math.max(Math.ceil(totalCount / limit), 1);
+    return res.json({
+      success: true,
+      data: applications,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages,
+        hasNextPage: page < totalPages,
+      },
+    });
   } catch (error) {
     logger.error('gulf applications admin list error:', error);
     return res.status(500).json({ success: false, message: 'Unable to fetch admin Gulf applications.' });
@@ -1574,8 +1600,24 @@ router.post('/recruiters/apply', documentUploadLimiter, docUpload.single('kycDoc
 
 router.get('/admin/recruiters/pending', authenticate, verifyAdmin, async (req, res) => {
   try {
-    const pending = await GulfRecruiter.find({ status: 'pending' }).sort({ createdAt: -1 }).limit(200).lean();
-    return res.json({ success: true, data: pending });
+    const { page, limit, skip } = parsePagination(req.query, { page: 1, limit: 50, maxLimit: 200 });
+    const filter = { status: 'pending' };
+    const [pending, totalCount] = await Promise.all([
+      GulfRecruiter.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      GulfRecruiter.countDocuments(filter),
+    ]);
+    const totalPages = Math.max(Math.ceil(totalCount / limit), 1);
+    return res.json({
+      success: true,
+      data: pending,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages,
+        hasNextPage: page < totalPages,
+      },
+    });
   } catch (error) {
     logger.error('admin recruiters pending error:', error);
     res.status(500).json({ success: false, message: 'Unable to fetch pending recruiters.' });
@@ -1666,9 +1708,24 @@ router.post('/fraud/report', fraudReportLimiter, async (req, res) => {
 router.get('/admin/fraud-reports', authenticate, verifyAdmin, async (req, res) => {
   try {
     const status = String(req.query.status || '').trim();
+    const { page, limit, skip } = parsePagination(req.query, { page: 1, limit: 50, maxLimit: 500 });
     const filter = status ? { status } : {};
-    const reports = await GulfFraudReport.find(filter).sort({ createdAt: -1 }).limit(500).lean();
-    return res.json({ success: true, data: reports });
+    const [reports, totalCount] = await Promise.all([
+      GulfFraudReport.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      GulfFraudReport.countDocuments(filter),
+    ]);
+    const totalPages = Math.max(Math.ceil(totalCount / limit), 1);
+    return res.json({
+      success: true,
+      data: reports,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages,
+        hasNextPage: page < totalPages,
+      },
+    });
   } catch (error) {
     logger.error('admin fraud reports fetch error:', error);
     return res.status(500).json({ success: false, message: 'Unable to fetch fraud reports.' });

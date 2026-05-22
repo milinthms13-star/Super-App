@@ -144,6 +144,8 @@ const HyperlocalOrderSchema = new Schema(
     userPhone: { type: String, trim: true, default: '' },
     paymentMode: { type: String, trim: true, required: true },
     deliveryType: { type: String, trim: true, default: 'instant' },
+    deliveryWindowStart: { type: Date },
+    deliveryWindowEnd: { type: Date },
     address: {
       fullName: { type: String, trim: true, default: '' },
       phone: { type: String, trim: true, default: '' },
@@ -172,6 +174,7 @@ const HyperlocalOrderSchema = new Schema(
     prescriptionFile: { type: String, trim: true, default: '' },
     complaintStatus: { type: String, trim: true, default: '' },
     refundStatus: { type: String, trim: true, default: '' },
+    inventoryReserved: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
@@ -232,6 +235,7 @@ const HyperlocalWalletSchema = new Schema(
           type: { type: String, trim: true, default: 'credit' },
           amount: { type: Number, min: 0, default: 0 },
           note: { type: String, trim: true, default: '' },
+          paymentReference: { type: String, trim: true, default: '' },
           at: { type: Date, default: Date.now },
         },
       ],
@@ -302,6 +306,34 @@ const HyperlocalComplaintSchema = new Schema(
   { timestamps: true }
 );
 
+const HyperlocalOrderIdempotencyKeySchema = new Schema(
+  {
+    key: { type: String, required: true, trim: true, index: true },
+    userEmail: { type: String, required: true, trim: true, lowercase: true, index: true },
+    orderId: { type: String, trim: true, default: '' },
+    responseStatus: { type: Number, default: 201 },
+    responsePayload: { type: Schema.Types.Mixed, default: {} },
+    createdAt: { type: Date, default: Date.now, index: true },
+  },
+  { timestamps: true }
+);
+
+HyperlocalOrderIdempotencyKeySchema.index({ key: 1, userEmail: 1 }, { unique: true });
+
+const HyperlocalAdminAuditLogSchema = new Schema(
+  {
+    auditId: { type: String, required: true, unique: true, index: true },
+    actorEmail: { type: String, trim: true, lowercase: true, index: true },
+    actorRole: { type: String, trim: true, default: '' },
+    action: { type: String, required: true, trim: true, index: true },
+    targetType: { type: String, trim: true, default: '' },
+    targetId: { type: String, trim: true, default: '' },
+    meta: { type: Schema.Types.Mixed, default: {} },
+    at: { type: Date, default: Date.now, index: true },
+  },
+  { timestamps: true }
+);
+
 module.exports = {
   HyperlocalShop: mongoose.model('HyperlocalShop', HyperlocalShopSchema),
   HyperlocalAddress: mongoose.model('HyperlocalAddress', HyperlocalAddressSchema),
@@ -314,4 +346,6 @@ module.exports = {
   HyperlocalAdminConfig: mongoose.model('HyperlocalAdminConfig', HyperlocalAdminConfigSchema),
   HyperlocalRefund: mongoose.model('HyperlocalRefund', HyperlocalRefundSchema),
   HyperlocalComplaint: mongoose.model('HyperlocalComplaint', HyperlocalComplaintSchema),
+  HyperlocalOrderIdempotencyKey: mongoose.model('HyperlocalOrderIdempotencyKey', HyperlocalOrderIdempotencyKeySchema),
+  HyperlocalAdminAuditLog: mongoose.model('HyperlocalAdminAuditLog', HyperlocalAdminAuditLogSchema),
 };

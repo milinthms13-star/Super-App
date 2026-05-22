@@ -88,6 +88,8 @@ const DEFAULT_RECOMMENDATIONS = [
   },
 ];
 
+const API_BASE = "/api/nilaaihub";
+
 const NilaAIHub = () => {
   const { t } = useI18n();
   const chatInputRef = useRef(null);
@@ -116,25 +118,34 @@ const NilaAIHub = () => {
     window.localStorage.getItem("authToken") || window.localStorage.getItem("token") || "";
 
   useEffect(() => {
+    const savedConversation = window.localStorage.getItem("nilaAIHubSavedConversation");
+    if (savedConversation) {
+      try {
+        const parsed = JSON.parse(savedConversation);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setConversation(parsed);
+        }
+      } catch (_err) {
+        // Ignore invalid saved data.
+      }
+    }
+
     const token = getStoredAuthToken();
     fetchRecommendations(token);
-
-    if (token) {
-      initChatSession(token);
-    }
+    initChatSession(token);
   }, []);
 
   const initChatSession = async (token) => {
     try {
-      const { data } = await axios.post(
-        "/api/ecommerce/ai-chat/init",
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const config = token
+        ? {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        : {};
+
+      const { data } = await axios.post(`${API_BASE}/ai-chat/init`, {}, config);
 
       const nextSessionId = data.data?.sessionId;
       if (nextSessionId) {
@@ -142,7 +153,7 @@ const NilaAIHub = () => {
       }
       return nextSessionId;
     } catch (error) {
-      console.warn("Unable to initialize AI chat session:", error?.response?.data || error.message);
+      console.warn("Unable to initialize Nila AI Hub session:", error?.response?.data || error.message);
       return null;
     }
   };
@@ -152,8 +163,8 @@ const NilaAIHub = () => {
     setRecommendationsError("");
     try {
       const url = token
-        ? "/api/ecommerce/recommendations/personalized?limit=6"
-        : "/api/ecommerce/recommendations/trending?limit=6";
+        ? `${API_BASE}/recommendations/personalized?limit=6`
+        : `${API_BASE}/recommendations/trending?limit=6`;
       const response = await axios.get(url, {
         headers: token
           ? {
@@ -303,10 +314,6 @@ const NilaAIHub = () => {
     const token = getStoredAuthToken();
 
     try {
-      if (!token) {
-        throw new Error("unauthenticated");
-      }
-
       let activeSessionId = sessionId;
       if (!activeSessionId) {
         activeSessionId = await initChatSession(token);
@@ -316,8 +323,16 @@ const NilaAIHub = () => {
         throw new Error("no-session");
       }
 
+      const config = token
+        ? {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        : {};
+
       const response = await axios.post(
-        "/api/ecommerce/ai-chat/message",
+        `${API_BASE}/ai-chat/message`,
         {
           sessionId: activeSessionId,
           message: trimmedQuery,
@@ -325,11 +340,7 @@ const NilaAIHub = () => {
             topic: activeTopic,
           },
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        config
       );
 
       const payload = response.data?.data;
@@ -346,14 +357,17 @@ const NilaAIHub = () => {
       ]);
       setSuggestedActions(actions);
       setQuery("");
+      setSessionId(activeSessionId);
     } catch (submitError) {
-      if (submitError.message === "unauthenticated" || submitError?.response?.status === 401) {
+      if (submitError?.response?.status === 401) {
         setError(t("nilaaihub.loginRequired", "Sign in to use the full AI chat experience. Guest mode still offers helpful guidance."));
       } else {
-        setError(t(
-          "nilaaihub.chatError",
-          "We couldn't process that right now. Try again or select another topic."
-        ));
+        setError(
+          t(
+            "nilaaihub.chatError",
+            "We couldn't process that right now. Try again or select another topic."
+          )
+        );
       }
 
       const fallbackResponse = generateLocalAssistantResponse(trimmedQuery);
@@ -419,6 +433,12 @@ const NilaAIHub = () => {
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleQuerySubmit();
+                }
+              }}
               placeholder={t('nilaaihub.search.placeholder')}
               aria-label={t('nilaaihub.search.placeholder')}
             />

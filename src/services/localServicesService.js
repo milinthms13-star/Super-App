@@ -46,6 +46,11 @@ export const localServicesService = {
     return response.data?.data || null;
   },
 
+  createPackageRequest: async (payload) => {
+    const response = await axios.post(`${BASE}/package-requests`, payload);
+    return response.data?.data || null;
+  },
+
   getTrackingByPhone: async (phone) => {
     const response = await axios.get(`${BASE}/tracking${buildQuery({ phone })}`);
     return response.data?.data || [];

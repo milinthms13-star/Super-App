@@ -173,7 +173,7 @@ const DoctorConsultation = ({
   };
 
   return (
-    <section className="healthcare-section">
+    <section className="healthcare-section" data-testid="doctor-consultation">
       <div className="healthcare-section-heading">
         <h2>Doctor Consultation</h2>
         <p>Book clinic or online video consultations with profile, slot, and confirmation flow.</p>
@@ -189,6 +189,7 @@ const DoctorConsultation = ({
         <label className="healthcare-field">
           <span>Specialty</span>
           <select
+            data-testid="specialty-select"
             value={selectedSpecialty}
             onChange={(event) => setSelectedSpecialty(event.target.value)}
             aria-label="Filter doctors by specialty"
@@ -203,18 +204,18 @@ const DoctorConsultation = ({
       </div>
 
       <div className="healthcare-consultation-grid">
-        <div className="healthcare-doctors-list">
+        <div className="healthcare-doctors-list" data-testid="doctor-list">
           {loading ? <p>Loading doctors...</p> : null}
           {!loading && filteredDoctors.length === 0 ? <p>No doctors available for the selected specialty.</p> : null}
 
           {filteredDoctors.map((doctor) => (
-            <article key={doctor.id} className="healthcare-doctor-card">
-              <strong>{doctor.name}</strong>
+            <article key={doctor.id} className="healthcare-doctor-card" data-testid="doctor-card">
+              <strong data-testid="doctor-name">{doctor.name}</strong>
               <span>
-                {doctor.specialty} | {doctor.experienceYears} years | INR {doctor.consultationFee}
+                <span data-testid="doctor-specialty">{doctor.specialty}</span> | {doctor.experienceYears} years | INR {doctor.consultationFee}
               </span>
               <span>
-                Rating {doctor.rating} ({doctor.reviewsCount} reviews)
+                <span data-testid="doctor-rating">Rating {doctor.rating}</span> ({doctor.reviewsCount} reviews)
               </span>
               <span>{doctor.qualifications}</span>
               <span>{doctor.clinicAddress}</span>

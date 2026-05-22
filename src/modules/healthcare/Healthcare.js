@@ -5,6 +5,7 @@ import DoctorConsultation from "./components/DoctorConsultation";
 import ElderlyCare from "./components/ElderlyCare";
 import EmergencySOS from "./components/EmergencySOS";
 import FamilyProfiles from "./components/FamilyProfiles";
+import HealthcareAIAssistant from "./components/HealthcareAIAssistant";
 import Healthcare10Home from "./Healthcare10Home";
 import HealthcareHero from "./components/HealthcareHero";
 import HealthcareNav from "./components/HealthcareNav";
@@ -49,6 +50,10 @@ const Healthcare = () => {
   const [pharmacyOrders, setPharmacyOrders] = useState([]);
   const [adminApplications, setAdminApplications] = useState([]);
   const [recordAuditLog, setRecordAuditLog] = useState([]);
+  const [recordAuditPagination, setRecordAuditPagination] = useState(null);
+  const [queuedOfflineCount, setQueuedOfflineCount] = useState(0);
+  const [deadLetterCount, setDeadLetterCount] = useState(0);
+  const [opsMetrics, setOpsMetrics] = useState(null);
 
   const pushNotification = useCallback((notification) => {
     setNotifications((previous) => [
@@ -99,6 +104,42 @@ const Healthcare = () => {
       setPartnerApplications(Array.isArray(response.partnerApplications) ? response.partnerApplications : []);
       setPharmacyOrders(Array.isArray(response.pharmacyOrders) ? response.pharmacyOrders : []);
       setPartnerDashboard(response.partnerDashboard || null);
+      const auditResponse = await healthcareApi.getRecordAuditLogs({ page: 1, limit: 25 });
+      const auditRows = auditResponse?.rows || [];
+      setRecordAuditLog(
+        Array.isArray(auditRows)
+          ? auditRows.map((entry) => ({
+              id: entry.id || entry._id || `audit-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+              eventType: entry.eventType || entry.action || "record_event",
+              recordId: entry.recordId || entry.resourceId || "",
+              recordTitle: entry.recordTitle || entry.metadata?.fileName || "Medical record",
+              actor: entry.actor || entry.actorId || "System",
+              details: entry.details || "",
+              createdAt: entry.createdAt || new Date().toISOString(),
+            }))
+          : []
+      );
+      setRecordAuditPagination(auditResponse?.pagination || null);
+      const queuedActions = healthcareApi.getQueuedOfflineActions();
+      setQueuedOfflineCount(Array.isArray(queuedActions) ? queuedActions.length : 0);
+      const deadLetterActions = healthcareApi.getDeadLetterOfflineActions();
+      setDeadLetterCount(Array.isArray(deadLetterActions) ? deadLetterActions.length : 0);
+      let userIsAdmin = false;
+      try {
+        const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+        userIsAdmin =
+          currentUser?.role === "admin" ||
+          currentUser?.registrationType === "admin" ||
+          (Array.isArray(currentUser?.roles) && currentUser.roles.includes("admin"));
+      } catch (_error) {
+        userIsAdmin = false;
+      }
+      if (userIsAdmin) {
+        const metrics = await healthcareApi.getOpsMetrics();
+        setOpsMetrics(metrics || null);
+      } else {
+        setOpsMetrics(null);
+      }
       const summaryResponse = await healthcareApi.getHealthcareSummary();
       setDashboardSummary({
         appointments: Number(summaryResponse?.appointments ?? 0),
@@ -393,11 +434,40 @@ const Healthcare = () => {
           ? {
               ...item,
               deletedAt: new Date().toISOString(),
+              isDeleted: true,
               status: "archived",
             }
           : item
       )
     );
+  };
+
+  const handleRestoreRecord = async (recordId) => {
+    const restored = await healthcareApi.restoreRecord(recordId);
+    setRecords((previous) =>
+      previous.map((item) =>
+        item.id === recordId
+          ? {
+              ...item,
+              ...restored,
+              deletedAt: null,
+              isDeleted: false,
+              status: "active",
+            }
+          : item
+      )
+    );
+    const record = records.find((item) => item.id === recordId);
+    appendRecordAudit("record_restored", record || restored, "Record restored from archive.");
+  };
+
+  const handleRenewRecordConsent = async (recordId, payload) => {
+    const updated = await healthcareApi.renewRecordConsent(recordId, payload);
+    setRecords((previous) =>
+      previous.map((item) => (item.id === recordId ? { ...item, ...updated } : item))
+    );
+    const record = records.find((item) => item.id === recordId);
+    appendRecordAudit("consent_renewed", record || updated, "Record consent renewed.");
   };
 
   const handlePreviewRecord = async (record) => {
@@ -511,6 +581,14 @@ const Healthcare = () => {
     const updated = await healthcareApi.updateEmergencyLocation(payload);
     setEmergencyIncidents((previous) =>
       previous.map((item) => (item.id === payload.incidentId ? { ...item, ...updated } : item))
+    );
+    return updated;
+  };
+
+  const handleUpdateIncident = async (incidentId, payload) => {
+    const updated = await healthcareApi.updateEmergencyIncident(incidentId, payload);
+    setEmergencyIncidents((previous) =>
+      previous.map((item) => (item.id === incidentId ? { ...item, ...updated } : item))
     );
     return updated;
   };
@@ -634,6 +712,45 @@ const Healthcare = () => {
     setPartnerDashboard(dashboard);
   };
 
+  const handleRetryDeadLetterSync = async () => {
+    await healthcareApi.retryDeadLetterOfflineActions();
+    const queuedActions = healthcareApi.getQueuedOfflineActions();
+    setQueuedOfflineCount(Array.isArray(queuedActions) ? queuedActions.length : 0);
+    const deadLetterActions = healthcareApi.getDeadLetterOfflineActions();
+    setDeadLetterCount(Array.isArray(deadLetterActions) ? deadLetterActions.length : 0);
+    pushNotification({
+      title: "Offline sync retry started",
+      message: "Dead-letter actions were requeued for retry.",
+      notificationType: "system",
+    });
+  };
+
+  const handleRunRetentionPurge = async () => {
+    const result = await healthcareApi.runRetentionPurge(300);
+    const metrics = await healthcareApi.getOpsMetrics();
+    setOpsMetrics(metrics || null);
+    pushNotification({
+      title: "Retention purge completed",
+      message: `Purged ${Number(result?.purged || 0)} archived record(s).`,
+      notificationType: "system",
+    });
+    return result;
+  };
+
+  const handleAskHealthcareAssistant = async (question) => {
+    const response = await healthcareApi.askHealthcareAssistant({
+      question,
+      context: {
+        upcomingAppointments: appointments.filter((item) =>
+          ["requested", "booked", "confirmed", "rescheduled", "in_progress"].includes(String(item.status || "").toLowerCase())
+        ).length,
+        activeRefills: refillReminders.filter((item) => item.active !== false).length,
+        openIncidents: emergencyIncidents.filter((item) => String(item.status || "").toLowerCase() !== "resolved").length,
+      },
+    });
+    return response;
+  };
+
   const familyMemberOptions = [
     "Self",
     ...familyProfiles.map((profile) => profile.name || profile.relation).filter(Boolean),
@@ -641,7 +758,7 @@ const Healthcare = () => {
 
   if (activeSection === "home") {
     return (
-      <div className="healthcare-shell">
+      <div className="healthcare-shell" data-testid="healthcare-module">
         <Healthcare10Home
           onSelect={handleSelectPrimaryAction}
           summary={dashboardSummary}
@@ -654,7 +771,7 @@ const Healthcare = () => {
   }
 
   return (
-    <div className="healthcare-shell">
+    <div className="healthcare-shell" data-testid="healthcare-module">
       <HealthcareHero onBookDoctor={() => setActiveSection("consultation")} onBookLab={() => setActiveSection("lab")} />
 
       <HealthcareNav sections={HEALTHCARE_SECTIONS} activeSection={activeSection} onChange={setActiveSection} />
@@ -668,6 +785,27 @@ const Healthcare = () => {
       {errorMessage ? (
         <div className="healthcare-inline-alert healthcare-error" role="alert">
           {errorMessage}
+        </div>
+      ) : null}
+
+      {queuedOfflineCount > 0 ? (
+        <div className="healthcare-inline-alert" role="status">
+          {queuedOfflineCount} action(s) queued offline and will sync automatically once the network is stable.
+        </div>
+      ) : null}
+
+      {deadLetterCount > 0 ? (
+        <div className="healthcare-inline-alert healthcare-error" role="alert">
+          {deadLetterCount} offline action(s) require manual support review after repeated sync failures.
+          <button
+            type="button"
+            className="healthcare-secondary-button"
+            onClick={() => {
+              void handleRetryDeadLetterSync();
+            }}
+          >
+            Retry Sync
+          </button>
         </div>
       ) : null}
 
@@ -698,14 +836,17 @@ const Healthcare = () => {
 
       {activeSection === "records" ? (
         <RecordsVault
-          records={records.filter((item) => !item.deletedAt)}
+          records={records}
           familyMembers={familyMemberOptions}
           loading={loading}
           onCreateRecord={handleCreateRecord}
           onDeleteRecord={handleDeleteRecord}
+          onRestoreRecord={handleRestoreRecord}
+          onRenewConsent={handleRenewRecordConsent}
           onDownloadRecord={handleDownloadRecord}
           onPreviewRecord={handlePreviewRecord}
           auditLog={recordAuditLog}
+          auditPagination={recordAuditPagination}
         />
       ) : null}
 
@@ -747,6 +888,7 @@ const Healthcare = () => {
           incidents={emergencyIncidents}
           onCreateIncident={handleCreateIncident}
           onUpdateIncidentLocation={handleUpdateIncidentLocation}
+          onUpdateIncident={handleUpdateIncident}
         />
       ) : null}
 
@@ -768,10 +910,19 @@ const Healthcare = () => {
           dashboard={partnerDashboard}
           applications={partnerApplications}
           adminApplications={adminApplications}
+          opsMetrics={opsMetrics}
           loading={loading}
           isAdmin={isAdmin()}
           onCreateApplication={handleCreatePartnerApplication}
           onReviewApplication={handleReviewPartnerApplication}
+          onRunRetentionPurge={handleRunRetentionPurge}
+        />
+      ) : null}
+
+      {activeSection === "ai-assist" ? (
+        <HealthcareAIAssistant
+          loading={loading}
+          onAskAssistant={handleAskHealthcareAssistant}
         />
       ) : null}
     </div>

@@ -2,7 +2,7 @@ import React from "react";
 
 const ElderlyCare = ({ carePlans, governmentSchemes }) => {
   return (
-    <section className="healthcare-section">
+    <section className="healthcare-section" data-testid="elderly-care">
       <div className="healthcare-section-heading">
         <h2>Elderly Care and Assistance</h2>
         <p>Monthly care support, medicine refill reminders, insurance help, and government scheme awareness.</p>

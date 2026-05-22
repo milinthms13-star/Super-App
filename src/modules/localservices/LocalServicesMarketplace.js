@@ -342,20 +342,29 @@ const LocalServicesMarketplace = () => {
       const selectedItems = Object.entries(packageForm.items)
         .filter(([, enabled]) => enabled)
         .map(([name]) => name);
-      const localId = `LSP-${Date.now().toString().slice(-6)}`;
+      const request = await localServicesService.createPackageRequest({
+        eventType: packageForm.eventType,
+        eventDate: packageForm.eventDate,
+        items: selectedItems,
+        budget: Number(packageForm.budget || 0),
+        customerPhone: packageForm.customerPhone,
+        notes: packageForm.notes || "",
+      });
       setRequestHistory((current) => [
         {
-          id: localId,
+          id: request.packageCode,
           type: "Complete package",
-          target: `${packageForm.eventType} (${selectedItems.length} services)`,
-          status: "Coordinator assigned",
-          createdAt: new Date().toISOString(),
-          amount: Number(packageForm.budget || 0),
+          target: `${request.eventType} (${selectedItems.length} services)`,
+          status: request.status,
+          createdAt: request.createdAt,
+          amount: Number(request.budget || 0),
         },
         ...current,
       ]);
       setPackageForm(INITIAL_PACKAGE_FORM);
-      showToast("success", `${localId} package request created and coordinator assigned.`);
+      showToast("success", `${request.packageCode} package request created and coordinator assigned.`);
+    } catch (error) {
+      showToast("error", error?.response?.data?.message || "Unable to create package request.");
     } finally {
       setPackageSubmitting(false);
     }

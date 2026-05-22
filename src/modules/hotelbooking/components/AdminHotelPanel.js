@@ -25,11 +25,17 @@ const AdminHotelPanel = ({ currentUser }) => {
 
   const [showCommissionForm, setShowCommissionForm] = useState(false);
   const [commissionFormData, setCommissionFormData] = useState({ ...commissionSettings });
+  const [adminNotice, setAdminNotice] = useState(null);
+  const [confirmRejectHotelId, setConfirmRejectHotelId] = useState(null);
+
+  const notify = (message) => {
+    setAdminNotice(message);
+  };
 
   // Load admin data on mount
   useEffect(() => {
     loadAdminData();
-  }, []);
+  }, [apiCall]);
 
   const loadAdminData = async () => {
     try {
@@ -154,21 +160,23 @@ const AdminHotelPanel = ({ currentUser }) => {
         const updatedVerified = [...verifiedHotels, { ...approved, verified: true }];
         localStorage.setItem("admin_verified_hotels", JSON.stringify(updatedVerified));
 
-        alert(`✓ "${approved.businessName}" approved successfully!`);
+        notify(`"${approved.businessName}" approved successfully.`);
       }
     } catch (error) {
       console.error("Error approving hotel:", error);
-      alert("Failed to approve hotel");
+      notify("Failed to approve hotel");
     }
   };
 
   const handleRejectHotel = async (hotelId) => {
     const rejected = pendingHotels.find(h => h._id === hotelId);
     if (rejected) {
-      const confirmed = window.confirm(`Reject "${rejected.businessName}"? (This cannot be undone)`);
-      if (!confirmed) {
+      if (confirmRejectHotelId !== hotelId) {
+        setConfirmRejectHotelId(hotelId);
+        notify(`Click reject again to confirm for "${rejected.businessName}".`);
         return;
       }
+      setConfirmRejectHotelId(null);
 
       try {
         await apiCall(`/hotelbooking/admin/hotels/${hotelId}/status`, "PUT", {
@@ -188,7 +196,7 @@ const AdminHotelPanel = ({ currentUser }) => {
       const updatedPending = pendingHotels.filter(h => h._id !== hotelId);
       localStorage.setItem("admin_pending_hotels", JSON.stringify(updatedPending));
 
-      alert(`✕ "${rejected.businessName}" rejected.`);
+      notify(`"${rejected.businessName}" rejected.`);
     }
   };
 
@@ -203,10 +211,10 @@ const AdminHotelPanel = ({ currentUser }) => {
       setCommissionSettings(commissionFormData);
       localStorage.setItem("admin_commission_settings", JSON.stringify(commissionFormData));
       setShowCommissionForm(false);
-      alert("Commission settings updated successfully!");
+      notify("Commission settings updated successfully.");
     } catch (error) {
       console.error("Error updating settings:", error);
-      alert("Failed to update settings");
+      notify("Failed to update settings");
     }
   };
 
@@ -224,6 +232,7 @@ const AdminHotelPanel = ({ currentUser }) => {
         <h2>Admin Hotel Management</h2>
         <p>Manage properties, verify listings, and configure commission settings.</p>
       </div>
+      {adminNotice ? <div className="hotel-booking-success-banner">{adminNotice}</div> : null}
 
       {/* Admin Navigation */}
       <div className="hotel-booking-admin-nav">
@@ -232,28 +241,28 @@ const AdminHotelPanel = ({ currentUser }) => {
           className={`hotel-booking-admin-nav-item ${adminTab === "dashboard" ? "active" : ""}`}
           onClick={() => setAdminTab("dashboard")}
         >
-          📊 Dashboard
+          Dashboard
         </button>
         <button
           type="button"
           className={`hotel-booking-admin-nav-item ${adminTab === "verification" ? "active" : ""}`}
           onClick={() => setAdminTab("verification")}
         >
-          ✓ Verification ({stats.pendingApprovals})
+          Verification ({stats.pendingApprovals})
         </button>
         <button
           type="button"
           className={`hotel-booking-admin-nav-item ${adminTab === "commission" ? "active" : ""}`}
           onClick={() => setAdminTab("commission")}
         >
-          💰 Commission Settings
+          Commission Settings
         </button>
         <button
           type="button"
           className={`hotel-booking-admin-nav-item ${adminTab === "analytics" ? "active" : ""}`}
           onClick={() => setAdminTab("analytics")}
         >
-          📈 Analytics
+          Analytics
         </button>
       </div>
 
@@ -262,7 +271,7 @@ const AdminHotelPanel = ({ currentUser }) => {
         <div className="hotel-booking-admin-content">
           <div className="hotel-booking-admin-grid">
             <div className="hotel-booking-admin-card">
-              <div className="hotel-booking-admin-card-icon">🏨</div>
+              <div className="hotel-booking-admin-card-icon">HTL</div>
               <div className="hotel-booking-admin-card-content">
                 <div className="hotel-booking-admin-card-value">{stats.totalHotels}</div>
                 <div className="hotel-booking-admin-card-label">Total Properties</div>
@@ -273,7 +282,7 @@ const AdminHotelPanel = ({ currentUser }) => {
             </div>
 
             <div className="hotel-booking-admin-card">
-              <div className="hotel-booking-admin-card-icon">📅</div>
+              <div className="hotel-booking-admin-card-icon">BKG</div>
               <div className="hotel-booking-admin-card-content">
                 <div className="hotel-booking-admin-card-value">{stats.activeBookings}</div>
                 <div className="hotel-booking-admin-card-label">Active Bookings</div>
@@ -282,18 +291,18 @@ const AdminHotelPanel = ({ currentUser }) => {
             </div>
 
             <div className="hotel-booking-admin-card">
-              <div className="hotel-booking-admin-card-icon">💳</div>
+              <div className="hotel-booking-admin-card-icon">REV</div>
               <div className="hotel-booking-admin-card-content">
-                <div className="hotel-booking-admin-card-value">₹{(stats.monthlyRevenue / 100000).toFixed(1)}L</div>
+                <div className="hotel-booking-admin-card-value">INR {(stats.monthlyRevenue / 100000).toFixed(1)}L</div>
                 <div className="hotel-booking-admin-card-label">Monthly Revenue</div>
                 <div className="hotel-booking-admin-card-change">Gross booking value</div>
               </div>
             </div>
 
             <div className="hotel-booking-admin-card">
-              <div className="hotel-booking-admin-card-icon">💰</div>
+              <div className="hotel-booking-admin-card-icon">COM</div>
               <div className="hotel-booking-admin-card-content">
-                <div className="hotel-booking-admin-card-value">₹{(stats.commissionEarned / 1000).toFixed(0)}K</div>
+                <div className="hotel-booking-admin-card-value">INR {(stats.commissionEarned / 1000).toFixed(0)}K</div>
                 <div className="hotel-booking-admin-card-label">Commission Earned</div>
                 <div className="hotel-booking-admin-card-change">
                   {(stats.commissionEarned / stats.monthlyRevenue * 100).toFixed(1)}% rate
@@ -302,7 +311,7 @@ const AdminHotelPanel = ({ currentUser }) => {
             </div>
 
             <div className="hotel-booking-admin-card">
-              <div className="hotel-booking-admin-card-icon">👥</div>
+              <div className="hotel-booking-admin-card-icon">PRT</div>
               <div className="hotel-booking-admin-card-content">
                 <div className="hotel-booking-admin-card-value">{stats.totalPartners}</div>
                 <div className="hotel-booking-admin-card-label">Partner Vendors</div>
@@ -311,7 +320,7 @@ const AdminHotelPanel = ({ currentUser }) => {
             </div>
 
             <div className="hotel-booking-admin-card">
-              <div className="hotel-booking-admin-card-icon">⏳</div>
+              <div className="hotel-booking-admin-card-icon">PND</div>
               <div className="hotel-booking-admin-card-content">
                 <div className="hotel-booking-admin-card-value">{stats.pendingApprovals}</div>
                 <div className="hotel-booking-admin-card-label">Pending Approvals</div>
@@ -330,11 +339,11 @@ const AdminHotelPanel = ({ currentUser }) => {
                   <div key={hotel._id} className="hotel-booking-verified-hotel-item">
                     <div>
                       <h4>{hotel.businessName}</h4>
-                      <p>{hotel.location} • {hotel.type}</p>
+                      <p>{hotel.location}  {hotel.type}</p>
                       <div className="hotel-booking-verified-stats">
-                        <span>⭐ {hotel.rating || "—"}</span>
-                        <span>📅 {hotel.bookings} bookings</span>
-                        <span>💰 ₹{hotel.revenue?.toLocaleString()}</span>
+                        <span>Rating {hotel.rating || "N/A"}</span>
+                        <span>Bookings {hotel.bookings}</span>
+                        <span>Revenue INR {hotel.revenue?.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -352,7 +361,7 @@ const AdminHotelPanel = ({ currentUser }) => {
             <h3>Pending Hotel Approvals</h3>
             {pendingHotels.length === 0 ? (
               <div className="hotel-booking-admin-empty-state">
-                <p>✓ All hotels verified!</p>
+                <p>All hotels verified.</p>
                 <p>No pending approvals at this time</p>
               </div>
             ) : (
@@ -363,26 +372,26 @@ const AdminHotelPanel = ({ currentUser }) => {
                       <div>
                         <h3>{hotel.businessName}</h3>
                         <p className="hotel-booking-hotel-meta">
-                          {hotel.location} • {hotel.type}
+                          {hotel.location}  {hotel.type}
                         </p>
                       </div>
                       <span className="hotel-booking-status hotel-booking-status-pending">
-                        ⏳ Pending
+                        Pending
                       </span>
                     </div>
 
                     <div className="hotel-booking-pending-hotel-info">
                       <div>
-                        <strong>📸 Images:</strong> {hotel.images}
+                        <strong>Images:</strong> {hotel.images}
                       </div>
                       <div>
-                        <strong>🏠 Rooms:</strong> {hotel.rooms}
+                        <strong>Rooms:</strong> {hotel.rooms}
                       </div>
                       <div>
-                        <strong>☎️ Phone:</strong> {hotel.phone}
+                        <strong>Phone:</strong> {hotel.phone}
                       </div>
                       <div>
-                        <strong>📅 Submitted:</strong> {new Date(hotel.submittedDate).toLocaleDateString()}
+                        <strong>Submitted:</strong> {new Date(hotel.submittedDate).toLocaleDateString()}
                       </div>
                     </div>
 
@@ -392,17 +401,17 @@ const AdminHotelPanel = ({ currentUser }) => {
                         className="hotel-booking-primary-button"
                         onClick={() => handleApproveHotel(hotel._id)}
                       >
-                        ✓ Approve
+                        Approve
                       </button>
                       <button
                         type="button"
                         className="hotel-booking-danger-button"
                         onClick={() => handleRejectHotel(hotel._id)}
                       >
-                        ✕ Reject
+                        {confirmRejectHotelId === hotel._id ? "Confirm Reject" : "Reject"}
                       </button>
                       <button type="button" className="hotel-booking-secondary-button">
-                        📝 Request Info
+                        Request Info
                       </button>
                     </div>
                   </div>
@@ -424,13 +433,13 @@ const AdminHotelPanel = ({ currentUser }) => {
                 className="hotel-booking-primary-button"
                 onClick={() => setShowCommissionForm(true)}
               >
-                ⚙️ Configure Rates
+                Configure Rates
               </button>
             </div>
 
             <div className="hotel-booking-commission-grid">
               <div className="hotel-booking-commission-card">
-                <div className="hotel-booking-commission-icon">🏠</div>
+                <div className="hotel-booking-commission-icon">BSC</div>
                 <div className="hotel-booking-commission-info">
                   <h4>Basic Tier</h4>
                   <p>Standard hotels and homestays</p>
@@ -439,7 +448,7 @@ const AdminHotelPanel = ({ currentUser }) => {
               </div>
 
               <div className="hotel-booking-commission-card">
-                <div className="hotel-booking-commission-icon">📌</div>
+                <div className="hotel-booking-commission-icon">DEF</div>
                 <div className="hotel-booking-commission-info">
                   <h4>Default Rate</h4>
                   <p>Applied to all new listings</p>
@@ -448,7 +457,7 @@ const AdminHotelPanel = ({ currentUser }) => {
               </div>
 
               <div className="hotel-booking-commission-card">
-                <div className="hotel-booking-commission-icon">⭐</div>
+                <div className="hotel-booking-commission-icon">FTR</div>
                 <div className="hotel-booking-commission-info">
                   <h4>Featured Tier</h4>
                   <p>Premium listings with priority</p>
@@ -457,7 +466,7 @@ const AdminHotelPanel = ({ currentUser }) => {
               </div>
 
               <div className="hotel-booking-commission-card">
-                <div className="hotel-booking-commission-icon">👑</div>
+                <div className="hotel-booking-commission-icon">PRM</div>
                 <div className="hotel-booking-commission-info">
                   <h4>Premium Tier</h4>
                   <p>Top-performing, verified partners</p>
@@ -469,10 +478,10 @@ const AdminHotelPanel = ({ currentUser }) => {
             <div className="hotel-booking-commission-info-box">
               <h4>Commission Structure</h4>
               <ul>
-                <li>📊 Commissions are calculated on confirmed booking amount (before GST)</li>
-                <li>💳 Payouts processed monthly on 1st of next month</li>
-                <li>🛡️ Chargebacks and refunds adjusted from next payout</li>
-                <li>📈 Volume discounts available for 100+ monthly bookings</li>
+                <li>Commissions are calculated on confirmed booking amount (before GST).</li>
+                <li>Payouts are processed monthly on the 1st of the next month.</li>
+                <li>Chargebacks and refunds are adjusted in the next payout cycle.</li>
+                <li>Volume discounts are available for 100+ monthly bookings.</li>
               </ul>
             </div>
           </div>
@@ -488,25 +497,25 @@ const AdminHotelPanel = ({ currentUser }) => {
               <div className="hotel-booking-analytics-card">
                 <h4>Booking Trends</h4>
                 <p className="hotel-booking-analytics-placeholder">
-                  📈 Detailed booking trends chart (Ready for API integration)
+                  Detailed booking trends chart (ready for API integration).
                 </p>
               </div>
               <div className="hotel-booking-analytics-card">
                 <h4>Revenue Distribution</h4>
                 <p className="hotel-booking-analytics-placeholder">
-                  💰 Revenue by location and property type (Ready for API integration)
+                  Revenue by location and property type (ready for API integration).
                 </p>
               </div>
               <div className="hotel-booking-analytics-card">
                 <h4>Partner Performance</h4>
                 <p className="hotel-booking-analytics-placeholder">
-                  ⭐ Top performing partners leaderboard (Ready for API integration)
+                  Top performing partners leaderboard (ready for API integration).
                 </p>
               </div>
               <div className="hotel-booking-analytics-card">
                 <h4>Customer Insights</h4>
                 <p className="hotel-booking-analytics-placeholder">
-                  👥 Customer demographics and preferences (Ready for API integration)
+                  Customer demographics and preferences (ready for API integration).
                 </p>
               </div>
             </div>
@@ -525,7 +534,7 @@ const AdminHotelPanel = ({ currentUser }) => {
                 className="hotel-booking-modal-close"
                 onClick={() => setShowCommissionForm(false)}
               >
-                ✕
+                x
               </button>
             </div>
 

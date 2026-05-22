@@ -225,6 +225,63 @@ const serializeOwnProfile = (profile) => {
   };
 };
 
+const calculateMatchScore = (viewerProfile, candidate) => {
+  if (!candidate) {
+    return 0;
+  }
+
+  let score = 0;
+  const normalized = (value) => String(value || '').trim().toLowerCase();
+  const pref = viewerProfile?.preferences || {};
+
+  const age = Number(candidate.age || 0);
+  const minAge = Number(pref.ageMin || 0);
+  const maxAge = Number(pref.ageMax || 0);
+  if (minAge && maxAge && age >= minAge && age <= maxAge) {
+    score += 20;
+  } else if (minAge && maxAge && age > 0) {
+    const distance = Math.min(Math.abs(age - minAge), Math.abs(age - maxAge));
+    if (distance <= 2) {
+      score += 10;
+    }
+  }
+
+  if (pref.religion && normalized(pref.religion) !== 'any' && normalized(candidate.religion) === normalized(pref.religion)) {
+    score += 15;
+  }
+
+  if (pref.caste && normalized(pref.caste) !== 'any' && normalized(candidate.caste) === normalized(pref.caste)) {
+    score += 10;
+  }
+
+  if (pref.location && normalized(pref.location) !== 'any' && normalized(candidate.location).includes(normalized(pref.location))) {
+    score += 10;
+  }
+
+  if (pref.education && normalized(pref.education) !== 'any' && normalized(candidate.education) === normalized(pref.education)) {
+    score += 10;
+  }
+
+  if (pref.profession && normalized(pref.profession) !== 'any' && normalized(candidate.profession) === normalized(pref.profession)) {
+    score += 10;
+  }
+
+  if (candidate.verificationStatus === 'verified') {
+    score += 10;
+  }
+
+  if (!candidate.privacy?.hidePhotos) {
+    score += 5;
+  }
+
+  if (!candidate.privacy?.hidePhone) {
+    score += 5;
+  }
+
+  score += Math.min(10, Number(candidate.profileViews || 0) / 100);
+  return Math.round(Math.min(100, score));
+};
+
 const serializePublicProfile = (profile, viewerProfile) => {
   if (!profile) {
     return null;
@@ -279,6 +336,7 @@ const serializePublicProfile = (profile, viewerProfile) => {
     profileViews: Number(profile.profileViews || 0),
     lastActive: profile.lastActive || null,
     lastActiveLabel: formatRelativeTime(profile.lastActive),
+    matchScore: calculateMatchScore(viewerProfile, profile),
   };
 };
 
@@ -718,6 +776,8 @@ router.get('/search', searchLimiter, async (req, res) => {
       verifiedOnly = 'true',
       search = '',
       limit = 100,
+      page = 1,
+      sortBy = 'recent',
     } = req.query;
 
     const query = {
@@ -778,16 +838,33 @@ router.get('/search', searchLimiter, async (req, res) => {
     }
 
     const numericLimit = Math.min(200, Math.max(1, Number(limit) || 100));
+    const numericPage = Math.max(1, Number(page) || 1);
+    const skip = (numericPage - 1) * numericLimit;
 
-    const profiles = await MatrimonialProfile.find(query)
-      .select('-messages -interests -reports')
-      .sort({ lastActive: -1, profileViews: -1 })
-      .limit(numericLimit);
+    const [totalCount, profiles] = await Promise.all([
+      MatrimonialProfile.countDocuments(query),
+      MatrimonialProfile.find(query)
+        .select('-messages -interests -reports')
+        .sort({ lastActive: -1, profileViews: -1 })
+        .skip(skip)
+        .limit(numericLimit),
+    ]);
+
+    let results = profiles.map((profile) => serializePublicProfile(profile, currentProfile));
+    if (String(sortBy).toLowerCase() === 'match') {
+      results = results.sort((left, right) => (right.matchScore || 0) - (left.matchScore || 0));
+    }
 
     res.json({
       success: true,
-      data: profiles.map((profile) => serializePublicProfile(profile, currentProfile)),
-      total: profiles.length,
+      data: results,
+      meta: {
+        page: numericPage,
+        limit: numericLimit,
+        total: totalCount,
+        count: results.length,
+        sortBy: String(sortBy).toLowerCase(),
+      },
     });
   } catch (error) {
     logger.error('Matrimonial search error:', error);

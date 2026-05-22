@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../../contexts/AppContext";
 import "../HotelBooking.css";
 
@@ -23,7 +23,7 @@ const HotelDetailsModal = ({ hotel, checkIn, checkOut, guests, onClose, onBook, 
         const response = await apiCall(`/hotelbooking/hotels/${hotel.id}/reviews`, "GET");
         if (!mounted) return;
         setReviews(Array.isArray(response?.data) ? response.data : []);
-      } catch (error) {
+      } catch (_error) {
         if (!mounted) return;
         setReviewError("Unable to load reviews right now.");
       } finally {
@@ -46,11 +46,11 @@ const HotelDetailsModal = ({ hotel, checkIn, checkOut, guests, onClose, onBook, 
           <div>
             <h2>{hotel.name}</h2>
             <p>
-              {hotel.location} • {hotel.propertyType || hotel.type} • {hotel.rating?.toFixed(1) || 0} ⭐
+              {hotel.location} | {hotel.propertyType || hotel.type} | Rating {hotel.rating?.toFixed(1) || 0}
             </p>
           </div>
           <button type="button" className="hotel-booking-modal-close" onClick={onClose} aria-label="Close">
-            ✕
+            x
           </button>
         </div>
 
@@ -60,6 +60,7 @@ const HotelDetailsModal = ({ hotel, checkIn, checkOut, guests, onClose, onBook, 
               <p>Fetching property details...</p>
             </div>
           )}
+
           <div className="hotel-booking-hotel-detail-gallery">
             {(hotel.images || []).slice(0, 3).map((src, index) => (
               <img key={index} src={src || "/api/placeholder/300/200"} alt={`${hotel.name} ${index + 1}`} />
@@ -86,14 +87,14 @@ const HotelDetailsModal = ({ hotel, checkIn, checkOut, guests, onClose, onBook, 
                   <div key={room.type} className="hotel-booking-room-card">
                     <div>
                       <strong>{room.type}</strong>
-                      <p>{room.bedType || 'Standard'} • Capacity {room.capacity || 1}</p>
-                      <p>₹{Number(room.basePrice || hotel.pricePerNight || hotel.price).toLocaleString()} / night</p>
+                      <p>{room.bedType || "Standard"} | Capacity {room.capacity || 1}</p>
+                      <p>INR {Number(room.basePrice || hotel.pricePerNight || hotel.price).toLocaleString()} / night</p>
                       <p>
                         {Number.isFinite(Number(room.availableRooms))
                           ? `${room.availableRooms} rooms left`
                           : room.available
-                          ? 'Available'
-                          : 'Check availability'}
+                          ? "Available"
+                          : "Check availability"}
                       </p>
                     </div>
                   </div>
@@ -108,11 +109,11 @@ const HotelDetailsModal = ({ hotel, checkIn, checkOut, guests, onClose, onBook, 
             <h3>Booking summary</h3>
             <div className="hotel-booking-summary-row">
               <span>Check-in</span>
-              <strong>{checkIn ? new Date(checkIn).toLocaleDateString() : 'Select dates'}</strong>
+              <strong>{checkIn ? new Date(checkIn).toLocaleDateString() : "Select dates"}</strong>
             </div>
             <div className="hotel-booking-summary-row">
               <span>Check-out</span>
-              <strong>{checkOut ? new Date(checkOut).toLocaleDateString() : 'Select dates'}</strong>
+              <strong>{checkOut ? new Date(checkOut).toLocaleDateString() : "Select dates"}</strong>
             </div>
             <div className="hotel-booking-summary-row">
               <span>Nights</span>
@@ -136,10 +137,10 @@ const HotelDetailsModal = ({ hotel, checkIn, checkOut, guests, onClose, onBook, 
               reviews.slice(0, 4).map((review) => (
                 <div key={review._id || review.id} className="hotel-booking-review-card">
                   <div className="hotel-booking-review-header">
-                    <strong>{review.guestName || 'Guest'}</strong>
-                    <span>⭐ {review.rating}</span>
+                    <strong>{review.guestName || "Guest"}</strong>
+                    <span>Rating {review.rating}</span>
                   </div>
-                  <p>{review.comment || 'No comment provided.'}</p>
+                  <p>{review.comment || "No comment provided."}</p>
                 </div>
               ))
             )}
@@ -153,13 +154,8 @@ const HotelDetailsModal = ({ hotel, checkIn, checkOut, guests, onClose, onBook, 
           <button type="button" className="hotel-booking-secondary-button" onClick={() => onCall(hotel)}>
             Call Property
           </button>
-          <button
-            type="button"
-            className="hotel-booking-primary-button"
-            onClick={() => onBook(hotel)}
-            disabled={!checkIn || !checkOut}
-          >
-            {checkIn && checkOut ? 'Book This Stay' : 'Select Dates to Book'}
+          <button type="button" className="hotel-booking-primary-button" onClick={() => onBook(hotel)} disabled={!checkIn || !checkOut}>
+            {checkIn && checkOut ? "Book This Stay" : "Select Dates to Book"}
           </button>
         </div>
       </div>

@@ -10,6 +10,12 @@ const healthcareRefillReminderSchema = new mongoose.Schema(
     nextRefillDate: { type: String, required: true, trim: true, index: true },
     reminderDaysBefore: { type: Number, default: 5, min: 1, max: 30 },
     active: { type: Boolean, default: true, index: true },
+    adherenceStatus: {
+      type: String,
+      enum: ['pending', 'met', 'missed'],
+      default: 'pending',
+    },
+    lastComplianceUpdate: { type: Date },
     lastNotifiedAt: { type: Date },
     channels: { type: [String], default: ['in_app'] },
   },

@@ -104,14 +104,25 @@ export const saveMatrimonialProfile = async ({ profile, preferences, photoFile }
   return response.data;
 };
 
-export const searchMatrimonialProfiles = async (filters = {}) => {
+export const searchMatrimonialProfiles = async (filters = {}, includeMeta = false) => {
   const params = buildSearchParams({
     ...filters,
     limit: filters.limit || 100,
+    page: filters.page || 1,
+    sortBy: filters.sortBy || 'recent',
   });
 
   const response = await matrimonialApi.get(`/search?${params.toString()}`);
-  return response.data?.data || [];
+  const data = response.data?.data || [];
+  const meta = response.data?.meta || {
+    page: Number(filters.page || 1),
+    limit: Number(filters.limit || 100),
+    total: data.length,
+    count: data.length,
+    sortBy: String(filters.sortBy || 'recent').toLowerCase(),
+  };
+
+  return includeMeta ? { profiles: data, meta } : data;
 };
 
 export const getMatrimonialInterests = async () => {

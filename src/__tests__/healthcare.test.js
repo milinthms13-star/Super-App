@@ -254,4 +254,32 @@ describe('Healthcare API Service', () => {
 
     getSpy.mockRestore();
   });
+
+  test('getInitialData surfaces auth failures for protected loaders', async () => {
+    const axios = require('axios');
+    const getSpy = jest.spyOn(axios, 'get').mockImplementation((url) => {
+      if (String(url).includes('/records')) {
+        return Promise.reject({ response: { status: 401, data: { message: 'Unauthorized' } } });
+      }
+      return Promise.resolve({ data: { success: true, data: [] } });
+    });
+    const { healthcareApi: realApi } = jest.requireActual('../modules/healthcare/services/healthcareApi');
+
+    await expect(realApi.getInitialData()).rejects.toBeTruthy();
+    getSpy.mockRestore();
+  });
+
+  test('verifyAppointmentPayment does not fallback on 4xx verification errors', async () => {
+    const axios = require('axios');
+    const postSpy = jest.spyOn(axios, 'post').mockRejectedValue({
+      response: { status: 400, data: { message: 'Payment reference mismatch' } },
+    });
+    const { healthcareApi: realApi } = jest.requireActual('../modules/healthcare/services/healthcareApi');
+
+    await expect(
+      realApi.verifyAppointmentPayment('appointment-1', 'HC-APT-REF', 'success', 'simulated')
+    ).rejects.toBeTruthy();
+
+    postSpy.mockRestore();
+  });
 });

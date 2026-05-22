@@ -3,8 +3,9 @@ import { healthcareApi } from "../services/healthcareApi";
 
 const formatCurrency = (value) => `INR ${Number(value || 0).toLocaleString("en-IN")}`;
 const NEXT_ORDER_STATUS = {
-  placed: "packed",
-  packed: "out_for_delivery",
+  placed: "processing",
+  verified: "processing",
+  processing: "out_for_delivery",
   out_for_delivery: "delivered",
 };
 
@@ -197,6 +198,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
       const created = await onCreateOrder?.({
         order: {
           pharmacyId: selectedPharmacy.id,
+          pharmacyVendorId: selectedPharmacy.id,
           pharmacyName: selectedPharmacy.name,
           pharmacyArea: selectedPharmacy.area,
           items: cart.map((item) => ({
@@ -221,7 +223,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
       });
 
       if (created?.id && paymentForm.paymentMethod !== "cod") {
-        const paymentReference = `PHARM-${Date.now()}`;
+        const paymentReference = created.paymentReference || `PHARM-${Date.now()}`;
         await onVerifyPayment?.(created.id, paymentReference, "success");
       }
 
@@ -242,7 +244,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
   };
 
   return (
-    <section className="healthcare-section">
+    <section className="healthcare-section" data-testid="pharmacy-delivery">
       <div className="healthcare-section-heading">
         <h2>Pharmacy Delivery</h2>
         <p>Select pharmacy, search medicines, view ingredients/use, and order safely.</p>
@@ -274,6 +276,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
           <span>Search medicine / ingredient</span>
           <input
             type="text"
+            data-testid="medicine-search"
             className="healthcare-search-input"
             placeholder="Eg: Paracetamol, Cetirizine, Metformin, fever, allergy"
             value={query}
@@ -318,6 +321,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
           <p>Required for antibiotics, BP, diabetes, insulin, and selected chronic-care medicines.</p>
           <input
             type="file"
+            data-testid="prescription-upload"
             accept="image/*,application/pdf"
             onChange={(event) => {
               setPrescriptionFile(event.target.files?.[0] || null);
@@ -349,7 +353,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
 
           <div className="healthcare-medicines-list">
             {filteredMedicines.map((medicine) => (
-              <article key={medicine.id} className="healthcare-medicine-card healthcare-info-enabled-card">
+              <article key={medicine.id} className="healthcare-medicine-card healthcare-info-enabled-card" data-testid="medicine-result">
                 <div>
                   <strong>{medicine.name}</strong>
                   <span>
@@ -398,7 +402,13 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
               <span>Pharmacy: {order.pharmacyName || "Selected pharmacy"}</span>
               <span>Order status: {order.orderStatus || "placed"}</span>
               <span>Payment: {order.paymentStatus || "pending"}</span>
-              {order.requiresPrescriptionReview ? <span>Prescription: verified</span> : null}
+              {order.prescriptionRequired ? (
+                <span>Prescription review: {order.prescriptionReviewStatus || "pending"}</span>
+              ) : null}
+              {Array.isArray(order.interactionAlerts) && order.interactionAlerts.length > 0 ? (
+                <span>Safety: {order.interactionAlerts[0]}</span>
+              ) : null}
+              {order.syncStatus === "queued" ? <span>Sync: queued offline</span> : null}
             </div>
             <div className="healthcare-record-actions">
               {NEXT_ORDER_STATUS[order.orderStatus || "placed"] ? (

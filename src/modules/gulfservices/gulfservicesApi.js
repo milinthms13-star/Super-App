@@ -76,9 +76,10 @@ export const gulfservicesApi = {
         headers: buildAuthHeaders(),
       })
     ),
-  getPendingRecruiters: async () =>
+  getPendingRecruiters: async (params = {}) =>
     handleResponse(
       await axios.get(`${BASE}/admin/recruiters/pending`, {
+        params,
         headers: buildAuthHeaders(),
       })
     ),
@@ -107,10 +108,14 @@ export const gulfservicesApi = {
         headers: buildAuthHeaders(),
       })
     ),
-  getAdminFraudReports: async (status = '') =>
+  getAdminFraudReports: async (status = '', options = {}) =>
     handleResponse(
       await axios.get(`${BASE}/admin/fraud-reports`, {
-        params: status ? { status } : {},
+        params: {
+          ...(status ? { status } : {}),
+          ...(options.page ? { page: options.page } : {}),
+          ...(options.limit ? { limit: options.limit } : {}),
+        },
         headers: buildAuthHeaders(),
       })
     ),

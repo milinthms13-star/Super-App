@@ -212,7 +212,7 @@ const LabBooking = ({
   };
 
   return (
-    <section className="healthcare-section">
+    <section className="healthcare-section" data-testid="lab-booking">
       <div className="healthcare-section-heading">
         <h2>Lab and Scan Booking</h2>
         <p>Select lab, search test name, understand test purpose, and book blood tests/scans.</p>
@@ -246,6 +246,7 @@ const LabBooking = ({
           <span>Enter test name</span>
           <input
             type="text"
+            data-testid="lab-test-search"
             className="healthcare-search-input"
             placeholder="Eg: CBC, Thyroid, Diabetes, MRI, X-Ray"
             value={testQuery}
@@ -288,7 +289,7 @@ const LabBooking = ({
         <div className="healthcare-lab-section">
           <h3>Blood Tests and Home Collection</h3>
           {bloodTests.map((test) => (
-            <article key={test.id} className="healthcare-test-card healthcare-info-enabled-card">
+            <article key={test.id} className="healthcare-test-card healthcare-info-enabled-card" data-testid="blood-test-item">
               <div>
                 <strong>{test.name}</strong>
                 <span>
@@ -307,7 +308,7 @@ const LabBooking = ({
         <div className="healthcare-lab-section">
           <h3>Scan Booking</h3>
           {scanTests.map((scan) => (
-            <article key={scan.id} className="healthcare-test-card healthcare-info-enabled-card">
+            <article key={scan.id} className="healthcare-test-card healthcare-info-enabled-card" data-testid="scan-test-item">
               <div>
                 <strong>{scan.name}</strong>
                 <span>{formatCurrency(scan.price)} | Visit required</span>
@@ -324,7 +325,7 @@ const LabBooking = ({
         <div className="healthcare-lab-section">
           <h3>Health Packages</h3>
           {(healthPackages || []).map((pkg) => (
-            <article key={pkg.id} className="healthcare-package-card">
+            <article key={pkg.id} className="healthcare-package-card" data-testid="health-package-item">
               <div>
                 <strong>{pkg.name}</strong>
                 <span>

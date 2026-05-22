@@ -36,6 +36,13 @@ function PackageBuilder({
             onChange={(event) => onChange("customerPhone", event.target.value)}
           />
         </InputField>
+        <InputField label="Additional notes">
+          <textarea
+            value={packageForm.notes}
+            onChange={(event) => onChange("notes", event.target.value)}
+            rows={3}
+          />
+        </InputField>
         <div className="local-services-checkbox-grid">
           {completePackageItems.map((item) => (
             <label key={item} className="local-services-checkbox">

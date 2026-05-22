@@ -35,6 +35,7 @@ const hotelBookingSchema = new mongoose.Schema(
     },
     status: { type: String, default: 'pending', trim: true, index: true },
     cancellationReason: { type: String, default: '', trim: true },
+    inventoryRestoredAt: { type: Date, default: null },
     partnerNote: { type: String, default: '', trim: true },
     adminNote: { type: String, default: '', trim: true },
   },

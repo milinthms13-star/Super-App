@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
-const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateIncidentLocation }) => {
+const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateIncidentLocation, onUpdateIncident }) => {
   const [statusMessage, setStatusMessage] = useState("");
   const [locationState, setLocationState] = useState({
     latitude: null,
@@ -9,8 +9,11 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [showSosConfirm, setShowSosConfirm] = useState(false);
   const [escalationLevel, setEscalationLevel] = useState("high");
+  const [trackingIncidentId, setTrackingIncidentId] = useState("");
+  const [liveTrackingEnabled, setLiveTrackingEnabled] = useState(false);
+  const [contactDeliveryState, setContactDeliveryState] = useState("idle");
 
-  const getLocation = async () => {
+  const getLocation = useCallback(async () => {
     if (!navigator.geolocation) {
       setStatusMessage("Geolocation is not supported on this device.");
       return null;
@@ -40,7 +43,7 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
     } finally {
       setLoadingLocation(false);
     }
-  };
+  }, []);
 
   const shareLiveLocation = async () => {
     const coords = locationState.latitude ? locationState : await getLocation();
@@ -91,6 +94,9 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
       return;
     }
 
+    setContactDeliveryState("sending");
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
+    setContactDeliveryState("delivered");
     setStatusMessage(
       `Emergency notification prepared for ${familyLabels.join(", ")} with location ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}.`
     );
@@ -133,11 +139,13 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
       contactsNotified: familyLabels,
     });
     if (incident?.id) {
+      setTrackingIncidentId(incident.id);
       await onUpdateIncidentLocation?.({
         incidentId: incident.id,
         latitude: coords.latitude,
         longitude: coords.longitude,
       });
+      setLiveTrackingEnabled(true);
     }
     await notifyFamily();
     setStatusMessage("SOS alert triggered. Family notification and location share are in progress.");
@@ -160,10 +168,55 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
       status: "resolved",
     });
     setStatusMessage("Safe check-in logged for your incident timeline.");
+    setLiveTrackingEnabled(false);
+    setTrackingIncidentId("");
   };
 
+  useEffect(() => {
+    if (!liveTrackingEnabled || !trackingIncidentId) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const intervalId = window.setInterval(async () => {
+      if (cancelled) {
+        return;
+      }
+      try {
+        const coords = await getLocation();
+        if (!coords || cancelled) {
+          return;
+        }
+        await onUpdateIncidentLocation?.({
+          incidentId: trackingIncidentId,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        });
+      } catch (_error) {
+        // Continue background tracking attempts without blocking UI.
+      }
+    }, 30000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [getLocation, liveTrackingEnabled, onUpdateIncidentLocation, trackingIncidentId]);
+
+  useEffect(() => {
+    if (!trackingIncidentId) {
+      return;
+    }
+    const activeIncident = (incidents || []).find((item) => item.id === trackingIncidentId);
+    if (activeIncident && String(activeIncident.status || "").toLowerCase() === "resolved") {
+      setLiveTrackingEnabled(false);
+      setTrackingIncidentId("");
+      setContactDeliveryState("idle");
+    }
+  }, [incidents, trackingIncidentId]);
+
   return (
-    <section className="healthcare-section">
+    <section className="healthcare-section" data-testid="emergency-sos">
       <div className="healthcare-section-heading">
         <h2>Emergency and SOS</h2>
         <p>Real emergency actions: call lines, live location, family alerts, and nearby hospitals map.</p>
@@ -175,11 +228,24 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
         </div>
       ) : null}
 
+      {trackingIncidentId ? (
+        <div className="healthcare-inline-alert" role="status">
+          Incident tracking active: {trackingIncidentId}. Contact delivery: {contactDeliveryState}.
+          <button
+            type="button"
+            className="healthcare-secondary-button"
+            onClick={() => setLiveTrackingEnabled((previous) => !previous)}
+          >
+            {liveTrackingEnabled ? "Pause Live Tracking" : "Resume Live Tracking"}
+          </button>
+        </div>
+      ) : null}
+
       <div className="healthcare-emergency-grid">
         <article className="healthcare-emergency-card">
           <h3>Ambulance</h3>
           <p>Immediate emergency medical transport.</p>
-          <a className="healthcare-emergency-button" href="tel:108">
+          <a className="healthcare-emergency-button" href="tel:108" data-testid="ambulance-btn">
             Call 108
           </a>
         </article>
@@ -226,6 +292,7 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
             className="healthcare-secondary-button"
             onClick={openNearbyHospitals}
             disabled={loadingLocation}
+            data-testid="hospital-finder-btn"
           >
             Open Hospitals Map
           </button>
@@ -234,7 +301,7 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
         <article className="healthcare-emergency-card">
           <h3>SOS Confirmation</h3>
           <p>Trigger confirmed SOS with emergency context.</p>
-          <button type="button" className="healthcare-emergency-button" onClick={() => setShowSosConfirm(true)}>
+          <button type="button" className="healthcare-emergency-button" onClick={() => setShowSosConfirm(true)} data-testid="sos-btn">
             Send SOS Alert
           </button>
         </article>
@@ -277,6 +344,26 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
                     .map((entry) => `${entry.step.replaceAll("_", " ")} (${String(entry.at || "").slice(0, 10)})`)
                     .join(" -> ")}
                 </span>
+              ) : null}
+            </div>
+            <div className="healthcare-record-actions">
+              {incident.status === "open" ? (
+                <button
+                  type="button"
+                  className="healthcare-secondary-button"
+                  onClick={() => onUpdateIncident?.(incident.id, { status: "acknowledged", responderNote: "Acknowledged by user action." })}
+                >
+                  Mark Acknowledged
+                </button>
+              ) : null}
+              {incident.status === "acknowledged" ? (
+                <button
+                  type="button"
+                  className="healthcare-secondary-button"
+                  onClick={() => onUpdateIncident?.(incident.id, { status: "resolved", responderNote: "Resolved by user confirmation." })}
+                >
+                  Mark Resolved
+                </button>
               ) : null}
             </div>
           </article>

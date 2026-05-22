@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "crons": [
+    {
+      "path": "/api/hyperlocal/internal/cron/overview360-rebuild",
+      "schedule": "*/10 * * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(self)" },
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains; preload" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; connect-src 'self' https:; img-src 'self' data: blob: https:; media-src 'self' blob: https:; font-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';"
+        }
+      ]
+    },
+    {
+      "source": "/api/hyperlocal/bootstrap",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=300, stale-while-revalidate=1800" }
+      ]
+    },
+    {
+      "source": "/api/hyperlocal/shops",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=45, stale-while-revalidate=300" }
+      ]
+    },
+    {
+      "source": "/api/hyperlocal/subscriptions/plans",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=600, stale-while-revalidate=3600" }
+      ]
+    }
+  ]
+}

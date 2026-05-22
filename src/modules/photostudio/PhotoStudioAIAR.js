@@ -131,6 +131,7 @@ const PhotoStudioAIAR = () => {
   const [exportUnlock, setExportUnlock] = useState(false);
   const [studio360Style, setStudio360Style] = useState("spherical");
   const [studio360Result, setStudio360Result] = useState(null);
+  const [studio360Meta, setStudio360Meta] = useState(null);
   const [viewerPan, setViewerPan] = useState(50);
   const [viewerDragStart, setViewerDragStart] = useState(null);
   const [quickFilter, setQuickFilter] = useState("Normal");
@@ -256,6 +257,7 @@ const PhotoStudioAIAR = () => {
 
   useEffect(() => {
     setStudio360Result(null);
+    setStudio360Meta(null);
     setViewerPan(50);
   }, [currentAssetUrl]);
 
@@ -831,10 +833,13 @@ const PhotoStudioAIAR = () => {
         });
 
         const outputUrl = result?.result?.outputUrl;
+        const viewerType = result?.result?.viewerType || "equirectangular";
         if (outputUrl) {
           setStudio360Result(outputUrl);
+          setStudio360Meta({ style: studio360Style, viewerType, width: result?.result?.width, height: result?.result?.height });
+          setViewerPan(50);
           pushHistoryUrl(outputUrl);
-          trackEvent("ai_tool_applied", { tool: "360-style", style: studio360Style });
+          trackEvent("ai_tool_applied", { tool: "360-style", style: studio360Style, viewerType });
           pushStatus("success", "360° image created successfully.");
         } else {
           pushStatus("error", "360° render completed but no output was returned.");
@@ -1674,6 +1679,14 @@ const PhotoStudioAIAR = () => {
             </div>
             <div>
               <h3>Preview</h3>
+              {studio360Meta ? (
+                <div className="photostudio-360-meta">
+                  <small>{studio360Meta.viewerType === 'equirectangular' ? 'Interactive panorama output' : '360 preview'}</small>
+                  {studio360Meta.width && studio360Meta.height ? (
+                    <small>{`${studio360Meta.width}×${studio360Meta.height}`}</small>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="photostudio-360-viewer">
                 {studio360Result ? (
                   <div
@@ -1681,17 +1694,24 @@ const PhotoStudioAIAR = () => {
                     style={{
                       backgroundImage: `url(${studio360Result})`,
                       backgroundPosition: `${viewerPan}% 50%`,
+                      backgroundSize: "auto 100%",
+                      backgroundRepeat: "no-repeat",
                     }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Drag to pan 360 degree view"
                     onPointerDown={(event) => {
+                      event.preventDefault();
                       setViewerDragStart({ x: event.clientX, pan: viewerPan });
                     }}
                     onPointerMove={(event) => {
                       if (!viewerDragStart) return;
                       const delta = event.clientX - viewerDragStart.x;
-                      const nextPan = Math.max(0, Math.min(100, viewerDragStart.pan + delta * 0.09));
+                      const nextPan = Math.max(0, Math.min(100, viewerDragStart.pan + delta * 0.12));
                       setViewerPan(nextPan);
                     }}
                     onPointerUp={() => setViewerDragStart(null)}
+                    onPointerCancel={() => setViewerDragStart(null)}
                     onPointerLeave={() => setViewerDragStart(null)}
                   />
                 ) : currentAssetUrl ? (
@@ -1700,18 +1720,43 @@ const PhotoStudioAIAR = () => {
                     style={{ backgroundImage: `url(${currentAssetUrl})` }}
                   />
                 ) : (
-                  <p>Upload a photo to preview 360 mode.</p>
+                  <div className="viewer-360 viewer-360-fallback" style={{ display: 'grid', placeItems: 'center', color: '#475569' }}>
+                    <p>Upload a photo to preview 360 mode.</p>
+                  </div>
                 )}
               </div>
               {studio360Result ? (
-                <div className="photostudio-360-actions">
-                  <button
-                    type="button"
-                    onClick={() => window.open(studio360Result, "_blank")}
-                  >
-                    Open 360° Output
-                  </button>
-                </div>
+                <>
+                  <label>
+                    Drag to pan.
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={viewerPan}
+                      onChange={(event) => setViewerPan(Number(event.target.value))}
+                    />
+                  </label>
+                  <div className="photostudio-360-actions">
+                    <button
+                      type="button"
+                      onClick={() => window.open(studio360Result, "_blank")}
+                    >
+                      Open 360° Output
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const anchor = document.createElement('a');
+                        anchor.href = studio360Result;
+                        anchor.download = `photo-studio-360-${studio360Style}.jpg`;
+                        anchor.click();
+                      }}
+                    >
+                      Download 360° Panorama
+                    </button>
+                  </div>
+                </>
               ) : null}
             </div>
           </div>

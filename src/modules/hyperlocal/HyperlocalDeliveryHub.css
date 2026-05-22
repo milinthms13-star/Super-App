@@ -1,10 +1,22 @@
+:root {
+  --hl-bg: #ffffff;
+  --hl-text: #0f172a;
+  --hl-border: #cbd5e1;
+  --hl-border-strong: #94a3b8;
+  --hl-primary: #0369a1;
+  --hl-primary-strong: #0b5f90;
+  --hl-accent: #0ea5e9;
+  --hl-surface-soft: #f8fafc;
+  --hl-focus: #f59e0b;
+}
+
 .hyperlocal-page {
   max-width: 1240px;
   margin: 0 auto;
   padding: 20px;
   display: grid;
   gap: 16px;
-  color: #0f172a;
+  color: var(--hl-text);
 }
 
 .hyperlocal-hero,
@@ -12,8 +24,8 @@
 .hyperlocal-card,
 .hyperlocal-empty-card,
 .hyperlocal-summary-card {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--hl-bg);
+  border: 1px solid var(--hl-border);
   border-radius: 16px;
 }
 
@@ -21,7 +33,7 @@
   padding: 18px;
   display: grid;
   gap: 14px;
-  background: linear-gradient(135deg, #f0f9ff, #f8fafc);
+  background: linear-gradient(135deg, #f0f9ff, var(--hl-surface-soft));
 }
 
 .hyperlocal-kicker {
@@ -57,16 +69,16 @@
 .hyperlocal-chip-row button,
 .hyperlocal-chip {
   border-radius: 999px;
-  border: 1px solid #94a3b8;
-  background: #ffffff;
+  border: 1px solid var(--hl-border-strong);
+  background: var(--hl-bg);
   padding: 6px 12px;
-  color: #0f172a;
+  color: var(--hl-text);
   font-weight: 600;
 }
 
 .hyperlocal-chip-row button.active {
-  background: #0ea5e9;
-  border-color: #0ea5e9;
+  background: var(--hl-accent);
+  border-color: var(--hl-accent);
   color: #ffffff;
 }
 
@@ -132,11 +144,11 @@
 .hyperlocal-shop-toolbar input,
 .hyperlocal-shop-toolbar select {
   width: 100%;
-  border: 1px solid #94a3b8;
+  border: 1px solid var(--hl-border-strong);
   border-radius: 10px;
   padding: 10px 11px;
-  color: #0f172a;
-  background: #ffffff;
+  color: var(--hl-text);
+  background: var(--hl-bg);
 }
 
 .hyperlocal-inline-actions {
@@ -150,8 +162,8 @@
 .hyperlocal-secondary-btn,
 .hyperlocal-link-btn,
 .hyperlocal-sticky-checkout button {
-  border: 1px solid #0b5f90;
-  background: #0369a1;
+  border: 1px solid var(--hl-primary-strong);
+  background: var(--hl-primary);
   color: #ffffff;
   border-radius: 10px;
   padding: 9px 12px;
@@ -162,8 +174,8 @@
 
 .hyperlocal-secondary-btn,
 .hyperlocal-link-btn {
-  background: #ffffff;
-  color: #0b5f90;
+  background: var(--hl-bg);
+  color: var(--hl-primary-strong);
 }
 
 .hyperlocal-inline-actions button:disabled,
@@ -216,6 +228,10 @@
 
 .hyperlocal-empty-card {
   color: #475569;
+}
+
+.hyperlocal-empty-card-compact {
+  padding: 10px;
 }
 
 .hyperlocal-summary-card p {
@@ -282,8 +298,90 @@
 .hyperlocal-chip-row button:focus-visible,
 .hyperlocal-link-btn:focus-visible,
 .hyperlocal-secondary-btn:focus-visible {
-  outline: 3px solid #f59e0b;
+  outline: 3px solid var(--hl-focus);
   outline-offset: 2px;
+}
+
+.hyperlocal-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--hl-border);
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.hyperlocal-status-badge-success {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.hyperlocal-status-badge-warning {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.hyperlocal-status-badge-danger {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.hyperlocal-status-badge-neutral {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.hyperlocal-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.hyperlocal-metric-card {
+  border: 1px solid var(--hl-border);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--hl-bg);
+}
+
+.hyperlocal-metric-label {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.hyperlocal-metric-value {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0b1324;
+}
+
+.hyperlocal-metric-helper,
+.hyperlocal-metric-trend {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: 0.82rem;
+}
+
+.hyperlocal-empty-title {
+  margin: 0;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.hyperlocal-empty-subtitle {
+  margin: 4px 0 0;
+  color: #64748b;
 }
 
 @media (max-width: 860px) {

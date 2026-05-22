@@ -107,6 +107,7 @@ const startBackgroundServices = () => {
   const pushNotificationScheduler = require('./services/pushNotificationScheduler');
   const whatsappGroupReminderScheduler = require('./services/whatsappGroupReminderScheduler');
   const draftExpirationScheduler = require('./services/draftExpirationScheduler');
+  const { startHealthcareRetentionScheduler } = require('./jobs/healthcareRetentionScheduler');
 
   voiceCallScheduler.start();
   scheduleAbandonedCartReminders();
@@ -131,6 +132,7 @@ const startBackgroundServices = () => {
   pushNotificationScheduler.startPushNotificationScheduler();
   whatsappGroupReminderScheduler.startWhatsAppGroupReminderScheduler();
   draftExpirationScheduler.startDraftExpirationScheduler();
+  startHealthcareRetentionScheduler();
 
   backgroundServicesStarted = true;
 };
@@ -153,6 +155,7 @@ const stopBackgroundServices = async () => {
     const telegramReminderScheduler = require('./services/telegramReminderScheduler');
     const pushNotificationScheduler = require('./services/pushNotificationScheduler');
     const whatsappGroupReminderScheduler = require('./services/whatsappGroupReminderScheduler');
+    const { stopHealthcareRetentionScheduler } = require('./jobs/healthcareRetentionScheduler');
 
     voiceCallScheduler.stop();
     stopAbandonedCartReminders();
@@ -164,6 +167,7 @@ const stopBackgroundServices = async () => {
     telegramReminderScheduler.stopTelegramReminderScheduler();
     pushNotificationScheduler.stopPushNotificationScheduler();
     whatsappGroupReminderScheduler.stopWhatsAppGroupReminderScheduler();
+    stopHealthcareRetentionScheduler();
 
     try {
       await closeOrderQueue();

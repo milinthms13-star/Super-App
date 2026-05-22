@@ -249,10 +249,11 @@ const GulfPaymentIdempotencySchema = new Schema(
     idempotencyKey: { type: String, trim: true, default: '' },
     caller: { type: String, trim: true, default: '' },
     responsePayload: { type: Schema.Types.Mixed, default: {} },
-    expiresAt: { type: Date, required: true, index: true },
+    expiresAt: { type: Date, required: true },
   },
   { timestamps: true }
 );
+GulfPaymentIdempotencySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const GulfPaymentWebhookEventSchema = new Schema(
   {

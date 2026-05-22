@@ -45,9 +45,12 @@ const RecordsVault = ({
   loading,
   onCreateRecord,
   onDeleteRecord,
+  onRestoreRecord,
+  onRenewConsent,
   onDownloadRecord,
   onPreviewRecord,
   auditLog,
+  auditPagination,
 }) => {
   const [form, setForm] = useState({
     title: "",
@@ -64,10 +67,15 @@ const RecordsVault = ({
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [searchText, setSearchText] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [viewMode, setViewMode] = useState("active");
 
   const sortedRecords = useMemo(() => {
     const normalizedQuery = searchText.trim().toLowerCase();
     const filtered = (records || []).filter((record) => {
+      const archiveMatch = viewMode === "archived" ? record.isDeleted === true : record.isDeleted !== true;
+      if (!archiveMatch) {
+        return false;
+      }
       const categoryMatch = categoryFilter === "all" || record.category === categoryFilter;
       if (!categoryMatch) {
         return false;
@@ -84,7 +92,7 @@ const RecordsVault = ({
     });
 
     return filtered.sort((a, b) => (b.recordDate || "").localeCompare(a.recordDate || ""));
-  }, [records, searchText, categoryFilter]);
+  }, [records, searchText, categoryFilter, viewMode]);
 
   const updateField = (key, value) => {
     setForm((previous) => ({
@@ -165,7 +173,7 @@ const RecordsVault = ({
   };
 
   return (
-    <section className="healthcare-section">
+    <section className="healthcare-section" data-testid="records-vault">
       <div className="healthcare-section-heading">
         <h2>Health Records Vault</h2>
         <p>Upload, preview, categorize, delete, and securely download records by patient and doctor.</p>
@@ -274,6 +282,24 @@ const RecordsVault = ({
 
         <div className="healthcare-record-list-card">
           <h3>Stored Records</h3>
+          <div className="healthcare-pill-row">
+            <button
+              type="button"
+              className="healthcare-secondary-button"
+              onClick={() => setViewMode("active")}
+              disabled={viewMode === "active"}
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              className="healthcare-secondary-button"
+              onClick={() => setViewMode("archived")}
+              disabled={viewMode === "archived"}
+            >
+              Archived
+            </button>
+          </div>
           <div className="healthcare-filter-row">
             <label className="healthcare-field">
               <span>Search</span>
@@ -298,7 +324,7 @@ const RecordsVault = ({
           </div>
 
           {loading ? <p>Loading records...</p> : null}
-          {!loading && sortedRecords.length === 0 ? <p>No records yet.</p> : null}
+          {!loading && sortedRecords.length === 0 ? <p>{viewMode === "archived" ? "No archived records." : "No records yet."}</p> : null}
 
           {sortedRecords.map((record) => (
             <article key={record.id} className="healthcare-record-item">
@@ -315,25 +341,53 @@ const RecordsVault = ({
 
               <div className="healthcare-record-actions">
                 {renderPreview(record)}
-                <button
-                  type="button"
-                  className="healthcare-secondary-button"
-                  onClick={() => onDownloadRecord?.(record)}
-                >
-                  Secure Download
-                </button>
-                <button
-                  type="button"
-                  className="healthcare-danger-button"
-                  onClick={() => {
-                    const confirmed = window.confirm("Archive this record? It will be removed from active list.");
-                    if (confirmed) {
-                      void onDeleteRecord(record.id);
-                    }
-                  }}
-                >
-                  Delete
-                </button>
+                {viewMode === "active" ? (
+                  <>
+                    <button
+                      type="button"
+                      className="healthcare-secondary-button"
+                      onClick={() => onDownloadRecord?.(record)}
+                    >
+                      Secure Download
+                    </button>
+                    <button
+                      type="button"
+                      className="healthcare-secondary-button"
+                      onClick={() => {
+                        const expirySeed = new Date();
+                        expirySeed.setDate(expirySeed.getDate() + 30);
+                        const consentExpiryDate = expirySeed.toISOString().slice(0, 10);
+                        void onRenewConsent?.(record.id, {
+                          visibility: record.visibility || "private",
+                          consentAccepted: true,
+                          consentExpiryDate,
+                        });
+                      }}
+                    >
+                      Renew Consent
+                    </button>
+                    <button
+                      type="button"
+                      className="healthcare-danger-button"
+                      onClick={() => {
+                        const confirmed = window.confirm("Archive this record? It will be removed from active list.");
+                        if (confirmed) {
+                          void onDeleteRecord(record.id);
+                        }
+                      }}
+                    >
+                      Archive
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="healthcare-secondary-button"
+                    onClick={() => onRestoreRecord?.(record.id)}
+                  >
+                    Restore
+                  </button>
+                )}
               </div>
             </article>
           ))}
@@ -355,6 +409,11 @@ const RecordsVault = ({
             </div>
           </article>
         ))}
+        {auditPagination ? (
+          <p className="healthcare-muted">
+            Page {auditPagination.page} / {auditPagination.totalPages} | Total events {auditPagination.totalCount}
+          </p>
+        ) : null}
       </div>
     </section>
   );

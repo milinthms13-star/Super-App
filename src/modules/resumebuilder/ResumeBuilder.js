@@ -260,34 +260,87 @@ const computeSectionCompleteness = (resume = {}) => {
   return { checks, completed, total, percent: Math.round((completed / total) * 100) };
 };
 
+const getTemplateLabel = (templateId) => TEMPLATE_OPTIONS.find((item) => item.id === templateId)?.name || "Resume";
+
 const formatResumeText = (resume = {}) => {
   const lines = [];
   const header = resume.header || {};
-  lines.push(header.fullName || "Candidate");
-  lines.push(header.targetJob || "");
-  lines.push([header.location, header.preferredCountry].filter(Boolean).join(", "));
-  lines.push([header.email, header.phone].filter(Boolean).join(" | "));
-  lines.push(header.linkedin || "");
+  if (clean(header.fullName)) lines.push(header.fullName);
+  if (clean(header.targetJob)) lines.push(header.targetJob);
+  const locationLine = [header.location, header.preferredCountry].filter(Boolean).join(" | ");
+  if (locationLine) lines.push(locationLine);
+  const contactLine = [header.email, header.phone, header.linkedin].filter(Boolean).join(" | ");
+  if (contactLine) lines.push(contactLine);
   lines.push("");
-  lines.push("PROFILE");
-  lines.push(resume.profile || "");
-  lines.push("");
-  lines.push("SKILLS");
-  lines.push((resume.skills || []).join(", "));
-  lines.push("");
-  lines.push("EXPERIENCE");
-  (resume.experience || []).forEach((item) => {
-    lines.push(`${item.role || ""} | ${item.company || ""} | ${item.duration || ""}`.replace(/\s+\|/g, " |"));
-    (item.bullets || []).forEach((bullet) => lines.push(`- ${bullet}`));
-  });
-  lines.push("");
-  lines.push("GULF PROFILE");
+
+  if (clean(resume.profile)) {
+    lines.push("PROFILE");
+    lines.push(resume.profile);
+    lines.push("");
+  }
+
+  if (Array.isArray(resume.skills) && resume.skills.length > 0) {
+    lines.push("SKILLS");
+    lines.push((resume.skills || []).join(", "));
+    lines.push("");
+  }
+
+  if (Array.isArray(resume.experience) && resume.experience.length > 0) {
+    lines.push("EXPERIENCE");
+    (resume.experience || []).forEach((item) => {
+      const roleLine = [item.role, item.company, item.duration].filter(Boolean).join(" | ");
+      if (roleLine) lines.push(roleLine);
+      (item.bullets || []).forEach((bullet) => {
+        lines.push(`- ${clean(bullet)}`);
+      });
+      lines.push("");
+    });
+  }
+
+  if (Array.isArray(resume.education) && resume.education.length > 0) {
+    lines.push("EDUCATION");
+    (resume.education || []).forEach((item) => {
+      const educationLine = [item.degree, item.institution, item.year].filter(Boolean).join(" | ");
+      lines.push(educationLine || "Education entry");
+    });
+    lines.push("");
+  }
+
+  if (Array.isArray(resume.projects) && resume.projects.length > 0) {
+    lines.push("PROJECTS");
+    (resume.projects || []).forEach((item) => {
+      const projectLine = [item.name, item.tech].filter(Boolean).join(" | ");
+      if (projectLine) lines.push(projectLine);
+      if (clean(item.summary)) lines.push(`- ${item.summary}`);
+    });
+    lines.push("");
+  }
+
+  if (Array.isArray(resume.certifications) && resume.certifications.length > 0) {
+    lines.push("CERTIFICATIONS");
+    lines.push((resume.certifications || []).join(", "));
+    lines.push("");
+  }
+
+  if (Array.isArray(resume.languages) && resume.languages.length > 0) {
+    lines.push("LANGUAGES");
+    lines.push((resume.languages || []).join(", "));
+    lines.push("");
+  }
+
   const gulf = resume.gulfProfile || {};
-  lines.push(`Passport Number: ${gulf.passportNumber || "N/A"}`);
-  lines.push(`Visa Status: ${gulf.visaStatus || "N/A"}`);
-  lines.push(`Current Visa Type: ${gulf.currentVisaType || "N/A"}`);
-  lines.push(`Relocation: ${gulf.availableToRelocate || "N/A"}`);
-  return lines.join("\n");
+  const gulfLines = [];
+  if (clean(gulf.passportStatus)) gulfLines.push(`Passport status: ${gulf.passportStatus}`);
+  if (clean(gulf.passportNumber)) gulfLines.push(`Passport number: ${gulf.passportNumber}`);
+  if (clean(gulf.visaStatus)) gulfLines.push(`Visa status: ${gulf.visaStatus}`);
+  if (clean(gulf.currentVisaType)) gulfLines.push(`Current visa type: ${gulf.currentVisaType}`);
+  if (clean(gulf.availableToRelocate)) gulfLines.push(`Relocation: ${gulf.availableToRelocate}`);
+  if (gulfLines.length > 0) {
+    lines.push("GULF PROFILE");
+    gulfLines.forEach((line) => lines.push(line));
+  }
+
+  return lines.filter(Boolean).join("\n");
 };
 
 const buildLocalAtsReport = ({ resume = {}, jobDescription = "" }) => {
@@ -298,17 +351,44 @@ const buildLocalAtsReport = ({ resume = {}, jobDescription = "" }) => {
   const missingKeywords = jdKeywords.filter((keyword) => !resumeKeywords.includes(keyword));
   const keywordMatchPercent = jdKeywords.length ? Math.round((matchedKeywords.length / jdKeywords.length) * 100) : 0;
   const sectionCompleteness = computeSectionCompleteness(resume);
+  const issues = [];
   const suggestions = [];
-  if (clean(resume.profile).length < 60) suggestions.push("Strengthen your summary with outcomes.");
-  if (keywordMatchPercent < 35) suggestions.push("Add missing keywords from the job description.");
-  if (sectionCompleteness.percent < 70) suggestions.push("Complete missing resume sections.");
+  const warnings = [];
+
+  if (clean(resume.profile).length < 80) {
+    issues.push("Professional profile is too short or unfocused.");
+    suggestions.push("Use a 3-4 line summary with outcomes and target role keywords.");
+  }
+
+  if (sectionCompleteness.percent < 80) {
+    issues.push("Resume sections are incomplete.");
+    suggestions.push("Fill career, skills, education, experience, projects, and certifications.");
+  }
+
+  if (keywordMatchPercent < 45 && jdKeywords.length > 0) {
+    issues.push("Low keyword match with the target job description.");
+    suggestions.push("Mirror role-specific terms in summary, skills, and experience.");
+  }
+
+  if (missingKeywords.length > 0 && jdKeywords.length > 0) {
+    warnings.push("Missing key terms from the job description.");
+  }
+
+  if (!resume.gulfProfile || !clean(resume.gulfProfile.passportStatus)) {
+    warnings.push("Add Gulf-ready passport and visa details for GCC applications.");
+  }
+
+  if (clean(resume.profile).length > 260) {
+    warnings.push("Keep the summary concise for ATS and recruiter readability.");
+  }
+
   return {
-    score: Math.max(30, Math.min(100, 52 + Math.round(keywordMatchPercent * 0.5) + Math.round(sectionCompleteness.percent * 0.35))),
+    score: Math.max(30, Math.min(100, 50 + Math.round(keywordMatchPercent * 0.5) + Math.round(sectionCompleteness.percent * 0.35) - warnings.length * 4)),
     keywordMatchPercent,
     matchedKeywords,
     missingKeywords,
-    issues: [],
-    warnings: [],
+    issues,
+    warnings,
     suggestions,
     sectionCompleteness,
     checkedAt: new Date().toISOString(),

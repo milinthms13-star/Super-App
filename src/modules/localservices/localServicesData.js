@@ -109,6 +109,7 @@ export const INITIAL_PACKAGE_FORM = {
   items: COMPLETE_PACKAGE_ITEMS.reduce((acc, item) => ({ ...acc, [item]: true }), {}),
   budget: "",
   customerPhone: "",
+  notes: "",
 };
 
 export const FALLBACK_PROVIDERS = [

@@ -346,6 +346,131 @@ const upsertVendorAdminStatus = async (vendorId, updates = {}) => {
   return clone(state.vendors[index]);
 };
 
+const buildLocalServicesInsights = async () => {
+  const state = await readState();
+  const providerMap = new Map(state.providers.map((provider) => [provider.id, provider]));
+
+  const totals = {
+    totalProviders: state.providers.length,
+    totalVendors: state.vendors.length,
+    totalBookings: state.bookings.length,
+    totalQuotes: state.quotes.length,
+    totalRequests: state.bookings.length + state.quotes.length,
+  };
+
+  const totalRevenue = state.bookings.reduce(
+    (sum, booking) => sum + Number(booking.payment?.totalAmount || 0),
+    0
+  );
+  const avgBookingValue = totals.totalBookings ? Math.round(totalRevenue / totals.totalBookings) : 0;
+
+  const vendorStatusCounts = state.vendors.reduce((acc, vendor) => {
+    const status = String(vendor.approvalStatus || "pending");
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+  const featuredVendors = state.vendors.filter((vendor) => vendor.featured).length;
+
+  const providerBookingCounts = state.bookings.reduce((acc, booking) => {
+    const providerId = String(booking.providerId || "");
+    acc[providerId] = (acc[providerId] || 0) + 1;
+    return acc;
+  }, {});
+
+  const categoryDemand = state.bookings.reduce((acc, booking) => {
+    const provider = providerMap.get(booking.providerId);
+    const category = provider?.category || "Unknown";
+    acc[category] = (acc[category] || 0) + 1;
+    return acc;
+  }, {});
+
+  const cityDemand = state.bookings.reduce((acc, booking) => {
+    const provider = providerMap.get(booking.providerId);
+    const city = provider?.city || "Unknown";
+    acc[city] = (acc[city] || 0) + 1;
+    return acc;
+  }, {});
+
+  const eventTypeDemand = state.bookings.reduce((acc, booking) => {
+    const eventType = String(booking.eventType || "Other");
+    acc[eventType] = (acc[eventType] || 0) + 1;
+    return acc;
+  }, {});
+  state.quotes.forEach((quote) => {
+    const eventType = String(quote.eventType || "Other");
+    eventTypeDemand[eventType] = (eventTypeDemand[eventType] || 0) + 1;
+  });
+
+  const bookingStatusCounts = state.bookings.reduce((acc, booking) => {
+    const status = String(booking.status || "Unknown");
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+
+  const quoteStatusCounts = state.quotes.reduce((acc, quote) => {
+    const status = String(quote.status || "Unknown");
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+
+  const toSortedList = (counts, limit = 5) =>
+    Object.entries(counts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, limit)
+      .map(([label, value]) => ({ label, value }));
+
+  const providerPerformance = Object.entries(providerBookingCounts)
+    .map(([providerId, count]) => {
+      const provider = providerMap.get(providerId);
+      return {
+        id: providerId,
+        name: provider?.name || providerId,
+        category: provider?.category || "Unknown",
+        city: provider?.city || "Unknown",
+        rating: provider?.rating || 0,
+        bookings: count,
+      };
+    })
+    .sort((a, b) => b.bookings - a.bookings)
+    .slice(0, 5);
+
+  const recentRequests = [
+    ...state.bookings.map((booking) => ({
+      id: booking.bookingCode,
+      type: "Booking",
+      target: booking.providerName,
+      status: booking.status,
+      amount: booking.payment?.totalAmount || 0,
+      createdAt: booking.createdAt,
+    })),
+    ...state.quotes.map((quote) => ({
+      id: quote.quoteCode,
+      type: "Quote",
+      target: quote.providerName,
+      status: quote.status,
+      amount: 0,
+      createdAt: quote.createdAt,
+    })),
+  ]
+    .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+    .slice(0, 8);
+
+  return {
+    ...totals,
+    totalRevenue,
+    avgBookingValue,
+    vendorStatusCounts,
+    featuredVendors,
+    bookingStatusCounts,
+    quoteStatusCounts,
+    topCategories: toSortedList(categoryDemand),
+    topCities: toSortedList(cityDemand),
+    topEvents: toSortedList(eventTypeDemand),
+    topProviders: providerPerformance,
+    recentRequests,
+  };
+};
+
 module.exports = {
   listProviders,
   getProviderById,
@@ -355,6 +480,7 @@ module.exports = {
   listTrackingByPhone,
   listVendorDashboard,
   upsertVendorAdminStatus,
+  buildLocalServicesInsights,
   readState,
   EVENT_TYPES,
   CITIES,

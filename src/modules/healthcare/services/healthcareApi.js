@@ -1,6 +1,13 @@
 import axios from "axios";
 import { buildApiUrl } from "../../../utils/api";
 import {
+  enqueueHealthcareAction,
+  flushHealthcareQueue,
+  getDeadLetterHealthcareActions,
+  getQueuedHealthcareActions,
+  requeueAllDeadLetterHealthcareActions,
+} from "./offlineActionQueue";
+import {
   MOCK_APPOINTMENTS,
   MOCK_DOCTORS,
   FAMILY_MEMBERS,
@@ -30,6 +37,11 @@ const endpoints = {
   partnerAdminApplications: buildApiUrl("/partner/applications/admin"),
   partnerDashboard: buildApiUrl("/partner/dashboard"),
   dashboardSummary: buildApiUrl("/dashboard/summary"),
+  recordsAudit: buildApiUrl("/records/audit"),
+  emergencyIncidentUpdate: buildApiUrl("/emergency/incidents"),
+  opsMetrics: buildApiUrl("/ops/metrics"),
+  retentionPurge: buildApiUrl("/ops/retention/purge"),
+  aiAssist: buildApiUrl("/ai/assist"),
 };
 
 const authHeaders = () => ({
@@ -39,6 +51,30 @@ const authHeaders = () => ({
 });
 
 const unwrap = (response) => response?.data?.data ?? response?.data;
+const generateIdempotencyKey = (scope = "healthcare") =>
+  `${scope}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+const withIdempotency = (config = {}, providedKey = "", scope = "healthcare") => {
+  const key = String(providedKey || "").trim() || generateIdempotencyKey(scope);
+  return {
+    ...config,
+    headers: {
+      ...(config?.headers || {}),
+      "x-idempotency-key": key,
+    },
+    idempotencyKey: key,
+  };
+};
+const isAuthError = (error) => [401, 403].includes(Number(error?.response?.status));
+const isQueueEligibleError = (error) => {
+  if (isAuthError(error)) {
+    return false;
+  }
+  const status = Number(error?.response?.status || 0);
+  if (!status) {
+    return true;
+  }
+  return status >= 500 || status === 429;
+};
 
 const getWithFallback = async (requestFn, fallbackValue, options = {}) => {
   const fallbackStatuses = Array.isArray(options.fallbackStatuses) ? options.fallbackStatuses : [];
@@ -58,27 +94,50 @@ const getWithFallback = async (requestFn, fallbackValue, options = {}) => {
   }
 };
 
+const withOfflineQueue = async ({
+  actionType,
+  execute,
+  queuePayload,
+  fallbackValue,
+  canQueue = true,
+}) => {
+  try {
+    return await execute();
+  } catch (error) {
+    if (!canQueue || !isQueueEligibleError(error)) {
+      throw error;
+    }
+    const queued = enqueueHealthcareAction({ type: actionType, payload: queuePayload });
+    const fallback = typeof fallbackValue === "function" ? fallbackValue() : fallbackValue;
+    return {
+      ...fallback,
+      syncStatus: "queued",
+      queuedActionId: queued.id,
+    };
+  }
+};
+
 export const healthcareApi = {
   getDoctors: async (specialty = "") => {
     return getWithFallback(async () => {
       const params = specialty ? { specialty } : {};
       const response = await axios.get(endpoints.doctors, { ...authHeaders(), params });
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => MOCK_DOCTORS, { fallbackStatuses: [401, 403, 404] });
+    }, () => MOCK_DOCTORS, { fallbackStatuses: [404] });
   },
 
   getLabTests: async () => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.labTests, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => MOCK_LAB_TESTS, { fallbackStatuses: [401, 403, 404] });
+    }, () => MOCK_LAB_TESTS, { fallbackStatuses: [404] });
   },
 
   getHealthPackages: async () => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.healthPackages, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => MOCK_HEALTH_PACKAGES, { fallbackStatuses: [401, 403, 404] });
+    }, () => MOCK_HEALTH_PACKAGES, { fallbackStatuses: [404] });
   },
 
   getLabTestInfo: async (query = "") => {
@@ -103,7 +162,7 @@ export const healthcareApi = {
             preparation: "Booking before lab preparation/fasting instruction confirm cheyyuka.",
           }
         : null,
-    }), { fallbackStatuses: [401, 403, 404] });
+    }), { fallbackStatuses: [404] });
   },
 
   getMedicines: async (query = "") => {
@@ -121,7 +180,7 @@ export const healthcareApi = {
       return MOCK_MEDICINES.filter((item) => {
         return item.name.toLowerCase().includes(normalizedQuery) || item.category.toLowerCase().includes(normalizedQuery);
       });
-    }, { fallbackStatuses: [401, 403, 404] });
+    }, { fallbackStatuses: [404] });
   },
 
   getMedicineInfo: async (query = "") => {
@@ -146,51 +205,91 @@ export const healthcareApi = {
             warning: "Self-medication avoid cheyyuka. Doctor/pharmacist advice follow cheyyuka.",
           }
         : null,
-    }), { fallbackStatuses: [401, 403, 404] });
+    }), { fallbackStatuses: [404] });
   },
 
-  getRecords: async () => {
+  getRecords: async ({ includeDeleted = false } = {}) => {
     return getWithFallback(async () => {
-      const response = await axios.get(endpoints.records, authHeaders());
+      const response = await axios.get(endpoints.records, {
+        ...authHeaders(),
+        params: includeDeleted ? { includeDeleted: "true" } : {},
+      });
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => MOCK_RECORDS, { fallbackStatuses: [401, 403] });
+    }, () => MOCK_RECORDS);
   },
 
   createRecord: async ({ meta = {}, file = null }) => {
-    return getWithFallback(async () => {
-      const formData = new FormData();
-      Object.entries(meta || {}).forEach(([key, value]) => {
-        if (value == null) {
-          return;
+    const idempotencyKey = generateIdempotencyKey("hc-record");
+    return withOfflineQueue({
+      actionType: "create_record",
+      canQueue: false,
+      queuePayload: { meta },
+      execute: async () => {
+        const formData = new FormData();
+        Object.entries(meta || {}).forEach(([key, value]) => {
+          if (value == null) {
+            return;
+          }
+          formData.append(key, String(value));
+        });
+        if (file) {
+          formData.append("file", file);
         }
-        formData.append(key, String(value));
-      });
-      if (file) {
-        formData.append("file", file);
-      }
-      const response = await axios.post(endpoints.records, formData, {
-        ...authHeaders(),
-        headers: {
-          ...authHeaders().headers,
-          "Content-Type": "multipart/form-data",
-        },
-      });
-      return unwrap(response);
-    }, () => ({
-      ...meta,
-      fileName: file?.name || meta?.fileName || "",
-      fileType: file?.type || meta?.fileType || "application/octet-stream",
-      fileSize: file?.size || Number(meta?.fileSize || 0),
-      fileUrl: file ? URL.createObjectURL(file) : meta?.fileUrl || "",
-      id: `record-${Date.now()}`,
-    }));
+        formData.append("idempotencyKey", idempotencyKey);
+        const response = await axios.post(endpoints.records, formData, {
+          ...withIdempotency(authHeaders(), idempotencyKey, "hc-record"),
+          headers: {
+            ...withIdempotency(authHeaders(), idempotencyKey, "hc-record").headers,
+            "Content-Type": "multipart/form-data",
+          },
+        });
+        return unwrap(response);
+      },
+      fallbackValue: () => ({
+        ...meta,
+        fileName: file?.name || meta?.fileName || "",
+        fileType: file?.type || meta?.fileType || "application/octet-stream",
+        fileSize: file?.size || Number(meta?.fileSize || 0),
+        fileUrl: file ? URL.createObjectURL(file) : meta?.fileUrl || "",
+        id: `record-${Date.now()}`,
+      }),
+    });
   },
 
   deleteRecord: async (recordId) => {
-    return getWithFallback(async () => {
-      const response = await axios.delete(`${endpoints.records}/${recordId}`, authHeaders());
-      return unwrap(response);
-    }, () => ({ success: true }));
+    return withOfflineQueue({
+      actionType: "archive_record",
+      queuePayload: { recordId },
+      execute: async () => {
+        const response = await axios.delete(`${endpoints.records}/${recordId}`, authHeaders());
+        return unwrap(response);
+      },
+      fallbackValue: () => ({ id: recordId, status: "archived" }),
+    });
+  },
+
+  restoreRecord: async (recordId) => {
+    return withOfflineQueue({
+      actionType: "restore_record",
+      queuePayload: { recordId },
+      execute: async () => {
+        const response = await axios.patch(`${endpoints.records}/${recordId}/restore`, {}, authHeaders());
+        return unwrap(response);
+      },
+      fallbackValue: () => ({ id: recordId, isDeleted: false, syncStatus: "queued" }),
+    });
+  },
+
+  renewRecordConsent: async (recordId, payload) => {
+    return withOfflineQueue({
+      actionType: "renew_record_consent",
+      queuePayload: { recordId, payload },
+      execute: async () => {
+        const response = await axios.patch(`${endpoints.records}/${recordId}/consent`, payload, authHeaders());
+        return unwrap(response);
+      },
+      fallbackValue: () => ({ id: recordId, ...payload }),
+    });
   },
 
   getRecordDownloadLink: async (recordId, fallbackUrl = "") => {
@@ -200,35 +299,50 @@ export const healthcareApi = {
     }, () => ({
       downloadUrl: fallbackUrl,
       fileName: "",
-    }), { fallbackStatuses: [401, 403, 404] });
+    }), { fallbackStatuses: [404] });
   },
 
   getAppointments: async () => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.appointments, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => MOCK_APPOINTMENTS, { fallbackStatuses: [401, 403] });
+    }, () => MOCK_APPOINTMENTS);
   },
 
   createAppointment: async (payload) => {
-    return getWithFallback(async () => {
-      const response = await axios.post(endpoints.appointments, payload, authHeaders());
-      return unwrap(response);
-    }, () => ({
-      ...payload,
-      id: `appointment-${Date.now()}`,
-      status: payload.status || "booked",
-    }));
+    const idempotencyKey = generateIdempotencyKey("hc-appointment");
+    return withOfflineQueue({
+      actionType: "create_appointment",
+      queuePayload: { payload, idempotencyKey },
+      execute: async () => {
+        const response = await axios.post(
+          endpoints.appointments,
+          { ...payload, idempotencyKey },
+          withIdempotency(authHeaders(), idempotencyKey, "hc-appointment")
+        );
+        return unwrap(response);
+      },
+      fallbackValue: () => ({
+        ...payload,
+        id: `appointment-${Date.now()}`,
+        status: payload.status || "booked",
+      }),
+    });
   },
 
   updateAppointment: async (appointmentId, payload) => {
-    return getWithFallback(async () => {
-      const response = await axios.patch(`${endpoints.appointments}/${appointmentId}`, payload, authHeaders());
-      return unwrap(response);
-    }, () => ({
-      id: appointmentId,
-      ...payload,
-    }));
+    return withOfflineQueue({
+      actionType: "update_appointment",
+      queuePayload: { appointmentId, payload },
+      execute: async () => {
+        const response = await axios.patch(`${endpoints.appointments}/${appointmentId}`, payload, authHeaders());
+        return unwrap(response);
+      },
+      fallbackValue: () => ({
+        id: appointmentId,
+        ...payload,
+      }),
+    });
   },
 
   cancelAppointment: async (appointmentId, reason = "Cancelled by user") => {
@@ -275,9 +389,7 @@ export const healthcareApi = {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.familyProfiles, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => FAMILY_MEMBERS.map((member, index) => ({ id: `family-${index + 1}`, name: member, relation: member })), {
-      fallbackStatuses: [401, 403],
-    });
+    }, () => FAMILY_MEMBERS.map((member, index) => ({ id: `family-${index + 1}`, name: member, relation: member })));
   },
 
   createFamilyProfile: async (payload) => {
@@ -309,45 +421,55 @@ export const healthcareApi = {
   },
 
   createPharmacyOrder: async ({ order = {}, prescriptionFile = null }) => {
-    return getWithFallback(async () => {
-      const formData = new FormData();
-      formData.append("items", JSON.stringify(order.items || []));
-      formData.append("deliveryAddress", String(order.deliveryAddress || ""));
-      formData.append("phone", String(order.phone || ""));
-      formData.append("customerName", String(order.customerName || ""));
-      formData.append("paymentMethod", String(order.paymentMethod || "upi"));
-      if (order.notes) {
-        formData.append("notes", String(order.notes));
-      }
-      if (order.prescriptionVerified) {
-        formData.append("prescriptionVerified", "true");
-      }
-      if (prescriptionFile) {
-        formData.append("prescriptionFile", prescriptionFile);
-      }
-      const response = await axios.post(endpoints.pharmacyOrders, formData, {
-        ...authHeaders(),
-        headers: {
-          ...authHeaders().headers,
-          "Content-Type": "multipart/form-data",
-        },
-      });
-      return unwrap(response);
-    }, () => ({
-      id: `pharmacy-order-${Date.now()}`,
-      ...order,
-      paymentStatus: "pending",
-      orderStatus: "placed",
-      paymentProvider: order.paymentProvider || "simulated",
-      paymentReference: `PHARM-MOCK-${Date.now()}`,
-    }));
+    const hasBinaryAttachment = Boolean(prescriptionFile);
+    const idempotencyKey = generateIdempotencyKey("hc-pharmacy");
+    return withOfflineQueue({
+      actionType: "create_pharmacy_order",
+      canQueue: false,
+      queuePayload: { order },
+      execute: async () => {
+        const formData = new FormData();
+        formData.append("items", JSON.stringify(order.items || []));
+        formData.append("deliveryAddress", String(order.deliveryAddress || ""));
+        formData.append("phone", String(order.phone || ""));
+        formData.append("customerName", String(order.customerName || ""));
+        formData.append("paymentMethod", String(order.paymentMethod || "upi"));
+        if (order.notes) {
+          formData.append("notes", String(order.notes));
+        }
+        if (order.prescriptionVerified) {
+          formData.append("prescriptionVerified", "true");
+        }
+        if (prescriptionFile) {
+          formData.append("prescriptionFile", prescriptionFile);
+        }
+        formData.append("idempotencyKey", idempotencyKey);
+        const response = await axios.post(endpoints.pharmacyOrders, formData, {
+          ...withIdempotency(authHeaders(), idempotencyKey, "hc-pharmacy"),
+          headers: {
+            ...withIdempotency(authHeaders(), idempotencyKey, "hc-pharmacy").headers,
+            "Content-Type": "multipart/form-data",
+          },
+        });
+        return unwrap(response);
+      },
+      fallbackValue: () => ({
+        id: `pharmacy-order-${Date.now()}`,
+        ...order,
+        paymentStatus: "pending",
+        orderStatus: "placed",
+        paymentProvider: order.paymentProvider || "simulated",
+        paymentReference: `PHARM-MOCK-${Date.now()}`,
+        requiresAttachmentSync: hasBinaryAttachment,
+      }),
+    });
   },
 
   getPharmacyOrders: async () => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.pharmacyOrders, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => [], { fallbackStatuses: [401, 403] });
+    }, () => []);
   },
 
   verifyPharmacyPayment: async (orderId, paymentReference, paymentStatus = "success", paymentProvider = "simulated") => {
@@ -367,40 +489,61 @@ export const healthcareApi = {
   },
 
   updatePharmacyOrder: async (orderId, payload) => {
-    return getWithFallback(async () => {
-      const response = await axios.patch(`${endpoints.pharmacyOrders}/${orderId}`, payload, authHeaders());
-      return unwrap(response);
-    }, () => ({
-      id: orderId,
-      ...payload,
-    }));
+    return withOfflineQueue({
+      actionType: "update_pharmacy_order",
+      queuePayload: { orderId, payload },
+      execute: async () => {
+        const response = await axios.patch(`${endpoints.pharmacyOrders}/${orderId}`, payload, authHeaders());
+        return unwrap(response);
+      },
+      fallbackValue: () => ({
+        id: orderId,
+        ...payload,
+      }),
+    });
   },
 
   getRefillReminders: async () => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.refillReminders, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => [], { fallbackStatuses: [401, 403] });
+    }, () => []);
   },
 
   createRefillReminder: async (payload) => {
-    return getWithFallback(async () => {
-      const response = await axios.post(endpoints.refillReminders, payload, authHeaders());
-      return unwrap(response);
-    }, () => ({
-      ...payload,
-      id: `refill-${Date.now()}`,
-    }));
+    const idempotencyKey = generateIdempotencyKey("hc-refill");
+    return withOfflineQueue({
+      actionType: "create_refill_reminder",
+      canQueue: false,
+      queuePayload: { payload },
+      execute: async () => {
+        const response = await axios.post(
+          endpoints.refillReminders,
+          { ...payload, idempotencyKey },
+          withIdempotency(authHeaders(), idempotencyKey, "hc-refill")
+        );
+        return unwrap(response);
+      },
+      fallbackValue: () => ({
+        ...payload,
+        id: `refill-${Date.now()}`,
+      }),
+    });
   },
 
   updateRefillReminder: async (reminderId, payload) => {
-    return getWithFallback(async () => {
-      const response = await axios.patch(`${endpoints.refillReminders}/${reminderId}`, payload, authHeaders());
-      return unwrap(response);
-    }, () => ({
-      id: reminderId,
-      ...payload,
-    }));
+    return withOfflineQueue({
+      actionType: "update_refill_reminder",
+      queuePayload: { reminderId, payload },
+      execute: async () => {
+        const response = await axios.patch(`${endpoints.refillReminders}/${reminderId}`, payload, authHeaders());
+        return unwrap(response);
+      },
+      fallbackValue: () => ({
+        id: reminderId,
+        ...payload,
+      }),
+    });
   },
 
   deleteRefillReminder: async (reminderId) => {
@@ -411,38 +554,69 @@ export const healthcareApi = {
   },
 
   createEmergencyIncident: async (payload) => {
-    return getWithFallback(async () => {
-      const response = await axios.post(endpoints.emergencySos, payload, authHeaders());
-      return unwrap(response);
-    }, () => ({
-      ...payload,
-      id: `incident-${Date.now()}`,
-      status: "open",
-    }));
+    const idempotencyKey = generateIdempotencyKey("hc-emergency");
+    return withOfflineQueue({
+      actionType: "create_emergency_incident",
+      canQueue: false,
+      queuePayload: { payload },
+      execute: async () => {
+        const response = await axios.post(
+          endpoints.emergencySos,
+          { ...payload, idempotencyKey },
+          withIdempotency(authHeaders(), idempotencyKey, "hc-emergency")
+        );
+        return unwrap(response);
+      },
+      fallbackValue: () => ({
+        ...payload,
+        id: `incident-${Date.now()}`,
+        status: "open",
+      }),
+    });
   },
 
   updateEmergencyLocation: async (payload) => {
-    return getWithFallback(async () => {
-      const response = await axios.post(endpoints.emergencyLocation, payload, authHeaders());
-      return unwrap(response);
-    }, () => ({
-      ...payload,
-      id: payload.incidentId,
-    }));
+    return withOfflineQueue({
+      actionType: "update_emergency_location",
+      queuePayload: { payload },
+      execute: async () => {
+        const response = await axios.post(endpoints.emergencyLocation, payload, authHeaders());
+        return unwrap(response);
+      },
+      fallbackValue: () => ({
+        ...payload,
+        id: payload.incidentId,
+      }),
+    });
+  },
+
+  updateEmergencyIncident: async (incidentId, payload = {}) => {
+    return withOfflineQueue({
+      actionType: "update_emergency_incident",
+      queuePayload: { incidentId, payload },
+      execute: async () => {
+        const response = await axios.patch(`${endpoints.emergencyIncidentUpdate}/${incidentId}`, payload, authHeaders());
+        return unwrap(response);
+      },
+      fallbackValue: () => ({
+        id: incidentId,
+        ...payload,
+      }),
+    });
   },
 
   getEmergencyIncidents: async () => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.emergencyIncidents, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => [], { fallbackStatuses: [401, 403] });
+    }, () => []);
   },
 
   getNotifications: async () => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.notifications, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => [], { fallbackStatuses: [401, 403] });
+    }, () => []);
   },
 
   markNotificationRead: async (notificationId) => {
@@ -456,46 +630,55 @@ export const healthcareApi = {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.partnerApplications, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => [], { fallbackStatuses: [401, 403] });
+    }, () => []);
   },
 
   getPartnerAdminApplications: async () => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.partnerAdminApplications, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => [], { fallbackStatuses: [401, 403] });
+    }, () => []);
   },
 
   createPartnerApplication: async ({ payload = {}, documents = [] }) => {
-    return getWithFallback(async () => {
-      const formData = new FormData();
-      Object.entries(payload || {}).forEach(([key, value]) => {
-        if (value == null) {
-          return;
-        }
-        formData.append(key, String(value));
-      });
-      (documents || []).forEach((file) => {
-        formData.append("documents", file);
-      });
-      const response = await axios.post(endpoints.partnerApplications, formData, {
-        ...authHeaders(),
-        headers: {
-          ...authHeaders().headers,
-          "Content-Type": "multipart/form-data",
-        },
-      });
-      return unwrap(response);
-    }, () => ({
-      ...payload,
-      id: `partner-${Date.now()}`,
-      documents: (documents || []).map((file) => ({
-        fileName: file?.name || "",
-        fileType: file?.type || "application/octet-stream",
-        fileUrl: "",
-      })),
-      status: "pending",
-    }));
+    const idempotencyKey = generateIdempotencyKey("hc-partner");
+    return withOfflineQueue({
+      actionType: "create_partner_application",
+      canQueue: false,
+      queuePayload: { payload },
+      execute: async () => {
+        const formData = new FormData();
+        Object.entries(payload || {}).forEach(([key, value]) => {
+          if (value == null) {
+            return;
+          }
+          formData.append(key, String(value));
+        });
+        (documents || []).forEach((file) => {
+          formData.append("documents", file);
+        });
+        formData.append("idempotencyKey", idempotencyKey);
+        const response = await axios.post(endpoints.partnerApplications, formData, {
+          ...withIdempotency(authHeaders(), idempotencyKey, "hc-partner"),
+          headers: {
+            ...withIdempotency(authHeaders(), idempotencyKey, "hc-partner").headers,
+            "Content-Type": "multipart/form-data",
+          },
+        });
+        return unwrap(response);
+      },
+      fallbackValue: () => ({
+        ...payload,
+        id: `partner-${Date.now()}`,
+        documents: (documents || []).map((file) => ({
+          fileName: file?.name || "",
+          fileType: file?.type || "application/octet-stream",
+          fileUrl: "",
+        })),
+        status: "pending",
+        requiresAttachmentSync: (documents || []).length > 0,
+      }),
+    });
   },
 
   reviewPartnerApplication: async (applicationId, status, reviewNotes = "") => {
@@ -528,7 +711,7 @@ export const healthcareApi = {
         paidPharmacyOrdersRevenue: 0,
         totalRevenue: 0,
       },
-    }), { fallbackStatuses: [401, 403] });
+    }), { fallbackStatuses: [] });
   },
 
   getHealthcareSummary: async () => {
@@ -552,14 +735,212 @@ export const healthcareApi = {
       emergencyCases: 0,
       pendingApprovals: 0,
       healthScore: 42,
-    }, { fallbackStatuses: [401, 403, 404] });
+    }, { fallbackStatuses: [404] });
+  },
+
+  getRecordAuditLogs: async ({ page = 1, limit = 25, action = "", from = "", to = "" } = {}) => {
+    return getWithFallback(async () => {
+      const params = {
+        page: Number(page) || 1,
+        limit: Number(limit) || 25,
+      };
+      if (action) {
+        params.action = action;
+      }
+      if (from) {
+        params.from = from;
+      }
+      if (to) {
+        params.to = to;
+      }
+      const response = await axios.get(endpoints.recordsAudit, {
+        ...authHeaders(),
+        params,
+      });
+      const rows = Array.isArray(unwrap(response)) ? unwrap(response) : [];
+      const pagination = response?.data?.pagination || null;
+      return { rows, pagination };
+    }, () => ({ rows: [], pagination: null }), { fallbackStatuses: [404] });
+  },
+
+  getQueuedOfflineActions: () => {
+    return getQueuedHealthcareActions();
+  },
+
+  getDeadLetterOfflineActions: () => {
+    return getDeadLetterHealthcareActions();
+  },
+
+  retryDeadLetterOfflineActions: async () => {
+    const { movedCount } = requeueAllDeadLetterHealthcareActions();
+    if (!movedCount) {
+      return { movedCount: 0, processed: 0, failed: 0, deadLettered: 0 };
+    }
+    const result = await flushHealthcareQueue({
+      create_record: async ({ meta, idempotencyKey }) =>
+        axios.post(
+          endpoints.records,
+          { ...(meta || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+          withIdempotency(authHeaders(), idempotencyKey, "hc-record")
+        ),
+      archive_record: async ({ recordId }) => axios.delete(`${endpoints.records}/${recordId}`, authHeaders()),
+      restore_record: async ({ recordId }) => axios.patch(`${endpoints.records}/${recordId}/restore`, {}, authHeaders()),
+      renew_record_consent: async ({ recordId, payload }) =>
+        axios.patch(`${endpoints.records}/${recordId}/consent`, payload, authHeaders()),
+      create_appointment: async ({ payload, idempotencyKey }) =>
+        axios.post(
+          endpoints.appointments,
+          { ...(payload || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+          withIdempotency(authHeaders(), idempotencyKey, "hc-appointment")
+        ),
+      update_appointment: async ({ appointmentId, payload }) =>
+        axios.patch(`${endpoints.appointments}/${appointmentId}`, payload, authHeaders()),
+      create_pharmacy_order: async ({ order, idempotencyKey }) =>
+        axios.post(
+          endpoints.pharmacyOrders,
+          { ...(order || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+          withIdempotency(authHeaders(), idempotencyKey, "hc-pharmacy")
+        ),
+      create_refill_reminder: async ({ payload, idempotencyKey }) =>
+        axios.post(
+          endpoints.refillReminders,
+          { ...(payload || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+          withIdempotency(authHeaders(), idempotencyKey, "hc-refill")
+        ),
+      update_refill_reminder: async ({ reminderId, payload }) =>
+        axios.patch(`${endpoints.refillReminders}/${reminderId}`, payload, authHeaders()),
+      create_emergency_incident: async ({ payload, idempotencyKey }) =>
+        axios.post(
+          endpoints.emergencySos,
+          { ...(payload || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+          withIdempotency(authHeaders(), idempotencyKey, "hc-emergency")
+        ),
+      update_emergency_location: async ({ payload }) => axios.post(endpoints.emergencyLocation, payload, authHeaders()),
+      update_emergency_incident: async ({ incidentId, payload }) =>
+        axios.patch(`${endpoints.emergencyIncidentUpdate}/${incidentId}`, payload, authHeaders()),
+      update_pharmacy_order: async ({ orderId, payload }) =>
+        axios.patch(`${endpoints.pharmacyOrders}/${orderId}`, payload, authHeaders()),
+      create_partner_application: async ({ payload, idempotencyKey }) =>
+        axios.post(
+          endpoints.partnerApplications,
+          { ...(payload || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+          withIdempotency(authHeaders(), idempotencyKey, "hc-partner")
+        ),
+    });
+    return { movedCount, ...result };
+  },
+
+  getOpsMetrics: async () => {
+    return getWithFallback(async () => {
+      const response = await axios.get(endpoints.opsMetrics, authHeaders());
+      return unwrap(response) || {};
+    }, () => ({
+      pendingPrescriptionReviews: 0,
+      criticalIncidents: 0,
+      openIncidents: 0,
+      archivedRecordsPendingPurge: 0,
+      archivedRecordsExpiredPurge: 0,
+      generatedAt: new Date().toISOString(),
+    }), { fallbackStatuses: [403, 404] });
+  },
+
+  runRetentionPurge: async (limit = 200) => {
+    return getWithFallback(async () => {
+      const response = await axios.post(endpoints.retentionPurge, { limit }, authHeaders());
+      return unwrap(response) || {};
+    }, () => ({
+      scanned: 0,
+      purged: 0,
+      s3Deleted: 0,
+      s3DeleteFailed: 0,
+      triggeredAt: new Date().toISOString(),
+    }), { fallbackStatuses: [400, 403, 404] });
+  },
+
+  askHealthcareAssistant: async ({ question, context = {} }) => {
+    return getWithFallback(async () => {
+      const response = await axios.post(
+        endpoints.aiAssist,
+        { question, context },
+        authHeaders()
+      );
+      return unwrap(response) || {};
+    }, () => ({
+      answer: "Healthcare assistant is currently unavailable. Please try again.",
+      carePlan: [],
+      riskFlags: [],
+      disclaimer: "Informational support only.",
+      provider: "fallback",
+      model: "fallback",
+      generatedAt: new Date().toISOString(),
+    }));
   },
 
   getInitialData: async () => {
+    // Fire-and-forget sync so initial render is not blocked by retry work.
+    try {
+      void flushHealthcareQueue({
+        create_record: async ({ meta, idempotencyKey }) =>
+          axios.post(
+            endpoints.records,
+            { ...(meta || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+            withIdempotency(authHeaders(), idempotencyKey, "hc-record")
+          ),
+        archive_record: async ({ recordId }) => axios.delete(`${endpoints.records}/${recordId}`, authHeaders()),
+        restore_record: async ({ recordId }) => axios.patch(`${endpoints.records}/${recordId}/restore`, {}, authHeaders()),
+        renew_record_consent: async ({ recordId, payload }) =>
+          axios.patch(`${endpoints.records}/${recordId}/consent`, payload, authHeaders()),
+        create_appointment: async ({ payload, idempotencyKey }) =>
+          axios.post(
+            endpoints.appointments,
+            { ...(payload || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+            withIdempotency(authHeaders(), idempotencyKey, "hc-appointment")
+          ),
+        update_appointment: async ({ appointmentId, payload }) =>
+          axios.patch(`${endpoints.appointments}/${appointmentId}`, payload, authHeaders()),
+        create_pharmacy_order: async ({ order, idempotencyKey }) =>
+          axios.post(
+            endpoints.pharmacyOrders,
+            { ...(order || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+            withIdempotency(authHeaders(), idempotencyKey, "hc-pharmacy")
+          ),
+        create_refill_reminder: async ({ payload, idempotencyKey }) =>
+          axios.post(
+            endpoints.refillReminders,
+            { ...(payload || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+            withIdempotency(authHeaders(), idempotencyKey, "hc-refill")
+          ),
+        update_refill_reminder: async ({ reminderId, payload }) =>
+          axios.patch(`${endpoints.refillReminders}/${reminderId}`, payload, authHeaders()),
+        create_emergency_incident: async ({ payload, idempotencyKey }) =>
+          axios.post(
+            endpoints.emergencySos,
+            { ...(payload || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+            withIdempotency(authHeaders(), idempotencyKey, "hc-emergency")
+          ),
+        update_emergency_location: async ({ payload }) => axios.post(endpoints.emergencyLocation, payload, authHeaders()),
+        update_emergency_incident: async ({ incidentId, payload }) =>
+          axios.patch(`${endpoints.emergencyIncidentUpdate}/${incidentId}`, payload, authHeaders()),
+        update_pharmacy_order: async ({ orderId, payload }) =>
+          axios.patch(`${endpoints.pharmacyOrders}/${orderId}`, payload, authHeaders()),
+        create_partner_application: async ({ payload, idempotencyKey }) =>
+          axios.post(
+            endpoints.partnerApplications,
+            { ...(payload || {}), ...(idempotencyKey ? { idempotencyKey } : {}) },
+            withIdempotency(authHeaders(), idempotencyKey, "hc-partner")
+          ),
+      }).catch(() => ({}));
+    } catch (_error) {
+      // Queue flush failures are non-blocking. We continue with normal data fetch.
+    }
+
     const safeLoad = async (loader, fallbackValue) => {
       try {
         return await loader();
-      } catch (_error) {
+      } catch (error) {
+        if (isAuthError(error)) {
+          throw error;
+        }
         return typeof fallbackValue === "function" ? fallbackValue() : fallbackValue;
       }
     };
@@ -583,7 +964,7 @@ export const healthcareApi = {
       safeLoad(() => healthcareApi.getLabTests(), MOCK_LAB_TESTS),
       safeLoad(() => healthcareApi.getHealthPackages(), MOCK_HEALTH_PACKAGES),
       safeLoad(() => healthcareApi.getMedicines(), MOCK_MEDICINES),
-      safeLoad(() => healthcareApi.getRecords(), MOCK_RECORDS),
+      safeLoad(() => healthcareApi.getRecords({ includeDeleted: true }), MOCK_RECORDS),
       safeLoad(() => healthcareApi.getAppointments(), MOCK_APPOINTMENTS),
       safeLoad(
         () => healthcareApi.getFamilyProfiles(),

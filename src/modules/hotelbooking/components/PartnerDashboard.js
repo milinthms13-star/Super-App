@@ -4,6 +4,7 @@ import "../HotelBooking.css";
 
 const PartnerDashboard = ({ currentUser }) => {
   const { apiCall } = useApp();
+  const isAdmin = currentUser?.role === "admin" || currentUser?.registrationType === "admin";
   const [activePartnerTab, setActivePartnerTab] = useState("overview");
   const [properties, setProperties] = useState([]);
   const [bookingRequests, setBookingRequests] = useState([]);
@@ -23,6 +24,8 @@ const PartnerDashboard = ({ currentUser }) => {
   const [showBookingDetails, setShowBookingDetails] = useState(false);
   const [showFeaturedModal, setShowFeaturedModal] = useState(false);
   const [featuredProperty, setFeaturedProperty] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const [confirmDeleteRoomKey, setConfirmDeleteRoomKey] = useState(null);
   
   // Property form state
   const [propertyForm, setPropertyForm] = useState({
@@ -99,7 +102,44 @@ const PartnerDashboard = ({ currentUser }) => {
     setShowRoomForm(true);
   };
 
-  const saveRoomToProperty = () => {
+  const notify = (message) => {
+    setNotice(message);
+  };
+
+  const normalizeRoomForApi = (room = {}) => ({
+    type: String(room.type || "").trim(),
+    capacity: Number(room.capacity || 1),
+    bedType: String(room.bedType || "Double").trim(),
+    basePrice: Number(room.basePrice || room.price || 0),
+    totalInventory: Number(room.totalInventory || 1),
+    availableRooms: Number(room.availableRooms || room.totalInventory || 1),
+    amenities: Array.isArray(room.amenities) ? room.amenities : [],
+    cancellationPolicy: String(room.cancellationPolicy || "Flexible").trim(),
+  });
+
+  const buildPropertyPayload = (property, roomsOverride = null) => {
+    const rooms = Array.isArray(roomsOverride)
+      ? roomsOverride
+      : Array.isArray(property?.rooms)
+      ? property.rooms
+      : [];
+    return {
+      businessName: property?.businessName || property?.name || "",
+      propertyType: property?.propertyType || property?.type || "Hotel",
+      location: property?.location || property?.city || "",
+      address: property?.address || "",
+      city: property?.city || "",
+      pincode: property?.pincode || "",
+      phone: property?.phone || property?.contact?.phone || "",
+      email: property?.email || "",
+      description: property?.description || "",
+      amenities: Array.isArray(property?.amenities) ? property.amenities : [],
+      images: Array.isArray(property?.images) ? property.images : [],
+      rooms: rooms.map(normalizeRoomForApi),
+    };
+  };
+
+  const saveRoomToProperty = async () => {
     if (!selectedProperty) {
       return;
     }
@@ -110,6 +150,7 @@ const PartnerDashboard = ({ currentUser }) => {
       _id: roomId,
     };
 
+    const previousProperties = properties;
     const updatedProperties = properties.map(property => {
       if (property._id !== selectedProperty._id) {
         return property;
@@ -127,23 +168,44 @@ const PartnerDashboard = ({ currentUser }) => {
     });
 
     setProperties(updatedProperties);
-    localStorage.setItem(`partner_properties_${currentUser?.id}`, JSON.stringify(updatedProperties));
-    setShowRoomForm(false);
-    setSelectedProperty(null);
-    resetRoomForm();
-    alert(`Room ${editingRoom ? "updated" : "added"} successfully!`);
+    try {
+      const targetProperty = updatedProperties.find((property) => property._id === selectedProperty._id);
+      if (!targetProperty?._id) {
+        throw new Error("Property not found");
+      }
+
+      const payload = buildPropertyPayload(targetProperty, targetProperty.rooms || []);
+      const response = await apiCall(`/hotelbooking/partner/hotels/${targetProperty._id}`, "PUT", payload);
+      const persistedProperty = response?.data || response;
+      const syncedProperties = updatedProperties.map((property) =>
+        property._id === targetProperty._id ? { ...property, ...persistedProperty } : property
+      );
+      setProperties(syncedProperties);
+      localStorage.setItem(`partner_properties_${currentUser?.id}`, JSON.stringify(syncedProperties));
+      setShowRoomForm(false);
+      setSelectedProperty(null);
+      resetRoomForm();
+      notify(`Room ${editingRoom ? "updated" : "added"} successfully!`);
+    } catch (error) {
+      setProperties(previousProperties);
+      notify(error?.response?.data?.message || "Failed to save room. Please retry.");
+    }
   };
 
   const handleEditRoom = (property, room) => {
     openRoomForm(property, room);
   };
 
-  const handleDeleteRoom = (propertyId, roomId) => {
-    const confirmed = window.confirm("Delete this room type? This cannot be undone.");
-    if (!confirmed) {
+  const handleDeleteRoom = async (propertyId, roomId) => {
+    const actionKey = `${propertyId}:${roomId}`;
+    if (confirmDeleteRoomKey !== actionKey) {
+      setConfirmDeleteRoomKey(actionKey);
+      notify("Click Delete Room again to confirm.");
       return;
     }
 
+    setConfirmDeleteRoomKey(null);
+    const previousProperties = properties;
     const updatedProperties = properties.map(property => {
       if (property._id !== propertyId) {
         return property;
@@ -156,7 +218,24 @@ const PartnerDashboard = ({ currentUser }) => {
     });
 
     setProperties(updatedProperties);
-    localStorage.setItem(`partner_properties_${currentUser?.id}`, JSON.stringify(updatedProperties));
+    try {
+      const targetProperty = updatedProperties.find((property) => property._id === propertyId);
+      if (!targetProperty?._id) {
+        throw new Error("Property not found");
+      }
+      const payload = buildPropertyPayload(targetProperty, targetProperty.rooms || []);
+      const response = await apiCall(`/hotelbooking/partner/hotels/${targetProperty._id}`, "PUT", payload);
+      const persistedProperty = response?.data || response;
+      const syncedProperties = updatedProperties.map((property) =>
+        property._id === targetProperty._id ? { ...property, ...persistedProperty } : property
+      );
+      setProperties(syncedProperties);
+      localStorage.setItem(`partner_properties_${currentUser?.id}`, JSON.stringify(syncedProperties));
+      notify("Room deleted successfully.");
+    } catch (error) {
+      setProperties(previousProperties);
+      notify(error?.response?.data?.message || "Failed to delete room. Please retry.");
+    }
   };
 
   const resetPropertyForm = () => {
@@ -219,7 +298,7 @@ const PartnerDashboard = ({ currentUser }) => {
     localStorage.setItem(`partner_properties_${currentUser?.id}`, JSON.stringify(updatedProperties));
     setShowFeaturedModal(false);
     setFeaturedProperty(null);
-    alert(`"${featuredProperty.businessName}" is now a Featured Listing.`);
+    notify(`"${featuredProperty.businessName}" is now a Featured Listing.`);
   };
 
   const closeFeaturedUpgradeModal = () => {
@@ -227,10 +306,16 @@ const PartnerDashboard = ({ currentUser }) => {
     setFeaturedProperty(null);
   };
 
-  // Load partner data on mount
+  // Load partner data on mount and user change
   useEffect(() => {
+    if (!currentUser?.id) {
+      setProperties([]);
+      setBookingRequests([]);
+      setPayouts([]);
+      return;
+    }
     loadPartnerData();
-  }, []);
+  }, [apiCall, currentUser?.id]);
 
   const loadPartnerData = async () => {
     try {
@@ -268,7 +353,7 @@ const PartnerDashboard = ({ currentUser }) => {
       }
 
       try {
-        const payoutsRes = await apiCall(`/api/partner/payouts/${currentUser.id}`);
+        const payoutsRes = await apiCall(`/hotelbooking/partner/payouts/${currentUser.id}`);
         setPayouts(payoutsRes?.data || []);
       } catch (apiError) {
         console.warn("API call failed, using localStorage:", apiError);
@@ -380,7 +465,7 @@ const PartnerDashboard = ({ currentUser }) => {
 
         setProperties(updatedProperties);
         localStorage.setItem(`partner_properties_${currentUser?.id}`, JSON.stringify(updatedProperties));
-        alert(`Property "${propertyForm.businessName}" ${isEditing ? "updated" : "registered"} successfully!`);
+        notify(`Property "${propertyForm.businessName}" ${isEditing ? "updated" : "registered"} successfully!`);
       } catch (apiError) {
         console.warn("API call failed, using localStorage:", apiError);
         const fallbackProperty = {
@@ -399,14 +484,14 @@ const PartnerDashboard = ({ currentUser }) => {
 
         setProperties(updatedProperties);
         localStorage.setItem(`partner_properties_${currentUser?.id}`, JSON.stringify(updatedProperties));
-        alert(`Property "${propertyForm.businessName}" ${isEditing ? "updated" : "registered"} successfully (offline mode)!`);
+        notify(`Property "${propertyForm.businessName}" ${isEditing ? "updated" : "registered"} successfully (offline mode)!`);
       }
 
       setShowPropertyForm(false);
       resetPropertyForm();
     } catch (error) {
       console.error("Error submitting property:", error);
-      alert("Failed to save property");
+      notify("Failed to save property");
     }
   };
 
@@ -427,10 +512,10 @@ const PartnerDashboard = ({ currentUser }) => {
       );
       setBookingRequests(updated);
       localStorage.setItem(`booking_requests_${currentUser?.id}`, JSON.stringify(updated));
-      alert("Booking request approved!");
+      notify("Booking request approved!");
     } catch (error) {
       console.error("Error approving booking:", error);
-      alert("Failed to approve booking");
+      notify("Failed to approve booking");
     }
   };
 
@@ -451,10 +536,10 @@ const PartnerDashboard = ({ currentUser }) => {
       );
       setBookingRequests(updated);
       localStorage.setItem(`booking_requests_${currentUser?.id}`, JSON.stringify(updated));
-      alert("Booking request rejected.");
+      notify("Booking request rejected.");
     } catch (error) {
       console.error("Error rejecting booking:", error);
-      alert("Failed to reject booking");
+      notify("Failed to reject booking");
     }
   };
 
@@ -479,29 +564,26 @@ const PartnerDashboard = ({ currentUser }) => {
   }, 0);
 
   const handleSettlePayout = async (payoutId) => {
+    if (!isAdmin) {
+      notify("Only admins can settle payouts.");
+      return;
+    }
     try {
-      try {
-        await apiCall(`/api/partner/payouts/${payoutId}/settle`, "POST");
-      } catch (apiError) {
-        console.warn("API call failed, using localStorage:", apiError);
-      }
-
-      // Update local state regardless
+      await apiCall(`/hotelbooking/partner/payouts/${payoutId}/settle`, "POST");
       const updated = payouts.map(payout =>
         payout._id === payoutId ? { ...payout, status: "paid" } : payout
       );
       setPayouts(updated);
       localStorage.setItem(`payouts_${currentUser?.id}`, JSON.stringify(updated));
-      alert("Payout marked as paid.");
+      notify("Payout marked as paid.");
     } catch (error) {
-      console.error("Error settling payout:", error);
-      alert("Failed to settle payout");
+      notify(error?.response?.data?.message || "Failed to settle payout");
     }
   };
 
   const handleRequestPayout = async () => {
-    if (approvedBookingRequests.length === 0) {
-      alert("No approved bookings available for payout.");
+    if (approvedBookingRequests.length < 10) {
+      notify("At least 10 approved bookings are required to request payout.");
       return;
     }
 
@@ -530,35 +612,14 @@ const PartnerDashboard = ({ currentUser }) => {
         bookingIds: approvedBookingRequests.map(req => req._id),
       };
 
-      try {
-        const response = await apiCall("/api/partner/payouts/request", "POST", payoutData);
-        const newPayout = response?.data || {
-          ...payoutData,
-          _id: Date.now().toString(),
-          status: "pending",
-        };
-
-        const updatedPayouts = [...payouts, newPayout];
-        setPayouts(updatedPayouts);
-        localStorage.setItem(`payouts_${currentUser?.id}`, JSON.stringify(updatedPayouts));
-        alert("Payout request submitted successfully!");
-      } catch (apiError) {
-        console.warn("API call failed, using localStorage:", apiError);
-        // Fallback to localStorage
-        const newPayout = {
-          ...payoutData,
-          _id: Date.now().toString(),
-          status: "pending",
-        };
-
-        const updatedPayouts = [...payouts, newPayout];
-        setPayouts(updatedPayouts);
-        localStorage.setItem(`payouts_${currentUser?.id}`, JSON.stringify(updatedPayouts));
-        alert("Payout request created (offline mode).");
-      }
+      const response = await apiCall("/hotelbooking/partner/payouts/request", "POST", payoutData);
+      const newPayout = response?.data || response;
+      const updatedPayouts = [...payouts, newPayout];
+      setPayouts(updatedPayouts);
+      localStorage.setItem(`payouts_${currentUser?.id}`, JSON.stringify(updatedPayouts));
+      notify("Payout request submitted successfully!");
     } catch (error) {
-      console.error("Error requesting payout:", error);
-      alert("Failed to request payout");
+      notify(error?.response?.data?.message || "Failed to request payout");
     }
   };
 
@@ -566,10 +627,10 @@ const PartnerDashboard = ({ currentUser }) => {
     const contactInfo = request.guestEmail || request.guestPhone || "No contact available";
     if (navigator?.clipboard?.writeText) {
       navigator.clipboard.writeText(contactInfo)
-        .then(() => alert(`Guest contact copied: ${contactInfo}`))
-        .catch(() => alert(`Guest contact: ${contactInfo}`));
+        .then(() => notify(`Guest contact copied: ${contactInfo}`))
+        .catch(() => notify(`Guest contact: ${contactInfo}`));
     } else {
-      alert(`Guest contact: ${contactInfo}`);
+      notify(`Guest contact: ${contactInfo}`);
     }
   };
 
@@ -589,6 +650,7 @@ const PartnerDashboard = ({ currentUser }) => {
         <h2>Partner Dashboard</h2>
         <p>Manage your properties, bookings, and payouts.</p>
       </div>
+      {notice ? <div className="hotel-booking-success-banner">{notice}</div> : null}
 
       {/* Partner Navigation */}
       <div className="hotel-booking-partner-nav">
@@ -643,9 +705,9 @@ const PartnerDashboard = ({ currentUser }) => {
             </div>
 
             <div className="hotel-booking-partner-stat-card">
-              <div className="hotel-booking-stat-value">₹{payouts.reduce((sum, p) => sum + (p.netAmount || 0), 0).toLocaleString()}</div>
+              <div className="hotel-booking-stat-value">INR {payouts.reduce((sum, p) => sum + (p.netAmount || 0), 0).toLocaleString()}</div>
               <div className="hotel-booking-stat-label">Total Earnings</div>
-              <div className="hotel-booking-stat-subtitle">Pending payout: ₹{pendingPayoutAmount.toLocaleString()}</div>
+              <div className="hotel-booking-stat-subtitle">Pending payout: INR {pendingPayoutAmount.toLocaleString()}</div>
             </div>
 
             <div className="hotel-booking-partner-stat-card">
@@ -657,13 +719,13 @@ const PartnerDashboard = ({ currentUser }) => {
 
           <div className="hotel-booking-partner-grid">
             <div className="hotel-booking-partner-card">
-              <h3>🏨 Register New Property</h3>
+              <h3>Register New Property</h3>
               <p>Add your hotel, homestay, or resort to NilaStay</p>
               <ul>
-                <li>✓ Free basic listing</li>
-                <li>✓ Reach Kerala tourists</li>
-                <li>✓ 10% commission per booking</li>
-                <li>✓ Direct customer contact</li>
+                <li>Free basic listing</li>
+                <li>Reach Kerala tourists</li>
+                <li>10% commission per booking</li>
+                <li>Direct customer contact</li>
               </ul>
               <button
                 type="button"
@@ -675,13 +737,13 @@ const PartnerDashboard = ({ currentUser }) => {
             </div>
 
             <div className="hotel-booking-partner-card">
-              <h3>⭐ Featured Listing</h3>
+              <h3>Featured Listing</h3>
               <p>Get premium visibility and more bookings</p>
               <ul>
-                <li>✓ Top search results</li>
-                <li>✓ Priority support</li>
-                <li>✓ ₹299/month</li>
-                <li>✓ Analytics included</li>
+                <li>Top search results</li>
+                <li>Priority support</li>
+                <li>INR 299/month</li>
+                <li>Analytics included</li>
               </ul>
               <button
                 type="button"
@@ -692,7 +754,7 @@ const PartnerDashboard = ({ currentUser }) => {
                     openFeaturedUpgradeModal(nextStandard);
                     setActivePartnerTab("properties");
                   } else {
-                    alert("All your properties are already featured.");
+                    notify("All your properties are already featured.");
                   }
                 }}
               >
@@ -701,13 +763,13 @@ const PartnerDashboard = ({ currentUser }) => {
             </div>
 
             <div className="hotel-booking-partner-card">
-              <h3>💡 Partner Growth Pack</h3>
+              <h3>Partner Growth Pack</h3>
               <p>Professional tools to scale your business</p>
               <ul>
-                <li>✓ Professional photos</li>
-                <li>✓ SEO optimization</li>
-                <li>✓ Seasonal pricing</li>
-                <li>✓ Dedicated support</li>
+                <li>Professional photos</li>
+                <li>SEO optimization</li>
+                <li>Seasonal pricing</li>
+                <li>Dedicated support</li>
               </ul>
               <button type="button" className="hotel-booking-secondary-button">
                 Learn More
@@ -722,7 +784,7 @@ const PartnerDashboard = ({ currentUser }) => {
         <div className="hotel-booking-partner-content">
           {properties.length === 0 ? (
             <div className="hotel-booking-empty-state">
-              <p>📭 No properties registered yet</p>
+              <p>No properties registered yet.</p>
               <p>Start by registering your first property</p>
               <button
                 type="button"
@@ -739,7 +801,7 @@ const PartnerDashboard = ({ currentUser }) => {
                   <div className="hotel-booking-property-header">
                     <h3>{property.businessName}</h3>
                     <span className={`hotel-booking-status ${property.verified ? "hotel-booking-status-confirmed" : "hotel-booking-status-pending"}`}>
-                      {property.verified ? "✓ Verified" : "⏳ Pending"}
+                      {property.verified ? "Verified" : "Pending"}
                     </span>
                   </div>
 
@@ -748,7 +810,7 @@ const PartnerDashboard = ({ currentUser }) => {
                     <p><strong>Type:</strong> {property.propertyType}</p>
                     <p><strong>Rooms:</strong> {property.rooms?.length || 0}</p>
                     <p><strong>Bookings:</strong> {property.stats?.bookings || 0}</p>
-                    <p><strong>Revenue:</strong> ₹{property.stats?.revenue?.toLocaleString() || 0}</p>
+                    <p><strong>Revenue:</strong> INR {property.stats?.revenue?.toLocaleString() || 0}</p>
                   </div>
 
                   {property.rooms?.length > 0 && (
@@ -757,8 +819,8 @@ const PartnerDashboard = ({ currentUser }) => {
                         <div key={room._id} className="hotel-booking-room-card">
                           <div>
                             <h4>{room.type}</h4>
-                            <p>{room.bedType} bed • Capacity {room.capacity}</p>
-                            <p>₹{room.basePrice.toLocaleString()} / night</p>
+                            <p>{room.bedType} bed  Capacity {room.capacity}</p>
+                            <p>INR {room.basePrice.toLocaleString()} / night</p>
                           </div>
                           <div className="hotel-booking-room-actions">
                             <button
@@ -820,7 +882,7 @@ const PartnerDashboard = ({ currentUser }) => {
         <div className="hotel-booking-partner-content">
           {bookingRequests.length === 0 ? (
             <div className="hotel-booking-empty-state">
-              <p>📭 No booking requests yet</p>
+              <p>No booking requests yet.</p>
               <p>When customers book your properties, requests will appear here</p>
             </div>
           ) : (
@@ -838,10 +900,10 @@ const PartnerDashboard = ({ currentUser }) => {
                   </div>
 
                   <div className="hotel-booking-request-details">
-                    <span>📅 {new Date(request.checkInDate).toLocaleDateString()} - {new Date(request.checkOutDate).toLocaleDateString()}</span>
-                    <span>👤 {request.numberOfGuests} guests</span>
-                    <span>🏠 {request.roomType}</span>
-                    <span>💰 ₹{request.totalPrice.toLocaleString()}</span>
+                    <span>Dates {new Date(request.checkInDate).toLocaleDateString()} - {new Date(request.checkOutDate).toLocaleDateString()}</span>
+                    <span>Guests {request.numberOfGuests}</span>
+                    <span>Room {request.roomType}</span>
+                    <span>Total INR {request.totalPrice.toLocaleString()}</span>
                   </div>
 
                   {request.specialRequests && (
@@ -856,7 +918,7 @@ const PartnerDashboard = ({ currentUser }) => {
                       className="hotel-booking-secondary-button"
                       onClick={() => openBookingDetails(request)}
                     >
-                      📄 View Details
+                      View Details
                     </button>
                     {request.status === "pending" && (
                       <>
@@ -865,14 +927,14 @@ const PartnerDashboard = ({ currentUser }) => {
                           className="hotel-booking-primary-button"
                           onClick={() => handleApproveBookingRequest(request._id)}
                         >
-                          ✓ Approve
+                          Approve
                         </button>
                         <button
                           type="button"
                           className="hotel-booking-danger-button"
                           onClick={() => handleRejectBookingRequest(request._id)}
                         >
-                          ✕ Reject
+                          Reject
                         </button>
                       </>
                     )}
@@ -881,7 +943,7 @@ const PartnerDashboard = ({ currentUser }) => {
                       className="hotel-booking-secondary-button"
                       onClick={() => handleContactGuest(request)}
                     >
-                      📞 Contact Guest
+                      Contact Guest
                     </button>
                   </div>
                 </div>
@@ -902,14 +964,14 @@ const PartnerDashboard = ({ currentUser }) => {
                 className="hotel-booking-modal-close"
                 onClick={closeFeaturedUpgradeModal}
               >
-                ✕
+                x
               </button>
             </div>
 
             <div className="hotel-booking-modal-body">
               <div className="hotel-booking-modal-section">
                 <h3>{featuredProperty.businessName}</h3>
-                <p>{featuredProperty.location} • {featuredProperty.propertyType}</p>
+                <p>{featuredProperty.location}  {featuredProperty.propertyType}</p>
                 <p>{featuredProperty.description || "No property description available."}</p>
               </div>
 
@@ -925,7 +987,7 @@ const PartnerDashboard = ({ currentUser }) => {
 
               <div className="hotel-booking-modal-section">
                 <h3>Upgrade Fee</h3>
-                <p>₹299 for the first month (mock pricing)</p>
+                <p>INR 299 for the first month (mock pricing)</p>
                 <p>Featured commission rate: {commissionSettings.featuredRate}%</p>
               </div>
             </div>
@@ -961,7 +1023,7 @@ const PartnerDashboard = ({ currentUser }) => {
                 className="hotel-booking-modal-close"
                 onClick={closeBookingDetails}
               >
-                ✕
+                x
               </button>
             </div>
 
@@ -973,7 +1035,7 @@ const PartnerDashboard = ({ currentUser }) => {
                 <p><strong>Check-out:</strong> {new Date(selectedBookingRequest.checkOutDate).toLocaleDateString()}</p>
                 <p><strong>Guests:</strong> {selectedBookingRequest.numberOfGuests}</p>
                 <p><strong>Room Type:</strong> {selectedBookingRequest.roomType}</p>
-                <p><strong>Total Price:</strong> ₹{selectedBookingRequest.totalPrice?.toLocaleString()}</p>
+                <p><strong>Total Price:</strong> INR {selectedBookingRequest.totalPrice?.toLocaleString()}</p>
                 <p><strong>Contact:</strong> {selectedBookingRequest.guestEmail || selectedBookingRequest.guestPhone || "Not provided"}</p>
               </div>
 
@@ -1033,9 +1095,9 @@ const PartnerDashboard = ({ currentUser }) => {
         <div className="hotel-booking-partner-content">
           {payouts.length === 0 ? (
             <div className="hotel-booking-empty-state">
-              <p>💰 No payouts yet</p>
+              <p>No payouts yet.</p>
               <p>Your first payout will be available after 10 confirmed bookings</p>
-              {approvedBookingRequests.length > 0 && (
+              {approvedBookingRequests.length >= 10 && (
                 <button
                   type="button"
                   className="hotel-booking-primary-button"
@@ -1047,12 +1109,12 @@ const PartnerDashboard = ({ currentUser }) => {
             </div>
           ) : (
             <>
-              {approvedBookingRequests.length > 0 && (
+              {approvedBookingRequests.length >= 10 && (
                 <div className="hotel-booking-partner-card" style={{ marginBottom: "1.5rem" }}>
                   <h3>Pending Request</h3>
                   <p>{approvedBookingRequests.length} approved booking(s) ready for payout.</p>
                   <p>
-                    Expected net amount: <strong>₹{pendingPayoutAmount.toLocaleString()}</strong>
+                    Expected net amount: <strong>INR {pendingPayoutAmount.toLocaleString()}</strong>
                   </p>
                   <button
                     type="button"
@@ -1082,18 +1144,18 @@ const PartnerDashboard = ({ currentUser }) => {
                     </div>
                     <div className="hotel-booking-payout-item">
                       <span>Gross Amount:</span>
-                      <strong>₹{payout.grossAmount?.toLocaleString()}</strong>
+                      <strong>INR {payout.grossAmount?.toLocaleString()}</strong>
                     </div>
                     <div className="hotel-booking-payout-item">
                       <span>Commission ({payout.grossAmount > 0 ? Math.round((payout.commission / payout.grossAmount) * 100) : commissionSettings.defaultRate}%):</span>
-                      <strong>-₹{payout.commission?.toLocaleString()}</strong>
+                      <strong>-INR {payout.commission?.toLocaleString()}</strong>
                     </div>
                     <div className="hotel-booking-payout-item hotel-booking-payout-total">
                       <span>Net Payout:</span>
-                      <strong>₹{payout.netAmount?.toLocaleString()}</strong>
+                      <strong>INR {payout.netAmount?.toLocaleString()}</strong>
                     </div>
                   </div>
-                  {payout.status === "pending" && (
+                  {payout.status === "pending" && isAdmin && (
                     <div className="hotel-booking-payout-actions">
                       <button
                         type="button"
@@ -1102,6 +1164,13 @@ const PartnerDashboard = ({ currentUser }) => {
                       >
                         Mark as Paid
                       </button>
+                    </div>
+                  )}
+                  {payout.status === "pending" && !isAdmin && (
+                    <div className="hotel-booking-payout-actions">
+                      <span className="hotel-booking-status hotel-booking-status-pending">
+                        Awaiting admin settlement
+                      </span>
                     </div>
                   )}
                 </div>
@@ -1127,7 +1196,7 @@ const PartnerDashboard = ({ currentUser }) => {
                   resetRoomForm();
                 }}
               >
-                ✕
+                x
               </button>
             </div>
 
@@ -1281,7 +1350,7 @@ const PartnerDashboard = ({ currentUser }) => {
                 className="hotel-booking-modal-close"
                 onClick={() => setShowPropertyForm(false)}
               >
-                ✕
+                x
               </button>
             </div>
 
@@ -1476,7 +1545,7 @@ const PartnerDashboard = ({ currentUser }) => {
                             className="hotel-booking-remove-image"
                             onClick={() => handleRemoveImage(idx)}
                           >
-                            ✕
+                            x
                           </button>
                         </div>
                       ))}
@@ -1506,3 +1575,4 @@ const PartnerDashboard = ({ currentUser }) => {
 };
 
 export default PartnerDashboard;
+

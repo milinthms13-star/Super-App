@@ -84,27 +84,61 @@ const HotelBooking = () => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(null);
+  const [bookingError, setBookingError] = useState(null);
   const [hotels, setHotels] = useState([]);
   const [hotelsLoading, setHotelsLoading] = useState(false);
+  const [debouncedSearchLocation, setDebouncedSearchLocation] = useState("");
+  const [debouncedBudget, setDebouncedBudget] = useState(5000);
+  const [conciergeQuestion, setConciergeQuestion] = useState("");
+  const [conciergeLoading, setConciergeLoading] = useState(false);
+  const [conciergeResult, setConciergeResult] = useState(null);
+  const [conciergeError, setConciergeError] = useState(null);
 
-  const normalizeHotel = (hotel = {}) => ({
-    ...hotel,
-    id: hotel.id || hotel._id,
-    _id: hotel._id || hotel.id,
-    name: hotel.name || hotel.businessName || "Unnamed Property",
-    businessName: hotel.businessName || hotel.name || "Unnamed Property",
-    location: hotel.location || hotel.city || "",
-    type: hotel.type || hotel.propertyType || "Hotel",
-    propertyType: hotel.propertyType || hotel.type || "Hotel",
-    price: Number(hotel.price || hotel.pricePerNight || 0),
-    pricePerNight: Number(hotel.pricePerNight || hotel.price || 0),
-    rating: Number(hotel.rating || 0),
-    reviews: Number(hotel.reviews || 0),
-    rooms: Array.isArray(hotel.rooms) ? hotel.rooms : [],
-    images: Array.isArray(hotel.images) ? hotel.images : [],
-    amenities: Array.isArray(hotel.amenities) ? hotel.amenities : [],
-    verified: Boolean(hotel.verified || String(hotel.status || "").toLowerCase() === "approved"),
-  });
+  const normalizeHotel = (hotel = {}) => {
+    const phone = hotel?.contact?.phone || hotel?.phone || "";
+    const normalizedRooms = Array.isArray(hotel.rooms)
+      ? hotel.rooms.map((room) => {
+          const price = Number(room?.price ?? room?.basePrice ?? 0);
+          return {
+            ...room,
+            basePrice: Number(room?.basePrice ?? price),
+            price,
+            available: typeof room?.available === "boolean" ? room.available : Number(room?.availableRooms || 0) > 0,
+          };
+        })
+      : [];
+
+    return {
+      ...hotel,
+      id: hotel.id || hotel._id,
+      _id: hotel._id || hotel.id,
+      name: hotel.name || hotel.businessName || "Unnamed Property",
+      businessName: hotel.businessName || hotel.name || "Unnamed Property",
+      location: hotel.location || hotel.city || "",
+      type: hotel.type || hotel.propertyType || "Hotel",
+      propertyType: hotel.propertyType || hotel.type || "Hotel",
+      price: Number(hotel.price || hotel.pricePerNight || 0),
+      pricePerNight: Number(hotel.pricePerNight || hotel.price || 0),
+      rating: Number(hotel.rating || 0),
+      reviews: Number(hotel.reviews || 0),
+      rooms: normalizedRooms,
+      images: Array.isArray(hotel.images) ? hotel.images : [],
+      amenities: Array.isArray(hotel.amenities) ? hotel.amenities : [],
+      contact: {
+        phone,
+        whatsapp: hotel?.contact?.whatsapp || phone,
+      },
+      verified: Boolean(hotel.verified || String(hotel.status || "").toLowerCase() === "approved"),
+    };
+  };
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDebouncedSearchLocation(searchLocation);
+      setDebouncedBudget(budget);
+    }, 350);
+    return () => clearTimeout(timeout);
+  }, [searchLocation, budget]);
 
   useEffect(() => {
     let mounted = true;
@@ -112,9 +146,9 @@ const HotelBooking = () => {
       try {
         setHotelsLoading(true);
         const response = await apiCall("/hotelbooking/hotels", "GET", {
-          destination: searchLocation || undefined,
+          destination: debouncedSearchLocation || undefined,
           minPrice: 0,
-          maxPrice: budget,
+          maxPrice: debouncedBudget,
         });
         const items = response?.data || response?.hotels || [];
         if (mounted) {
@@ -136,19 +170,13 @@ const HotelBooking = () => {
     return () => {
       mounted = false;
     };
-  }, [apiCall, budget, searchLocation]);
+  }, [apiCall, debouncedBudget, debouncedSearchLocation]);
 
   // Validate dates
   const isValidDateRange = useMemo(() => {
     if (!checkIn || !checkOut) return true;
     return new Date(checkOut) > new Date(checkIn);
   }, [checkIn, checkOut]);
-
-  // Get today's date for minimum date validation
-  const today = useMemo(() => {
-    const date = new Date();
-    return date.toISOString().split("T")[0];
-  }, []);
 
   // Filter hotels with availability checking
   const filteredHotels = useMemo(() => {
@@ -180,16 +208,15 @@ const HotelBooking = () => {
 
   // Handle booking submission
   const handleBookingSubmit = async (bookingData) => {
-    const userId = currentUser?.id || "guest";
-    const fallbackBooking = {
-      ...bookingData,
-      _id: Date.now().toString(),
-      userId,
-      status: bookingData.status || "pending",
-      bookingStatus: bookingData.bookingStatus || "Pending",
-    };
+    const userId = currentUser?.id;
+    if (!userId) {
+      const message = "Please sign in before placing a booking.";
+      setBookingError(message);
+      throw new Error(message);
+    }
 
     try {
+      const idempotencyKey = `hotelbooking-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const response = await apiCall("/hotelbooking/bookings", "POST", {
         hotelId: bookingData.hotelId,
         hotelName: bookingData.hotelName,
@@ -204,37 +231,32 @@ const HotelBooking = () => {
         numberOfRooms: bookingData.numberOfRooms || 1,
         pricePerNight: bookingData.pricePerNight,
         specialRequests: bookingData.specialRequests,
+        idempotencyKey,
       });
-      const newBooking = response?.booking || response?.data?.booking || response?.data || response || fallbackBooking;
-      const existingBookings = JSON.parse(localStorage.getItem(`bookings_${userId}`) || "[]");
-      existingBookings.push(newBooking);
-      localStorage.setItem(`bookings_${userId}`, JSON.stringify(existingBookings));
+      const newBooking = response?.booking || response?.data?.booking || response?.data || response;
 
+      setBookingError(null);
       setBookingSuccess(`Booking submitted for ${newBooking.hotelName}. Confirmation sent to ${newBooking.guestEmail || bookingData.guestEmail}`);
       setTimeout(() => setBookingSuccess(null), 5000);
       setActiveTab("bookings");
     } catch (error) {
-      console.warn("Booking API failed, falling back to localStorage:", error);
-      const existingBookings = JSON.parse(localStorage.getItem(`bookings_${userId}`) || "[]");
-      existingBookings.push(fallbackBooking);
-      localStorage.setItem(`bookings_${userId}`, JSON.stringify(existingBookings));
-
-      setBookingSuccess(`Booking confirmed for ${fallbackBooking.hotelName}! Offline copy saved.`);
-      setTimeout(() => setBookingSuccess(null), 5000);
-      setActiveTab("bookings");
+      const message = error?.response?.data?.message || "Booking failed. Please retry.";
+      setBookingError(message);
+      throw new Error(message);
     }
   };
 
   // Handle booking request click
   const handleBookingClick = (hotel) => {
     if (!isValidDateRange) {
-      alert("Please select valid dates (check-out after check-in)");
+      setBookingError("Please select a valid date range (check-out must be after check-in).");
       return;
     }
     if (!checkIn || !checkOut) {
-      alert("Please select check-in and check-out dates");
+      setBookingError("Please select check-in and check-out dates.");
       return;
     }
+    setBookingError(null);
     setSelectedHotel(hotel);
     setShowBookingModal(true);
   };
@@ -242,19 +264,60 @@ const HotelBooking = () => {
   // Handle WhatsApp booking
   const handleWhatsAppBooking = (hotel) => {
     if (!checkIn || !checkOut) {
-      alert("Please select dates first");
+      setBookingError("Please select check-in and check-out dates first.");
       return;
     }
     const nights = Math.max(1, Math.ceil((new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60 * 24)));
     const totalPrice = hotel.price * nights;
-    const message = `Hi! I'm interested in booking at ${hotel.name}, ${hotel.location}.\n\nDetails:\nCheck-in: ${new Date(checkIn).toLocaleDateString()}\nCheck-out: ${new Date(checkOut).toLocaleDateString()}\nNights: ${nights}\nGuests: ${guests}\nRoom Type: ${hotel.rooms?.[0]?.type || "Standard"}\nTotal: ₹${totalPrice.toLocaleString()}\n\nPlease confirm availability and send booking details.`;
-    const whatsappLink = `https://wa.me/${hotel.contact.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`;
+    const message = `Hi! I'm interested in booking at ${hotel.name}, ${hotel.location}.\n\nDetails:\nCheck-in: ${new Date(checkIn).toLocaleDateString()}\nCheck-out: ${new Date(checkOut).toLocaleDateString()}\nNights: ${nights}\nGuests: ${guests}\nRoom Type: ${hotel.rooms?.[0]?.type || "Standard"}\nTotal: INR ${totalPrice.toLocaleString()}\n\nPlease confirm availability and send booking details.`;
+    const phone = hotel?.contact?.whatsapp || hotel?.contact?.phone || hotel?.phone || "";
+    if (!phone) {
+      setBookingError("This property has no phone or WhatsApp number yet.");
+      return;
+    }
+    setBookingError(null);
+    const whatsappLink = `https://wa.me/${String(phone).replace(/\D/g, "")}?text=${encodeURIComponent(message)}`;
     window.open(whatsappLink, "_blank");
   };
 
   // Handle call
   const handleCall = (hotel) => {
-    window.location.href = `tel:${hotel.contact.phone}`;
+    const phone = hotel?.contact?.phone || hotel?.phone || "";
+    if (!phone) {
+      setBookingError("This property has no contact phone number yet.");
+      return;
+    }
+    setBookingError(null);
+    window.location.href = `tel:${phone}`;
+  };
+
+  const handleConciergeAsk = async () => {
+    const question = conciergeQuestion.trim();
+    if (!question) {
+      setConciergeError("Please enter a question for the concierge.");
+      return;
+    }
+    setConciergeLoading(true);
+    setConciergeError(null);
+    try {
+      const response = await apiCall("/hotelbooking/ai/concierge", "POST", {
+        question,
+        context: {
+          destination: searchLocation,
+          checkInDate: checkIn,
+          checkOutDate: checkOut,
+          guests,
+          budget,
+          selectedTypes,
+          selectedAmenities,
+        },
+      });
+      setConciergeResult(response?.data || null);
+    } catch (error) {
+      setConciergeError("Concierge is unavailable right now. Please try again.");
+    } finally {
+      setConciergeLoading(false);
+    }
   };
 
   // Handle view details
@@ -272,10 +335,10 @@ const HotelBooking = () => {
 
     try {
       const response = await apiCall(`/hotelbooking/hotels/${hotel.id}`, "GET");
-      setSelectedHotelDetails(response?.data || hotel);
+      setSelectedHotelDetails(normalizeHotel(response?.data || hotel));
     } catch (error) {
       console.warn("Hotel details API failed, using list data:", error);
-      setSelectedHotelDetails(hotel);
+      setSelectedHotelDetails(normalizeHotel(hotel));
     } finally {
       setDetailsLoading(false);
     }
@@ -295,7 +358,7 @@ const HotelBooking = () => {
     <div className="hotel-booking-shell">
       <section className="hotel-booking-hero">
         <div className="hotel-booking-hero-copy">
-          <h1>NilaStay — Kerala Hotel & Homestay Booking</h1>
+          <h1>NilaStay - Kerala Hotel & Homestay Booking</h1>
           <p>
             Discover authentic Kerala stays: from cliffside homestays to backwater resorts.
             Book directly with verified local properties.
@@ -323,21 +386,21 @@ const HotelBooking = () => {
           className={`hotel-booking-nav-item ${activeTab === "search" ? "active" : ""}`}
           onClick={() => setActiveTab("search")}
         >
-          🔍 Find Hotels
+          Find Hotels
         </button>
         <button
           type="button"
           className={`hotel-booking-nav-item ${activeTab === "bookings" ? "active" : ""}`}
           onClick={() => setActiveTab("bookings")}
         >
-          📋 My Bookings
+          My Bookings
         </button>
         <button
           type="button"
           className={`hotel-booking-nav-item ${activeTab === "partner" ? "active" : ""}`}
           onClick={() => setActiveTab("partner")}
         >
-          🏨 Partner Hotels
+          Partner Hotels
         </button>
         {isAdmin && (
           <button
@@ -345,7 +408,7 @@ const HotelBooking = () => {
             className={`hotel-booking-nav-item ${activeTab === "admin" ? "active" : ""}`}
             onClick={() => setActiveTab("admin")}
           >
-            ⚙️ Admin Panel
+            Admin Panel
           </button>
         )}
       </section>
@@ -353,9 +416,10 @@ const HotelBooking = () => {
       {/* Success Message Banner */}
       {bookingSuccess && (
         <div className="hotel-booking-success-banner">
-          ✓ {bookingSuccess}
+          Success: {bookingSuccess}
         </div>
       )}
+      {bookingError && <div className="hotel-booking-error-banner">{bookingError}</div>}
 
       {/* Search Tab */}
       {activeTab === "search" && (
@@ -379,6 +443,41 @@ const HotelBooking = () => {
             />
 
             <div className="hotel-booking-results">
+              <div className="hotel-booking-admin-section" style={{ marginBottom: "1rem" }}>
+                <h3>AI Concierge</h3>
+                <p>Ask for a 360 recommendation based on dates, budget, and preferences.</p>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <input
+                    type="text"
+                    value={conciergeQuestion}
+                    onChange={(e) => setConciergeQuestion(e.target.value)}
+                    placeholder="Example: Find a quiet family stay in Munnar under INR 5000/night"
+                    style={{ flex: "1 1 320px" }}
+                  />
+                  <button
+                    type="button"
+                    className="hotel-booking-primary-button"
+                    onClick={handleConciergeAsk}
+                    disabled={conciergeLoading}
+                  >
+                    {conciergeLoading ? "Thinking..." : "Ask Concierge"}
+                  </button>
+                </div>
+                {conciergeError ? <p className="hotel-booking-error-text">{conciergeError}</p> : null}
+                {conciergeResult?.answer ? (
+                  <div className="hotel-booking-partner-card" style={{ marginTop: "0.75rem" }}>
+                    <p>{conciergeResult.answer}</p>
+                    {Array.isArray(conciergeResult.recommendations) && conciergeResult.recommendations.length > 0 ? (
+                      <ul>
+                        {conciergeResult.recommendations.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
               <div className="hotel-booking-results-header">
                 <h2>{filteredHotels.length} Properties Found {hotelsLoading ? "(syncing...)" : ""}</h2>
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
@@ -463,4 +562,5 @@ const HotelBooking = () => {
 };
 
 export default HotelBooking;
+
 

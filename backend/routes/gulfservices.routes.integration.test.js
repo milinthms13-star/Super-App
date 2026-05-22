@@ -135,4 +135,103 @@ describe('gulfservices routes integration', () => {
     expect(audits[0].before?.status).toBe('open');
     expect(audits[0].after?.status).toBe('in_review');
   });
+
+  test('GET /api/gulfservices/admin/fraud-reports supports pagination metadata', async () => {
+    await GulfFraudReport.create([
+      {
+        reportId: 'FRD-TST-010',
+        recruiterId: 'recruiter-a',
+        issueDescription: 'Requested money transfer before interview call.',
+        phone: '+919900000010',
+        status: 'open',
+      },
+      {
+        reportId: 'FRD-TST-011',
+        recruiterId: 'recruiter-b',
+        issueDescription: 'Shared fake visa letter and asked for payment.',
+        phone: '+919900000011',
+        status: 'open',
+      },
+      {
+        reportId: 'FRD-TST-012',
+        recruiterId: 'recruiter-c',
+        issueDescription: 'Posted fake listing and requested registration fee.',
+        phone: '+919900000012',
+        status: 'open',
+      },
+    ]);
+
+    const response = await request(app)
+      .get('/api/gulfservices/admin/fraud-reports')
+      .set('x-user-role', 'admin')
+      .query({ page: 2, limit: 2 })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(Array.isArray(response.body.data)).toBe(true);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.pagination).toEqual(
+      expect.objectContaining({
+        page: 2,
+        limit: 2,
+        totalCount: 3,
+        totalPages: 2,
+        hasNextPage: false,
+      })
+    );
+  });
+
+  test('GET /api/gulfservices/admin/recruiters/pending supports pagination metadata', async () => {
+    await GulfRecruiter.create([
+      {
+        name: 'Recruiter One',
+        companyName: 'One Manpower',
+        licenseNumber: 'UAE-001',
+        country: 'UAE',
+        phone: '+919911111111',
+        email: 'one@example.com',
+        status: 'pending',
+        verified: false,
+      },
+      {
+        name: 'Recruiter Two',
+        companyName: 'Two Manpower',
+        licenseNumber: 'UAE-002',
+        country: 'UAE',
+        phone: '+919922222222',
+        email: 'two@example.com',
+        status: 'pending',
+        verified: false,
+      },
+      {
+        name: 'Recruiter Three',
+        companyName: 'Three Manpower',
+        licenseNumber: 'UAE-003',
+        country: 'UAE',
+        phone: '+919933333333',
+        email: 'three@example.com',
+        status: 'pending',
+        verified: false,
+      },
+    ]);
+
+    const response = await request(app)
+      .get('/api/gulfservices/admin/recruiters/pending')
+      .set('x-user-role', 'admin')
+      .query({ page: 1, limit: 2 })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(Array.isArray(response.body.data)).toBe(true);
+    expect(response.body.data).toHaveLength(2);
+    expect(response.body.pagination).toEqual(
+      expect.objectContaining({
+        page: 1,
+        limit: 2,
+        totalCount: 3,
+        totalPages: 2,
+        hasNextPage: true,
+      })
+    );
+  });
 });

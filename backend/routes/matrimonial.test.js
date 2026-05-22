@@ -60,6 +60,7 @@ describe('matrimonial routes', () => {
     const findChain = {
       select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue([]),
     };
 
@@ -68,6 +69,7 @@ describe('matrimonial routes', () => {
       blockedBy: [blockedProfileId],
     });
     MatrimonialProfile.find.mockReturnValue(findChain);
+    MatrimonialProfile.countDocuments.mockResolvedValue(0);
 
     const req = {
       query: {},
@@ -351,6 +353,7 @@ describe('matrimonial routes', () => {
     const findChain = {
       select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue([
         {
           _id: privateProfileId,
@@ -389,6 +392,7 @@ describe('matrimonial routes', () => {
       premiumUntil: null,
     });
     MatrimonialProfile.find.mockReturnValue(findChain);
+    MatrimonialProfile.countDocuments.mockResolvedValue(1);
 
     const req = {
       query: {
@@ -406,6 +410,7 @@ describe('matrimonial routes', () => {
     const query = MatrimonialProfile.find.mock.calls[0][0];
     expect(query.verificationStatus).toBeUndefined();
     expect(findChain.limit).toHaveBeenCalledWith(200);
+    expect(MatrimonialProfile.countDocuments).toHaveBeenCalledWith(query);
     expect(res.statusCode).toBe(200);
     expect(res.body.data[0]).toMatchObject({
       id: privateProfileId,
@@ -413,6 +418,117 @@ describe('matrimonial routes', () => {
       photoUrl: '',
       contactVisibility: 'premium_required',
     });
+    expect(res.body.meta).toMatchObject({
+      page: 1,
+      limit: 200,
+      total: 1,
+      count: 1,
+      sortBy: 'recent',
+    });
+  });
+
+  test('search returns pagination metadata and supports page/limit sorting options', async () => {
+    const handler = getRouteHandler('get', '/search');
+    const currentProfileId = '665f4f7e8b69fe10ef2ac999';
+    const firstProfileId = '665f4f7e8b69fe10ef2acaaa';
+    const secondProfileId = '665f4f7e8b69fe10ef2acbbb';
+    const findChain = {
+      select: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue([
+        {
+          _id: firstProfileId,
+          name: 'Priya',
+          age: 26,
+          gender: 'Woman',
+          religion: 'Hindu',
+          caste: 'Nair',
+          community: 'Malayali',
+          education: 'MBA',
+          profession: 'Designer',
+          location: 'Kochi',
+          maritalStatus: 'Never Married',
+          familyDetails: 'Family details',
+          bio: 'Bio',
+          languages: ['Malayalam'],
+          hobbies: ['Travel'],
+          photoUrl: '/uploads/matrimonial/priya.jpg',
+          privacy: {
+            hidePhone: false,
+            hidePhotos: false,
+            premiumOnlyContact: false,
+          },
+          verificationStatus: 'verified',
+          profileStatus: 'approved',
+          profileViews: 240,
+          lastActive: new Date('2026-05-07T00:00:00.000Z'),
+        },
+        {
+          _id: secondProfileId,
+          name: 'Anjali',
+          age: 28,
+          gender: 'Woman',
+          religion: 'Hindu',
+          caste: 'Nair',
+          community: 'Malayali',
+          education: 'MBA',
+          profession: 'Designer',
+          location: 'Kochi',
+          maritalStatus: 'Never Married',
+          familyDetails: 'Family details',
+          bio: 'Bio',
+          languages: ['Malayalam'],
+          hobbies: ['Travel'],
+          photoUrl: '/uploads/matrimonial/anjali.jpg',
+          privacy: {
+            hidePhone: false,
+            hidePhotos: false,
+            premiumOnlyContact: false,
+          },
+          verificationStatus: 'verified',
+          profileStatus: 'approved',
+          profileViews: 120,
+          lastActive: new Date('2026-05-07T00:00:00.000Z'),
+        },
+      ]),
+    };
+
+    MatrimonialProfile.findOne.mockResolvedValue({
+      _id: currentProfileId,
+      preferences: { religion: 'Hindu', caste: 'Nair' },
+      blockedBy: [],
+    });
+    MatrimonialProfile.find.mockReturnValue(findChain);
+    MatrimonialProfile.countDocuments.mockResolvedValue(18);
+
+    const req = {
+      query: {
+        limit: '2',
+        page: '2',
+        sortBy: 'match',
+      },
+      user: {
+        _id: 'user-123',
+      },
+    };
+    const res = createMockResponse();
+
+    await handler(req, res);
+
+    expect(findChain.skip).toHaveBeenCalledWith(2);
+    expect(findChain.limit).toHaveBeenCalledWith(2);
+    expect(MatrimonialProfile.countDocuments).toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(res.body.meta).toMatchObject({
+      page: 2,
+      limit: 2,
+      total: 18,
+      count: 2,
+      sortBy: 'match',
+    });
+    expect(res.body.data.length).toBe(2);
+    expect(res.body.data[0].matchScore).toBeGreaterThanOrEqual(0);
   });
 
   test('sending a message is forbidden until an interest has been accepted', async () => {

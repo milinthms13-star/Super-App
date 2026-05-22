@@ -6,6 +6,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 const logger = require('../utils/logger');
 const { authenticate, verifyAdmin } = require('../middleware/auth');
@@ -21,6 +22,8 @@ const {
   HyperlocalAdminConfig,
   HyperlocalRefund,
   HyperlocalComplaint,
+  HyperlocalOrderIdempotencyKey,
+  HyperlocalAdminAuditLog,
 } = require('../models/hyperlocal');
 
 const router = express.Router();
@@ -60,25 +63,48 @@ const CATEGORIES = [
 const PAYMENT_MODES = ['UPI', 'COD', 'Card', 'Wallet'];
 const PHONE_REGEX = /^\+?[0-9]{8,15}$/;
 const PINCODE_REGEX = /^[1-9][0-9]{5}$/;
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+const UPLOAD_MODE = String(process.env.HYPERLOCAL_UPLOAD_MODE || 'disk').trim().toLowerCase();
+const OVERVIEW_CACHE_TTL_MS = Math.max(10000, Number.parseInt(String(process.env.HYPERLOCAL_OVERVIEW_CACHE_TTL_MS || '45000'), 10) || 45000);
+const CRON_SECRET = String(process.env.HYPERLOCAL_CRON_SECRET || '').trim();
+const ENABLE_OVERVIEW_CACHE = String(process.env.HYPERLOCAL_ENABLE_OVERVIEW_CACHE || 'true').trim().toLowerCase() !== 'false';
+const s3Bucket = String(process.env.HYPERLOCAL_UPLOAD_S3_BUCKET || '').trim();
+const s3Region = String(process.env.HYPERLOCAL_UPLOAD_S3_REGION || process.env.AWS_REGION || 'ap-south-1').trim();
+const s3PublicBaseUrl = String(process.env.HYPERLOCAL_UPLOAD_PUBLIC_BASE_URL || '').trim();
+const useS3Uploads = UPLOAD_MODE === 's3';
+const s3Client = useS3Uploads && s3Bucket ? new S3Client({ region: s3Region }) : null;
+
+let overviewCache = {
+  cachedAt: 0,
+  data: null,
+};
+
+const invalidateOverviewCache = () => {
+  overviewCache = { cachedAt: 0, data: null };
+};
 
 const uploadRoot = path.join(__dirname, '../uploads/hyperlocal');
 const prescriptionDir = path.join(uploadRoot, 'prescriptions');
 const kycDir = path.join(uploadRoot, 'kyc');
 
-[uploadRoot, prescriptionDir, kycDir].forEach((dir) => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-});
+if (!useS3Uploads) {
+  [uploadRoot, prescriptionDir, kycDir].forEach((dir) => {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  });
+}
 
-const storage = multer.diskStorage({
-  destination: (req, _file, cb) => {
-    const isKyc = req.path.includes('/partners/apply');
-    cb(null, isKyc ? kycDir : prescriptionDir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || '').toLowerCase();
-    cb(null, `${Date.now()}-${crypto.randomBytes(5).toString('hex')}${ext}`);
-  },
-});
+const storage = useS3Uploads
+  ? multer.memoryStorage()
+  : multer.diskStorage({
+      destination: (req, _file, cb) => {
+        const isKyc = req.path.includes('/partners/apply');
+        cb(null, isKyc ? kycDir : prescriptionDir);
+      },
+      filename: (_req, file, cb) => {
+        const ext = path.extname(file.originalname || '').toLowerCase();
+        cb(null, `${Date.now()}-${crypto.randomBytes(5).toString('hex')}${ext}`);
+      },
+    });
 
 const upload = multer({
   storage,
@@ -97,6 +123,38 @@ const upload = multer({
   },
 });
 
+const toUploadKey = (folder, originalName = '') => {
+  const ext = path.extname(originalName || '').toLowerCase();
+  return `hyperlocal/${folder}/${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
+};
+
+const uploadBufferToS3 = async (buffer, key, contentType = 'application/octet-stream') => {
+  if (!s3Client || !s3Bucket) {
+    throw new Error('S3 upload mode is enabled but HYPERLOCAL_UPLOAD_S3_BUCKET is not configured.');
+  }
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: s3Bucket,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+    })
+  );
+  if (s3PublicBaseUrl) {
+    return `${s3PublicBaseUrl.replace(/\/$/, '')}/${key}`;
+  }
+  return `s3://${s3Bucket}/${key}`;
+};
+
+const persistUploadedFile = async (file, folder) => {
+  if (!file) return '';
+  if (!useS3Uploads) {
+    return `/uploads/hyperlocal/${folder}/${file.filename}`;
+  }
+  const key = toUploadKey(folder, file.originalname || '');
+  return uploadBufferToS3(file.buffer, key, file.mimetype || 'application/octet-stream');
+};
+
 const writeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 80,
@@ -107,6 +165,12 @@ const orderLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: 'Too many order actions. Please retry shortly.',
+});
+
+const highRiskWriteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 12,
+  message: 'High frequency write activity detected. Please retry after a short interval.',
 });
 
 const id = (prefix) => `${prefix}-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
@@ -136,6 +200,30 @@ const getPartnerByEmail = async (email) => {
   if (!email) return null;
   if (isMongoReady()) return HyperlocalPartner.findOne({ email });
   return store.partners.find((entry) => entry.email === email) || null;
+};
+
+const parsePagination = (req, defaults = {}) => {
+  const page = Math.max(1, Number.parseInt(String(req.query.page || defaults.page || 1), 10) || 1);
+  const limit = Math.max(1, Math.min(100, Number.parseInt(String(req.query.limit || defaults.limit || 20), 10) || 20));
+  return { page, limit, skip: (page - 1) * limit };
+};
+
+const paginateList = (list, page, limit) => {
+  const total = Array.isArray(list) ? list.length : 0;
+  const start = Math.max(0, (page - 1) * limit);
+  const end = start + limit;
+  const items = (list || []).slice(start, end);
+  return {
+    items,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: total ? Math.ceil(total / limit) : 0,
+      hasNext: end < total,
+      hasPrev: start > 0,
+    },
+  };
 };
 
 const ensureAuthorizedPartner = async (req, res, requestedPartnerId = '', options = {}) => {
@@ -253,6 +341,16 @@ const sampleCoupons = [
   { code: 'FREEDEL', type: 'free-delivery', value: 0, minOrder: 699, maxDiscount: 0, active: true },
 ];
 
+const SUBSCRIPTION_PLANS = [
+  { planCode: 'PASS-STARTER', title: 'Starter Pass', amount: 149, benefits: ['Free delivery on 5 orders', '2% cashback'] },
+  { planCode: 'PASS-PLUS', title: 'Plus Pass', amount: 299, benefits: ['Free delivery on 15 orders', '5% cashback', 'Priority delivery'] },
+];
+
+const SUBSCRIPTION_PLAN_MAP = SUBSCRIPTION_PLANS.reduce((acc, plan) => {
+  acc[plan.planCode] = plan;
+  return acc;
+}, {});
+
 const sampleConfig = {
   configId: 'CFG-DEFAULT',
   zonePricing: {
@@ -283,6 +381,8 @@ const store = {
   config: { ...sampleConfig },
   complaints: [],
   refunds: [],
+  idempotencyKeys: [],
+  auditLogs: [],
 };
 
 const bootstrapMongo = async () => {
@@ -324,6 +424,24 @@ const orderSchema = Joi.object({
   couponCode: Joi.string().allow(''),
   multiShopMode: Joi.boolean().default(false),
   emergencyMedicine: Joi.boolean().default(false),
+  deliveryWindowStart: Joi.string().allow('', null),
+  deliveryWindowEnd: Joi.string().allow('', null),
+}).custom((value, helpers) => {
+  if (value.deliveryType !== 'scheduled') return value;
+  const startRaw = String(value.deliveryWindowStart || '').trim();
+  const endRaw = String(value.deliveryWindowEnd || '').trim();
+  if (!startRaw || !endRaw) {
+    return helpers.message('Scheduled delivery requires deliveryWindowStart and deliveryWindowEnd.');
+  }
+  if (!ISO_DATE_REGEX.test(startRaw) || !ISO_DATE_REGEX.test(endRaw)) {
+    return helpers.message('Delivery window must use ISO datetime format.');
+  }
+  const start = new Date(startRaw);
+  const end = new Date(endRaw);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    return helpers.message('Delivery window range is invalid.');
+  }
+  return value;
 });
 
 const addressSchema = Joi.object({
@@ -365,6 +483,10 @@ const productSchema = Joi.object({
   prescriptionRequired: Joi.boolean().default(false),
   isActive: Joi.boolean().default(true),
   description: Joi.string().allow('').max(500),
+});
+
+const productUpdateSchema = productSchema.keys({
+  productId: Joi.string().allow('').optional(),
 });
 
 const computeQuote = async (payload, prescriptionAttached = false) => {
@@ -472,6 +594,10 @@ const applyOrderStatusTransition = async (orderId, nextStatus, note = '') => {
     if (!allowed.includes(nextStatus)) {
       throw new Error(`Invalid transition from ${order.status} to ${nextStatus}.`);
     }
+    if (nextStatus === 'Cancelled/Refunded' && order.inventoryReserved) {
+      await releaseInventoryForOrder(order.items || []);
+      order.inventoryReserved = false;
+    }
     order.status = nextStatus;
     order.timeline = [...(order.timeline || []), { status: nextStatus, note, at: new Date() }];
     order.updatedAt = new Date();
@@ -486,37 +612,194 @@ const applyOrderStatusTransition = async (orderId, nextStatus, note = '') => {
   if (!allowed.includes(nextStatus)) {
     throw new Error(`Invalid transition from ${order.status} to ${nextStatus}.`);
   }
+  if (nextStatus === 'Cancelled/Refunded' && order.inventoryReserved) {
+    await releaseInventoryForOrder(order.items || []);
+  }
   const updated = {
     ...order,
     status: nextStatus,
     timeline: [...(order.timeline || []), { status: nextStatus, note, at: new Date() }],
+    inventoryReserved: nextStatus === 'Cancelled/Refunded' ? false : order.inventoryReserved,
     updatedAt: new Date(),
   };
   store.orders[idx] = updated;
   return updated;
 };
 
+const calculatePartnerAvailableBalance = (partner = {}) => {
+  const walletBalance = toNum(partner.walletBalance, 0);
+  const pendingPayouts = Array.isArray(partner.payoutHistory)
+    ? partner.payoutHistory
+        .filter((entry) => String(entry.status || '').toLowerCase() === 'requested')
+        .reduce((sum, entry) => sum + toNum(entry.amount, 0), 0)
+    : 0;
+  return Math.max(0, walletBalance - pendingPayouts);
+};
+
+const normalizeOrderItemsForInventory = (items = []) => {
+  const grouped = new Map();
+  for (const item of items) {
+    const shopId = String(item.shopId || '').trim();
+    const productId = String(item.productId || '').trim();
+    const qty = Math.max(0, Number.parseInt(String(item.qty || 0), 10) || 0);
+    if (!shopId || !productId || qty <= 0) continue;
+    const key = `${shopId}:${productId}`;
+    grouped.set(key, {
+      shopId,
+      productId,
+      qty: (grouped.get(key)?.qty || 0) + qty,
+    });
+  }
+  return Array.from(grouped.values());
+};
+
+const reserveInventoryForOrder = async (items = []) => {
+  const normalized = normalizeOrderItemsForInventory(items);
+  const reserved = [];
+
+  if (isMongoReady()) {
+    try {
+      for (const item of normalized) {
+        const result = await HyperlocalShop.updateOne(
+          {
+            shopId: item.shopId,
+            approvalStatus: 'approved',
+            products: { $elemMatch: { productId: item.productId, isActive: true, stockQty: { $gte: item.qty } } },
+          },
+          { $inc: { 'products.$.stockQty': -item.qty } }
+        );
+        if (!result.matchedCount || !result.modifiedCount) {
+          throw new Error(`Insufficient stock for ${item.productId}.`);
+        }
+        reserved.push(item);
+      }
+      return;
+    } catch (error) {
+      if (reserved.length) {
+        await Promise.all(
+          reserved.map((item) =>
+            HyperlocalShop.updateOne(
+              { shopId: item.shopId, 'products.productId': item.productId },
+              { $inc: { 'products.$.stockQty': item.qty } }
+            )
+          )
+        );
+      }
+      throw error;
+    }
+  }
+
+  try {
+    for (const item of normalized) {
+      const shopIndex = store.shops.findIndex((entry) => entry.shopId === item.shopId && entry.approvalStatus === 'approved');
+      if (shopIndex === -1) throw new Error(`Shop not found for ${item.shopId}.`);
+      const productIndex = (store.shops[shopIndex].products || []).findIndex(
+        (entry) => entry.productId === item.productId && entry.isActive
+      );
+      if (productIndex === -1) throw new Error(`Product not found for ${item.productId}.`);
+      if (toNum(store.shops[shopIndex].products[productIndex].stockQty, 0) < item.qty) {
+        throw new Error(`Insufficient stock for ${item.productId}.`);
+      }
+      store.shops[shopIndex].products[productIndex].stockQty -= item.qty;
+      reserved.push(item);
+    }
+  } catch (error) {
+    for (const item of reserved) {
+      const shopIndex = store.shops.findIndex((entry) => entry.shopId === item.shopId);
+      if (shopIndex === -1) continue;
+      const productIndex = (store.shops[shopIndex].products || []).findIndex((entry) => entry.productId === item.productId);
+      if (productIndex === -1) continue;
+      store.shops[shopIndex].products[productIndex].stockQty += item.qty;
+    }
+    throw error;
+  }
+};
+
+const releaseInventoryForOrder = async (items = []) => {
+  const normalized = normalizeOrderItemsForInventory(items);
+  if (!normalized.length) return;
+
+  if (isMongoReady()) {
+    await Promise.all(
+      normalized.map((item) =>
+        HyperlocalShop.updateOne(
+          { shopId: item.shopId, 'products.productId': item.productId },
+          { $inc: { 'products.$.stockQty': item.qty } }
+        )
+      )
+    );
+    return;
+  }
+
+  for (const item of normalized) {
+    const shopIndex = store.shops.findIndex((entry) => entry.shopId === item.shopId);
+    if (shopIndex === -1) continue;
+    const productIndex = (store.shops[shopIndex].products || []).findIndex((entry) => entry.productId === item.productId);
+    if (productIndex === -1) continue;
+    store.shops[shopIndex].products[productIndex].stockQty += item.qty;
+  }
+};
+
+const logAdminAction = async (req, { action, targetType = '', targetId = '', meta = {} }) => {
+  const actorEmail = normalizeEmail(req.user?.email || req.auth?.email || req.userEmail || '');
+  const actorRole = String(req.user?.role || req.user?.registrationType || '').trim().toLowerCase();
+  const entry = {
+    auditId: id('HLAUD'),
+    actorEmail,
+    actorRole,
+    action: String(action || '').trim(),
+    targetType: String(targetType || '').trim(),
+    targetId: String(targetId || '').trim(),
+    meta,
+    at: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  if (!entry.action) return;
+  if (isMongoReady()) {
+    await HyperlocalAdminAuditLog.create(entry);
+  } else {
+    store.auditLogs.unshift(entry);
+  }
+};
+
+const getIdempotencyKey = (req) => String(req.headers['x-idempotency-key'] || '').trim();
+
+const setEdgeCacheHeaders = (res, { isPublic = true, sMaxageSec = 60, swrSec = 300 } = {}) => {
+  const scope = isPublic ? 'public' : 'private';
+  res.set('Cache-Control', `${scope}, s-maxage=${sMaxageSec}, stale-while-revalidate=${swrSec}`);
+  if (!isPublic) {
+    res.set('Vary', 'Authorization');
+  }
+};
+
+const getFeatureFlags = () => ({
+  grocery: true,
+  pharmacy: true,
+  food: true,
+  parcel: true,
+  multiShop: true,
+  subscriptions: true,
+  walletCashback: true,
+  emergencyMedicine: true,
+  localAds: true,
+  whatsappUpdates: true,
+  overviewCache: ENABLE_OVERVIEW_CACHE,
+  cronRollups: Boolean(CRON_SECRET),
+  uploadStorage: useS3Uploads ? 's3' : 'disk',
+});
+
 router.get('/bootstrap', async (_req, res) => {
   try {
     await bootstrapMongo();
+    setEdgeCacheHeaders(res, { isPublic: true, sMaxageSec: 300, swrSec: 1800 });
     res.json({
       success: true,
       data: {
         categories: CATEGORIES,
         paymentModes: PAYMENT_MODES,
         statusFlow: DELIVERY_STATUS_FLOW,
-        featureFlags: {
-          grocery: true,
-          pharmacy: true,
-          food: true,
-          parcel: true,
-          multiShop: true,
-          subscriptions: true,
-          walletCashback: true,
-          emergencyMedicine: true,
-          localAds: true,
-          whatsappUpdates: true,
-        },
+        featureFlags: getFeatureFlags(),
       },
     });
   } catch (error) {
@@ -527,13 +810,16 @@ router.get('/bootstrap', async (_req, res) => {
 
 router.get('/shops', async (req, res) => {
   try {
-    const { category = '', search = '', lat, lng } = req.query;
+    setEdgeCacheHeaders(res, { isPublic: true, sMaxageSec: 45, swrSec: 300 });
+    const { category = '', search = '', lat, lng, openOnly = '' } = req.query;
+    const { page, limit } = parsePagination(req, { page: 1, limit: 24 });
     const userLocation = lat && lng ? toCoordinates(lat, lng) : null;
     const source = isMongoReady() ? await HyperlocalShop.find({ approvalStatus: 'approved' }).lean() : store.shops;
 
     const filtered = source
       .filter((shop) => !category || category === 'All' || shop.category === category)
       .filter((shop) => !search || `${shop.name} ${shop.description}`.toLowerCase().includes(String(search).toLowerCase()))
+      .filter((shop) => (String(openOnly).toLowerCase() === 'true' ? Boolean(shop.open) : true))
       .map((shop) => {
         const distanceKm = userLocation ? haversineKm(userLocation, shop.location || { lat: 0, lng: 0 }) : null;
         return {
@@ -544,7 +830,8 @@ router.get('/shops', async (req, res) => {
       })
       .sort((a, b) => (a.distanceKm ?? 999) - (b.distanceKm ?? 999));
 
-    res.json({ success: true, data: { shops: filtered } });
+    const paged = paginateList(filtered, page, limit);
+    res.json({ success: true, data: { shops: paged.items, pagination: paged.pagination } });
   } catch (error) {
     logger.error('hyperlocal shops error:', error);
     res.status(500).json({ success: false, message: 'Unable to fetch shops.' });
@@ -575,6 +862,21 @@ router.post('/orders', authenticate, orderLimiter, upload.single('prescription')
   try {
     const authEmail = ensureAuthenticatedEmail(req, res);
     if (!authEmail) return;
+    const idempotencyKey = getIdempotencyKey(req);
+    if (idempotencyKey) {
+      if (isMongoReady()) {
+        const existing = await HyperlocalOrderIdempotencyKey.findOne({ key: idempotencyKey, userEmail: authEmail }).lean();
+        if (existing?.responsePayload) {
+          return res.status(existing.responseStatus || 201).json(existing.responsePayload);
+        }
+      } else {
+        const existing = store.idempotencyKeys.find((entry) => entry.key === idempotencyKey && entry.userEmail === authEmail);
+        if (existing?.responsePayload) {
+          return res.status(existing.responseStatus || 201).json(existing.responsePayload);
+        }
+      }
+    }
+
     const payload = {
       ...req.body,
       userEmail: authEmail,
@@ -583,19 +885,25 @@ router.post('/orders', authenticate, orderLimiter, upload.single('prescription')
       address: typeof req.body.address === 'string' ? JSON.parse(req.body.address) : req.body.address,
       multiShopMode: String(req.body.multiShopMode) === 'true',
       emergencyMedicine: String(req.body.emergencyMedicine) === 'true',
+      deliveryWindowStart: String(req.body.deliveryWindowStart || '').trim(),
+      deliveryWindowEnd: String(req.body.deliveryWindowEnd || '').trim(),
     };
 
     const { error, value } = orderSchema.validate(payload, { allowUnknown: true });
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
 
     const quote = await computeQuote(value, Boolean(req.file));
+    await reserveInventoryForOrder(quote.items || []);
     const orderId = id('HLORD');
+    const prescriptionFilePath = await persistUploadedFile(req.file, 'prescriptions');
     const order = {
       orderId,
       userEmail: value.userEmail,
       userPhone: value.userPhone,
       paymentMode: value.paymentMode,
       deliveryType: value.deliveryType,
+      deliveryWindowStart: value.deliveryType === 'scheduled' ? new Date(value.deliveryWindowStart) : null,
+      deliveryWindowEnd: value.deliveryType === 'scheduled' ? new Date(value.deliveryWindowEnd) : null,
       address: { ...value.address, location: toCoordinates(value.address.lat, value.address.lng) },
       items: quote.items,
       multiShopMode: value.multiShopMode,
@@ -612,24 +920,55 @@ router.post('/orders', authenticate, orderLimiter, upload.single('prescription')
       assignedPartnerId: '',
       partnerLocation: { lat: 0, lng: 0 },
       navigationLink: '',
-      prescriptionFile: req.file ? `/uploads/hyperlocal/prescriptions/${req.file.filename}` : '',
+      prescriptionFile: prescriptionFilePath,
       complaintStatus: '',
       refundStatus: '',
+      inventoryReserved: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    if (isMongoReady()) {
-      await HyperlocalOrder.create(order);
-    } else {
-      store.orders.unshift(order);
+    try {
+      if (isMongoReady()) {
+        await HyperlocalOrder.create(order);
+      } else {
+        store.orders.unshift(order);
+      }
+    } catch (persistError) {
+      await releaseInventoryForOrder(order.items || []);
+      throw persistError;
     }
 
-    res.status(201).json({
+    const responsePayload = {
       success: true,
       message: 'Order placed successfully.',
       data: { orderId, order },
-    });
+    };
+
+    if (idempotencyKey) {
+      if (isMongoReady()) {
+        await HyperlocalOrderIdempotencyKey.updateOne(
+          { key: idempotencyKey, userEmail: authEmail },
+          {
+            $set: {
+              orderId,
+              responseStatus: 201,
+              responsePayload,
+              createdAt: new Date(),
+            },
+          },
+          { upsert: true }
+        );
+      } else {
+        const idx = store.idempotencyKeys.findIndex((entry) => entry.key === idempotencyKey && entry.userEmail === authEmail);
+        const valueToStore = { key: idempotencyKey, userEmail: authEmail, orderId, responseStatus: 201, responsePayload, createdAt: new Date() };
+        if (idx === -1) store.idempotencyKeys.push(valueToStore);
+        else store.idempotencyKeys[idx] = valueToStore;
+      }
+    }
+
+    invalidateOverviewCache();
+    res.status(201).json(responsePayload);
   } catch (error) {
     logger.error('hyperlocal order create error:', error);
     res.status(400).json({ success: false, message: error.message || 'Unable to place order.' });
@@ -640,10 +979,51 @@ router.get('/orders', authenticate, async (req, res) => {
   try {
     const email = ensureAuthenticatedEmail(req, res);
     if (!email) return;
-    const orders = isMongoReady()
-      ? await HyperlocalOrder.find({ userEmail: email }).sort({ createdAt: -1 }).lean()
-      : store.orders.filter((entry) => entry.userEmail === email);
-    res.json({ success: true, data: { orders } });
+    const statusFilter = String(req.query.status || '').trim();
+    const from = String(req.query.from || '').trim();
+    const to = String(req.query.to || '').trim();
+    const { page, limit, skip } = parsePagination(req, { page: 1, limit: 20 });
+
+    if (isMongoReady()) {
+      const query = { userEmail: email };
+      if (statusFilter) query.status = statusFilter;
+      if (from || to) {
+        query.createdAt = {};
+        if (from) query.createdAt.$gte = new Date(from);
+        if (to) query.createdAt.$lte = new Date(to);
+      }
+      const [orders, total] = await Promise.all([
+        HyperlocalOrder.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+        HyperlocalOrder.countDocuments(query),
+      ]);
+      return res.json({
+        success: true,
+        data: {
+          orders,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: total ? Math.ceil(total / limit) : 0,
+            hasNext: skip + orders.length < total,
+            hasPrev: page > 1,
+          },
+        },
+      });
+    }
+
+    const filtered = store.orders
+      .filter((entry) => entry.userEmail === email)
+      .filter((entry) => (!statusFilter ? true : String(entry.status) === statusFilter))
+      .filter((entry) => {
+        const createdTime = new Date(entry.createdAt).getTime();
+        const afterFrom = !from || createdTime >= new Date(from).getTime();
+        const beforeTo = !to || createdTime <= new Date(to).getTime();
+        return afterFrom && beforeTo;
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const paged = paginateList(filtered, page, limit);
+    res.json({ success: true, data: { orders: paged.items, pagination: paged.pagination } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Unable to fetch orders.' });
   }
@@ -673,6 +1053,7 @@ router.post('/orders/:orderId/cancel', authenticate, writeLimiter, async (req, r
       : store.orders.find((entry) => entry.orderId === req.params.orderId && entry.userEmail === authEmail);
     if (!sourceOrder) return res.status(404).json({ success: false, message: 'Order not found.' });
     const updated = await applyOrderStatusTransition(req.params.orderId, 'Cancelled/Refunded', String(req.body.reason || 'Cancelled by user'));
+    invalidateOverviewCache();
     return res.json({ success: true, message: 'Order cancelled.', data: { order: updated } });
   } catch (error) {
     const statusCode = error.message === 'Order not found.' ? 404 : 400;
@@ -680,7 +1061,7 @@ router.post('/orders/:orderId/cancel', authenticate, writeLimiter, async (req, r
   }
 });
 
-router.post('/orders/:orderId/refund-request', authenticate, writeLimiter, async (req, res) => {
+router.post('/orders/:orderId/refund-request', authenticate, highRiskWriteLimiter, async (req, res) => {
   try {
     const authEmail = ensureAuthenticatedEmail(req, res);
     if (!authEmail) return;
@@ -721,13 +1102,14 @@ router.post('/orders/:orderId/refund-request', authenticate, writeLimiter, async
       const idx = store.orders.findIndex((entry) => entry.orderId === req.params.orderId);
       if (idx !== -1) store.orders[idx].refundStatus = 'pending';
     }
+    invalidateOverviewCache();
     return res.status(201).json({ success: true, message: 'Refund request submitted.', data: { refund: refundEntry } });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Unable to submit refund request.' });
   }
 });
 
-router.post('/orders/:orderId/complaint', authenticate, writeLimiter, async (req, res) => {
+router.post('/orders/:orderId/complaint', authenticate, highRiskWriteLimiter, async (req, res) => {
   const authEmail = ensureAuthenticatedEmail(req, res);
   if (!authEmail) return;
   const issue = String(req.body.issue || '').trim();
@@ -762,6 +1144,7 @@ router.post('/orders/:orderId/complaint', authenticate, writeLimiter, async (req
     const idx = store.orders.findIndex((entry) => entry.orderId === req.params.orderId);
     if (idx !== -1) store.orders[idx].complaintStatus = 'open';
   }
+  invalidateOverviewCache();
   return res.status(201).json({ success: true, data: { complaint } });
 });
 
@@ -769,6 +1152,13 @@ router.patch('/orders/:orderId/status', authenticate, verifyAdmin, writeLimiter,
   try {
     const { status, note = '' } = req.body;
     const updated = await applyOrderStatusTransition(req.params.orderId, status, note);
+    await logAdminAction(req, {
+      action: 'order.status.update',
+      targetType: 'order',
+      targetId: req.params.orderId,
+      meta: { status, note },
+    });
+    invalidateOverviewCache();
     res.json({ success: true, message: 'Order status updated.', data: { order: updated } });
   } catch (error) {
     const statusCode = error.message === 'Order not found.' ? 404 : 400;
@@ -897,7 +1287,7 @@ router.patch('/vendor/shops/:shopId/products/:productId', authenticate, writeLim
   try {
     const ownerEmail = ensureAuthenticatedEmail(req, res);
     if (!ownerEmail) return;
-    const { error, value } = productSchema.validate(req.body);
+    const { error, value } = productUpdateSchema.validate(req.body, { allowUnknown: true });
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
 
     if (isMongoReady()) {
@@ -970,6 +1360,7 @@ router.patch('/vendor/orders/:orderId/action', authenticate, writeLimiter, async
     const isOrderForVendor = (sourceOrder.items || []).some((item) => ownedShopIds.has(item.shopId));
     if (!isOrderForVendor) return res.status(403).json({ success: false, message: 'Not authorized for this order.' });
     const updated = await applyOrderStatusTransition(req.params.orderId, status, action === 'accept' ? 'Accepted by vendor' : 'Rejected by vendor');
+    invalidateOverviewCache();
     return res.json({ success: true, message: 'Vendor order action applied.', data: { order: updated } });
   } catch (error) {
     const statusCode = error.message === 'Order not found.' ? 404 : 400;
@@ -980,13 +1371,26 @@ router.patch('/vendor/orders/:orderId/action', authenticate, writeLimiter, async
 router.get('/vendor/orders', authenticate, async (req, res) => {
   const ownerEmail = ensureAuthenticatedEmail(req, res);
   if (!ownerEmail) return;
+  const statusFilter = String(req.query.status || '').trim();
+  const { page, limit } = parsePagination(req, { page: 1, limit: 20 });
   const shops = isMongoReady()
     ? await HyperlocalShop.find({ ownerEmail }).lean()
     : store.shops.filter((entry) => entry.ownerEmail === ownerEmail);
   const shopIds = new Set(shops.map((entry) => entry.shopId));
-  const orders = (isMongoReady() ? await HyperlocalOrder.find().sort({ createdAt: -1 }).lean() : store.orders)
-    .filter((order) => order.items.some((item) => shopIds.has(item.shopId)));
-  return res.json({ success: true, data: { orders } });
+  if (isMongoReady()) {
+    const query = statusFilter ? { status: statusFilter } : {};
+    const all = await HyperlocalOrder.find(query).sort({ createdAt: -1 }).lean();
+    const filtered = all.filter((order) => order.items.some((item) => shopIds.has(item.shopId)));
+    const paged = paginateList(filtered, page, limit);
+    return res.json({ success: true, data: { orders: paged.items, pagination: paged.pagination } });
+  }
+
+  const filtered = store.orders
+    .filter((order) => order.items.some((item) => shopIds.has(item.shopId)))
+    .filter((order) => (!statusFilter ? true : String(order.status) === statusFilter))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const paged = paginateList(filtered, page, limit);
+  return res.json({ success: true, data: { orders: paged.items, pagination: paged.pagination } });
 });
 
 router.get('/vendor/settlements', authenticate, async (req, res) => {
@@ -1052,6 +1456,14 @@ router.post('/partners/apply', authenticate, writeLimiter, upload.array('kycDocs
     if (existingPartner) {
       return res.json({ success: true, message: 'Partner profile already exists for this account.', data: { partner: existingPartner } });
     }
+    const kycDocs = await Promise.all(
+      (req.files || []).map(async (file) => ({
+        docType: 'kyc',
+        fileName: await persistUploadedFile(file, 'kyc'),
+        uploadedAt: new Date(),
+      }))
+    );
+
     const partner = {
       partnerId: id('HLP'),
       ...payload,
@@ -1061,11 +1473,7 @@ router.post('/partners/apply', authenticate, writeLimiter, upload.array('kycDocs
       walletBalance: 0,
       payoutHistory: [],
       kycStatus: req.files?.length ? 'submitted' : 'pending',
-      kycDocs: (req.files || []).map((file) => ({
-        docType: 'kyc',
-        fileName: `/uploads/hyperlocal/kyc/${file.filename}`,
-        uploadedAt: new Date(),
-      })),
+      kycDocs,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -1126,6 +1534,7 @@ router.post('/partners/jobs/:orderId/accept', authenticate, writeLimiter, async 
       const partnerIdx = store.partners.findIndex((entry) => entry.partnerId === partnerId);
       if (partnerIdx !== -1) store.partners[partnerIdx].currentOrderId = req.params.orderId;
     }
+    invalidateOverviewCache();
     return res.json({ success: true, message: 'Delivery job accepted.', data: { order: { ...updated, assignedPartnerId: partnerId } } });
   } catch (error) {
     const statusCode = error.message === 'Order not found.' ? 404 : 400;
@@ -1147,6 +1556,7 @@ router.post('/partners/jobs/:orderId/reject', authenticate, writeLimiter, async 
 
     if (sourceOrder.status === 'Partner assigned' && String(sourceOrder.assignedPartnerId || '') === partnerId) {
       const updated = await applyOrderStatusTransition(orderId, 'Cancelled/Refunded', note);
+      invalidateOverviewCache();
       return res.json({ success: true, message: 'Assigned job rejected and marked cancelled.', data: { order: updated } });
     }
     if (sourceOrder.status === 'Partner assigned' && String(sourceOrder.assignedPartnerId || '') !== partnerId) {
@@ -1176,6 +1586,26 @@ router.post('/partners/jobs/:orderId/update', authenticate, writeLimiter, async 
       return res.status(403).json({ success: false, message: 'Not authorized for this delivery.' });
     }
     const updated = await applyOrderStatusTransition(req.params.orderId, status, req.body.note || `Updated by partner to ${status}`);
+
+    if (status === 'Delivered' && sourceOrder.status !== 'Delivered') {
+      const partnerEarning = Number(toNum(sourceOrder.deliveryCharge, 0).toFixed(2));
+      if (isMongoReady()) {
+        const partnerDoc = await HyperlocalPartner.findOne({ partnerId: partner.partnerId });
+        if (partnerDoc) {
+          partnerDoc.walletBalance = toNum(partnerDoc.walletBalance, 0) + partnerEarning;
+          partnerDoc.currentOrderId = '';
+          await partnerDoc.save();
+        }
+      } else {
+        const idx = store.partners.findIndex((entry) => entry.partnerId === partner.partnerId);
+        if (idx !== -1) {
+          store.partners[idx].walletBalance = toNum(store.partners[idx].walletBalance, 0) + partnerEarning;
+          store.partners[idx].currentOrderId = '';
+        }
+      }
+    }
+
+    invalidateOverviewCache();
     return res.json({ success: true, message: 'Delivery status updated.', data: { order: updated } });
   } catch (error) {
     const statusCode = error.message === 'Order not found.' ? 404 : 400;
@@ -1194,7 +1624,7 @@ router.get('/partners/:partnerId/wallet', authenticate, async (req, res) => {
   return res.json({ success: true, data: { walletBalance: partner.walletBalance || 0, payoutHistory: partner.payoutHistory || [] } });
 });
 
-router.post('/partners/:partnerId/payouts/request', authenticate, writeLimiter, async (req, res) => {
+router.post('/partners/:partnerId/payouts/request', authenticate, highRiskWriteLimiter, async (req, res) => {
   const authorizedPartner = await ensureAuthorizedPartner(req, res, req.params.partnerId, { requireApproved: true });
   if (!authorizedPartner) return;
   const amount = toNum(req.body.amount, 0);
@@ -1203,14 +1633,37 @@ router.post('/partners/:partnerId/payouts/request', authenticate, writeLimiter, 
   if (isMongoReady()) {
     const partner = await HyperlocalPartner.findOne({ partnerId: authorizedPartner.partnerId });
     if (!partner) return res.status(404).json({ success: false, message: 'Partner not found.' });
+    const availableBalance = calculatePartnerAvailableBalance(partner);
+    if (amount > availableBalance) {
+      return res.status(400).json({
+        success: false,
+        message: `Requested amount exceeds available balance. Available: INR ${availableBalance.toFixed(2)}.`,
+      });
+    }
     partner.payoutHistory.push(payout);
     await partner.save();
+    return res.status(201).json({
+      success: true,
+      message: 'Payout request submitted.',
+      data: { payout, availableBalance: Number((availableBalance - amount).toFixed(2)) },
+    });
   } else {
     const idx = store.partners.findIndex((entry) => entry.partnerId === authorizedPartner.partnerId);
     if (idx === -1) return res.status(404).json({ success: false, message: 'Partner not found.' });
+    const availableBalance = calculatePartnerAvailableBalance(store.partners[idx]);
+    if (amount > availableBalance) {
+      return res.status(400).json({
+        success: false,
+        message: `Requested amount exceeds available balance. Available: INR ${availableBalance.toFixed(2)}.`,
+      });
+    }
     store.partners[idx].payoutHistory.push(payout);
+    return res.status(201).json({
+      success: true,
+      message: 'Payout request submitted.',
+      data: { payout, availableBalance: Number((availableBalance - amount).toFixed(2)) },
+    });
   }
-  return res.status(201).json({ success: true, message: 'Payout request submitted.', data: { payout } });
 });
 
 router.patch('/admin/shops/:shopId/approval', authenticate, verifyAdmin, writeLimiter, async (req, res) => {
@@ -1224,6 +1677,13 @@ router.patch('/admin/shops/:shopId/approval', authenticate, verifyAdmin, writeLi
     const idx = store.shops.findIndex((entry) => entry.shopId === req.params.shopId);
     if (idx !== -1) store.shops[idx].approvalStatus = status;
   }
+  await logAdminAction(req, {
+    action: 'shop.approval.update',
+    targetType: 'shop',
+    targetId: req.params.shopId,
+    meta: { status },
+  });
+  invalidateOverviewCache();
   return res.json({ success: true, message: `Shop ${status}.` });
 });
 
@@ -1238,21 +1698,36 @@ router.patch('/admin/partners/:partnerId/approval', authenticate, verifyAdmin, w
     const idx = store.partners.findIndex((entry) => entry.partnerId === req.params.partnerId);
     if (idx !== -1) store.partners[idx].approvalStatus = status;
   }
+  await logAdminAction(req, {
+    action: 'partner.approval.update',
+    targetType: 'partner',
+    targetId: req.params.partnerId,
+    meta: { status },
+  });
+  invalidateOverviewCache();
   return res.json({ success: true, message: `Partner ${status}.` });
 });
 
 router.get('/admin/pending-shops', authenticate, verifyAdmin, async (_req, res) => {
+  const { page, limit } = parsePagination(_req, { page: 1, limit: 20 });
   const shops = isMongoReady()
-    ? await HyperlocalShop.find({ approvalStatus: 'pending' }).lean()
-    : store.shops.filter((entry) => entry.approvalStatus === 'pending');
-  return res.json({ success: true, data: { shops } });
+    ? await HyperlocalShop.find({ approvalStatus: 'pending' }).sort({ createdAt: -1 }).lean()
+    : store.shops
+        .filter((entry) => entry.approvalStatus === 'pending')
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  const paged = paginateList(shops, page, limit);
+  return res.json({ success: true, data: { shops: paged.items, pagination: paged.pagination } });
 });
 
 router.get('/admin/pending-partners', authenticate, verifyAdmin, async (_req, res) => {
+  const { page, limit } = parsePagination(_req, { page: 1, limit: 20 });
   const partners = isMongoReady()
-    ? await HyperlocalPartner.find({ approvalStatus: 'pending' }).lean()
-    : store.partners.filter((entry) => entry.approvalStatus === 'pending');
-  return res.json({ success: true, data: { partners } });
+    ? await HyperlocalPartner.find({ approvalStatus: 'pending' }).sort({ createdAt: -1 }).lean()
+    : store.partners
+        .filter((entry) => entry.approvalStatus === 'pending')
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  const paged = paginateList(partners, page, limit);
+  return res.json({ success: true, data: { partners: paged.items, pagination: paged.pagination } });
 });
 
 router.patch('/admin/config', authenticate, verifyAdmin, writeLimiter, async (req, res) => {
@@ -1288,6 +1763,16 @@ router.patch('/admin/config', authenticate, verifyAdmin, writeLimiter, async (re
     } else {
       store.config = nextConfig;
     }
+    await logAdminAction(req, {
+      action: 'admin.config.update',
+      targetType: 'config',
+      targetId: 'CFG-DEFAULT',
+      meta: {
+        commissionPercent: nextConfig.commissionPercent,
+        platformFee: nextConfig.platformFee,
+        surgeEnabled: nextConfig.surgePricing.enabled,
+      },
+    });
     res.json({ success: true, message: 'Admin pricing config updated.', data: { config: nextConfig } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Unable to update config.' });
@@ -1313,7 +1798,7 @@ router.get('/admin/analytics', authenticate, verifyAdmin, async (_req, res) => {
   });
 });
 
-router.get('/overview360', authenticate, async (_req, res) => {
+const computeOverview360Data = async () => {
   const orders = isMongoReady() ? await HyperlocalOrder.find().lean() : store.orders;
   const shops = isMongoReady() ? await HyperlocalShop.find().lean() : store.shops;
   const partners = isMongoReady() ? await HyperlocalPartner.find().lean() : store.partners;
@@ -1340,6 +1825,9 @@ router.get('/overview360', authenticate, async (_req, res) => {
   const approvedShopCount = shops.filter((entry) => entry.approvalStatus === 'approved').length;
   const approvedPartnerCount = partners.filter((entry) => entry.approvalStatus === 'approved').length;
   const activePartnerCount = partners.filter((entry) => entry.online).length;
+  const activeJobs = orders.filter((order) =>
+    ['Accepted by shop', 'Partner assigned', 'Picked up', 'Out for delivery'].includes(order.status)
+  ).length;
   const activeOrders = orders.filter((order) => ['Placed', 'Accepted by shop', 'Partner assigned', 'Picked up', 'Out for delivery'].includes(order.status)).length;
   const ordersByCity = orders.reduce((acc, order) => {
     const city = order.address?.city || 'Unknown';
@@ -1358,35 +1846,118 @@ router.get('/overview360', authenticate, async (_req, res) => {
     .sort((a, b) => b[1] - a[1])
     .map(([category, revenue]) => ({ category, revenue: Number(revenue.toFixed(2)) }));
 
-  res.json({
-    success: true,
-    data: {
-      totalOrders: orders.length,
-      deliveredOrders: orders.filter((entry) => entry.status === 'Delivered').length,
-      cancelledOrders: orders.filter((entry) => entry.status === 'Cancelled/Refunded').length,
-      activeOrders,
-      totalRevenue: Number(totalRevenue.toFixed(2)),
-      averageOrderValue: orders.length ? Number((totalRevenue / orders.length).toFixed(2)) : 0,
-      totalGross: Number(totalGross.toFixed(2)),
-      approvedShopCount,
-      approvedPartnerCount,
-      activePartnerCount,
-      activeJobs,
-      openComplaints,
-      pendingRefunds,
-      resolvedRefunds,
-      subscriptionCount: subscriptions.length,
-      ordersByCity: Object.entries(ordersByCity).map(([city, count]) => ({ city, count })),
-      topShops,
-      topProducts,
-      categoryBreakdown,
-    },
-  });
+  return {
+    totalOrders: orders.length,
+    deliveredOrders: orders.filter((entry) => entry.status === 'Delivered').length,
+    cancelledOrders: orders.filter((entry) => entry.status === 'Cancelled/Refunded').length,
+    activeOrders,
+    totalRevenue: Number(totalRevenue.toFixed(2)),
+    averageOrderValue: orders.length ? Number((totalRevenue / orders.length).toFixed(2)) : 0,
+    totalGross: Number(totalGross.toFixed(2)),
+    approvedShopCount,
+    approvedPartnerCount,
+    activePartnerCount,
+    activeJobs,
+    openComplaints,
+    pendingRefunds,
+    resolvedRefunds,
+    subscriptionCount: subscriptions.length,
+    ordersByCity: Object.entries(ordersByCity).map(([city, count]) => ({ city, count })),
+    topShops,
+    topProducts,
+    categoryBreakdown,
+  };
+};
+
+router.get('/overview360', authenticate, async (_req, res) => {
+  try {
+    setEdgeCacheHeaders(res, { isPublic: false, sMaxageSec: 25, swrSec: 120 });
+    const now = Date.now();
+    if (ENABLE_OVERVIEW_CACHE && overviewCache.data && now - overviewCache.cachedAt < OVERVIEW_CACHE_TTL_MS) {
+      return res.json({
+        success: true,
+        data: overviewCache.data,
+        meta: { cache: 'hit', cachedAt: new Date(overviewCache.cachedAt).toISOString() },
+      });
+    }
+
+    const startedAt = Date.now();
+    const data = await computeOverview360Data();
+    overviewCache = { cachedAt: Date.now(), data };
+    logger.info('hyperlocal overview360 recomputed', {
+      durationMs: Date.now() - startedAt,
+      cacheTtlMs: OVERVIEW_CACHE_TTL_MS,
+    });
+    return res.json({
+      success: true,
+      data,
+      meta: { cache: 'miss', cachedAt: new Date(overviewCache.cachedAt).toISOString() },
+    });
+  } catch (error) {
+    logger.error('hyperlocal overview360 error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load Hyperlocal 360 data.' });
+  }
+});
+
+router.post('/internal/cron/overview360-rebuild', async (req, res) => {
+  if (!CRON_SECRET) {
+    return res.status(503).json({ success: false, message: 'HYPERLOCAL_CRON_SECRET is not configured.' });
+  }
+  const providedSecret = String(req.headers['x-cron-secret'] || '').trim();
+  if (providedSecret !== CRON_SECRET) {
+    return res.status(401).json({ success: false, message: 'Unauthorized cron request.' });
+  }
+  try {
+    const startedAt = Date.now();
+    const data = await computeOverview360Data();
+    overviewCache = { cachedAt: Date.now(), data };
+    return res.json({
+      success: true,
+      data: {
+        cachedAt: new Date(overviewCache.cachedAt).toISOString(),
+        durationMs: Date.now() - startedAt,
+        summary: {
+          totalOrders: data.totalOrders,
+          totalRevenue: data.totalRevenue,
+          activeOrders: data.activeOrders,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('hyperlocal cron overview rebuild error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to rebuild overview cache.' });
+  }
 });
 
 router.get('/admin/refunds', authenticate, verifyAdmin, async (_req, res) => {
-  const refunds = isMongoReady() ? await HyperlocalRefund.find().sort({ createdAt: -1 }).lean() : store.refunds;
-  return res.json({ success: true, data: { refunds } });
+  const status = String(_req.query.status || '').trim().toLowerCase();
+  const { page, limit, skip } = parsePagination(_req, { page: 1, limit: 20 });
+  if (isMongoReady()) {
+    const query = status ? { status } : {};
+    const [refunds, total] = await Promise.all([
+      HyperlocalRefund.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      HyperlocalRefund.countDocuments(query),
+    ]);
+    return res.json({
+      success: true,
+      data: {
+        refunds,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: total ? Math.ceil(total / limit) : 0,
+          hasNext: skip + refunds.length < total,
+          hasPrev: page > 1,
+        },
+      },
+    });
+  }
+  const filtered = store.refunds
+    .filter((entry) => (!status ? true : String(entry.status || '').toLowerCase() === status))
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  const paged = paginateList(filtered, page, limit);
+  return res.json({ success: true, data: { refunds: paged.items, pagination: paged.pagination } });
 });
 router.patch('/admin/refunds/:refundId/review', authenticate, verifyAdmin, writeLimiter, async (req, res) => {
   const status = String(req.body.status || '').trim().toLowerCase();
@@ -1401,6 +1972,13 @@ router.patch('/admin/refunds/:refundId/review', authenticate, verifyAdmin, write
     ).lean();
     if (!result) return res.status(404).json({ success: false, message: 'Refund request not found.' });
     await HyperlocalOrder.updateOne({ orderId: result.orderId }, { $set: { refundStatus: status } });
+    await logAdminAction(req, {
+      action: 'refund.review',
+      targetType: 'refund',
+      targetId: req.params.refundId,
+      meta: { status, orderId: result.orderId },
+    });
+    invalidateOverviewCache();
     return res.json({ success: true, message: `Refund ${status}.`, data: { refund: result } });
   }
   const idx = store.refunds.findIndex((entry) => entry.refundId === req.params.refundId);
@@ -1409,12 +1987,45 @@ router.patch('/admin/refunds/:refundId/review', authenticate, verifyAdmin, write
   store.refunds[idx].updatedAt = new Date();
   const orderIndex = store.orders.findIndex((entry) => entry.orderId === store.refunds[idx].orderId);
   if (orderIndex !== -1) store.orders[orderIndex].refundStatus = status;
+  await logAdminAction(req, {
+    action: 'refund.review',
+    targetType: 'refund',
+    targetId: req.params.refundId,
+    meta: { status, orderId: store.refunds[idx].orderId },
+  });
+  invalidateOverviewCache();
   return res.json({ success: true, message: `Refund ${status}.`, data: { refund: store.refunds[idx] } });
 });
 
 router.get('/admin/complaints', authenticate, verifyAdmin, async (_req, res) => {
-  const complaints = isMongoReady() ? await HyperlocalComplaint.find().sort({ createdAt: -1 }).lean() : store.complaints;
-  return res.json({ success: true, data: { complaints } });
+  const status = String(_req.query.status || '').trim().toLowerCase();
+  const { page, limit, skip } = parsePagination(_req, { page: 1, limit: 20 });
+  if (isMongoReady()) {
+    const query = status ? { status } : {};
+    const [complaints, total] = await Promise.all([
+      HyperlocalComplaint.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      HyperlocalComplaint.countDocuments(query),
+    ]);
+    return res.json({
+      success: true,
+      data: {
+        complaints,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: total ? Math.ceil(total / limit) : 0,
+          hasNext: skip + complaints.length < total,
+          hasPrev: page > 1,
+        },
+      },
+    });
+  }
+  const filtered = store.complaints
+    .filter((entry) => (!status ? true : String(entry.status || '').toLowerCase() === status))
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  const paged = paginateList(filtered, page, limit);
+  return res.json({ success: true, data: { complaints: paged.items, pagination: paged.pagination } });
 });
 router.patch('/admin/complaints/:complaintId/resolve', authenticate, verifyAdmin, writeLimiter, async (req, res) => {
   const resolutionNote = String(req.body.resolutionNote || '').trim();
@@ -1426,6 +2037,13 @@ router.patch('/admin/complaints/:complaintId/resolve', authenticate, verifyAdmin
     ).lean();
     if (!result) return res.status(404).json({ success: false, message: 'Complaint not found.' });
     await HyperlocalOrder.updateOne({ orderId: result.orderId }, { $set: { complaintStatus: 'resolved' } });
+    await logAdminAction(req, {
+      action: 'complaint.resolve',
+      targetType: 'complaint',
+      targetId: req.params.complaintId,
+      meta: { orderId: result.orderId, resolutionNote },
+    });
+    invalidateOverviewCache();
     return res.json({ success: true, message: 'Complaint resolved.', data: { complaint: result } });
   }
   const idx = store.complaints.findIndex((entry) => entry.complaintId === req.params.complaintId);
@@ -1435,6 +2053,13 @@ router.patch('/admin/complaints/:complaintId/resolve', authenticate, verifyAdmin
   store.complaints[idx].updatedAt = new Date();
   const orderIndex = store.orders.findIndex((entry) => entry.orderId === store.complaints[idx].orderId);
   if (orderIndex !== -1) store.orders[orderIndex].complaintStatus = 'resolved';
+  await logAdminAction(req, {
+    action: 'complaint.resolve',
+    targetType: 'complaint',
+    targetId: req.params.complaintId,
+    meta: { orderId: store.complaints[idx].orderId, resolutionNote },
+  });
+  invalidateOverviewCache();
   return res.json({ success: true, message: 'Complaint resolved.', data: { complaint: store.complaints[idx] } });
 });
 
@@ -1455,6 +2080,37 @@ router.get('/admin/settlement-reports', authenticate, verifyAdmin, async (_req, 
       netPayoutToVendors: Number((gross - commission).toFixed(2)),
     },
   });
+});
+
+router.get('/admin/audit-logs', authenticate, verifyAdmin, async (req, res) => {
+  const action = String(req.query.action || '').trim();
+  const { page, limit, skip } = parsePagination(req, { page: 1, limit: 50 });
+  if (isMongoReady()) {
+    const query = action ? { action } : {};
+    const [auditLogs, total] = await Promise.all([
+      HyperlocalAdminAuditLog.find(query).sort({ at: -1 }).skip(skip).limit(limit).lean(),
+      HyperlocalAdminAuditLog.countDocuments(query),
+    ]);
+    return res.json({
+      success: true,
+      data: {
+        auditLogs,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: total ? Math.ceil(total / limit) : 0,
+          hasNext: skip + auditLogs.length < total,
+          hasPrev: page > 1,
+        },
+      },
+    });
+  }
+  const filtered = store.auditLogs
+    .filter((entry) => (!action ? true : String(entry.action) === action))
+    .sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime());
+  const paged = paginateList(filtered, page, limit);
+  return res.json({ success: true, data: { auditLogs: paged.items, pagination: paged.pagination } });
 });
 
 router.get('/wallet/me', authenticate, async (req, res) => {
@@ -1484,12 +2140,27 @@ router.get('/wallet/:email', authenticate, async (req, res) => {
   return res.json({ success: true, data: { wallet } });
 });
 
-router.post('/wallet/topup', authenticate, writeLimiter, async (req, res) => {
+router.post('/wallet/topup', authenticate, highRiskWriteLimiter, async (req, res) => {
   const userEmail = ensureAuthenticatedEmail(req, res);
   if (!userEmail) return;
   const amount = toNum(req.body.amount, 0);
   if (amount <= 0) return res.status(400).json({ success: false, message: 'Valid amount is required.' });
-  const tx = { txId: id('HLTX'), type: 'credit', amount, note: 'Wallet top-up', at: new Date() };
+  const paymentReference = String(req.body.paymentReference || '').trim();
+  const paymentStatus = String(req.body.paymentStatus || '').trim().toLowerCase();
+  if (!paymentReference || paymentReference.length < 6) {
+    return res.status(400).json({ success: false, message: 'A valid paymentReference is required.' });
+  }
+  if (paymentStatus !== 'verified') {
+    return res.status(400).json({ success: false, message: 'paymentStatus must be verified.' });
+  }
+  const tx = {
+    txId: id('HLTX'),
+    type: 'credit',
+    amount,
+    note: 'Wallet top-up',
+    paymentReference,
+    at: new Date(),
+  };
 
   if (isMongoReady()) {
     const wallet = await HyperlocalWallet.findOneAndUpdate(
@@ -1515,24 +2186,36 @@ router.post('/wallet/topup', authenticate, writeLimiter, async (req, res) => {
   return res.status(201).json({ success: true, data: { wallet } });
 });
 
-router.get('/subscriptions/plans', (_req, res) =>
-  res.json({
+router.get('/subscriptions/plans', (_req, res) => {
+  setEdgeCacheHeaders(res, { isPublic: true, sMaxageSec: 600, swrSec: 3600 });
+  return res.json({
     success: true,
     data: {
-      plans: [
-        { planCode: 'PASS-STARTER', title: 'Starter Pass', amount: 149, benefits: ['Free delivery on 5 orders', '2% cashback'] },
-        { planCode: 'PASS-PLUS', title: 'Plus Pass', amount: 299, benefits: ['Free delivery on 15 orders', '5% cashback', 'Priority delivery'] },
-      ],
+      plans: SUBSCRIPTION_PLANS,
     },
-  })
-);
+  });
+});
 
-router.post('/subscriptions/subscribe', authenticate, writeLimiter, async (req, res) => {
+router.post('/subscriptions/subscribe', authenticate, highRiskWriteLimiter, async (req, res) => {
   const email = ensureAuthenticatedEmail(req, res);
   if (!email) return;
   const planCode = String(req.body.planCode || '').trim();
-  const amount = toNum(req.body.amount, 0);
-  if (!planCode || amount < 0) return res.status(400).json({ success: false, message: 'planCode and amount are required.' });
+  const plan = SUBSCRIPTION_PLAN_MAP[planCode];
+  if (!plan) return res.status(400).json({ success: false, message: 'Invalid planCode.' });
+  const amount = toNum(plan.amount, 0);
+  const now = new Date();
+  const existingActive = isMongoReady()
+    ? await HyperlocalSubscription.findOne({ userEmail: email, planCode, status: 'active', validUntil: { $gt: now } }).lean()
+    : store.subscriptions.find(
+        (entry) =>
+          entry.userEmail === email &&
+          entry.planCode === planCode &&
+          entry.status === 'active' &&
+          new Date(entry.validUntil) > now
+      );
+  if (existingActive) {
+    return res.status(409).json({ success: false, message: 'This subscription is already active.' });
+  }
   const subscription = {
     subscriptionId: id('HLSUB'),
     userEmail: email,
@@ -1545,6 +2228,7 @@ router.post('/subscriptions/subscribe', authenticate, writeLimiter, async (req, 
   };
   if (isMongoReady()) await HyperlocalSubscription.create(subscription);
   else store.subscriptions.push(subscription);
+  invalidateOverviewCache();
   return res.status(201).json({ success: true, message: 'Subscription activated.', data: { subscription } });
 });
 
@@ -1569,7 +2253,7 @@ router.get('/subscriptions/:email', authenticate, async (req, res) => {
   return res.json({ success: true, data: { subscriptions } });
 });
 
-router.post('/ads', authenticate, writeLimiter, async (req, res) => {
+router.post('/ads', authenticate, highRiskWriteLimiter, async (req, res) => {
   const ownerEmail = ensureAuthenticatedEmail(req, res);
   if (!ownerEmail) return;
   const shopId = String(req.body.shopId || '').trim();
@@ -1599,10 +2283,19 @@ router.get('/ads', authenticate, async (req, res) => {
     return res.status(403).json({ success: false, message: 'Not authorized for this shop.' });
   }
   const filterShopIds = shopId ? new Set([shopId]) : ownedShopIds;
-  const ads = isMongoReady()
-    ? (await HyperlocalAd.find(shopId ? { shopId } : {}).sort({ createdAt: -1 }).lean()).filter((entry) => filterShopIds.has(entry.shopId))
-    : store.ads.filter((entry) => filterShopIds.has(entry.shopId));
-  return res.json({ success: true, data: { ads } });
+  const { page, limit } = parsePagination(req, { page: 1, limit: 20 });
+  if (isMongoReady()) {
+    const allAds = (await HyperlocalAd.find(shopId ? { shopId } : {}).sort({ createdAt: -1 }).lean()).filter((entry) =>
+      filterShopIds.has(entry.shopId)
+    );
+    const paged = paginateList(allAds, page, limit);
+    return res.json({ success: true, data: { ads: paged.items, pagination: paged.pagination } });
+  }
+  const filtered = store.ads
+    .filter((entry) => filterShopIds.has(entry.shopId))
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  const paged = paginateList(filtered, page, limit);
+  return res.json({ success: true, data: { ads: paged.items, pagination: paged.pagination } });
 });
 
 router.use((error, _req, res, next) => {

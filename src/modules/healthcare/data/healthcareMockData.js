@@ -69,6 +69,13 @@ export const HEALTHCARE_SECTIONS = [
     shortLabel: "Partner",
     icon: "PD",
   },
+  {
+    id: "ai-assist",
+    title: "AI Assistant",
+    description: "360 healthcare guidance and action planning",
+    shortLabel: "AI Assist",
+    icon: "AI",
+  },
 ];
 
 export const MOCK_DOCTORS = [

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
 import PropertyCard from "./components/PropertyCard";
 import PropertyDetailTabs from "./components/PropertyDetailTabs";
@@ -14,6 +14,33 @@ import {
   calculateEMI,
   normalizeProperty,
 } from "./realEstateUtils";
+
+const WORKSPACE_VIEWS = [
+  {
+    id: "preview",
+    title: "360 Preview",
+    subtitle: "Immersive property tour",
+    label: "Open tour",
+    description:
+      "Walk through images, videos, floor plans, and neighborhood context in a single command center.",
+  },
+  {
+    id: "insights",
+    title: "Market Pulse",
+    subtitle: "Pricing, demand, and offer signals",
+    label: "See insights",
+    description:
+      "Compare similar homes, pricing trends, and nearby market signals before making decisions.",
+  },
+  {
+    id: "connect",
+    title: "Seller Connect",
+    subtitle: "Talk, schedule, and save with ease",
+    label: "Connect now",
+    description:
+      "Stay on top of leads, schedule visits, and keep seller communication in a single workspace.",
+  },
+];
 
 const HomeSphere = ({ onNavigateToDashboard }) => {
   const {
@@ -38,6 +65,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
   const [readyToMoveOnly, setReadyToMoveOnly] = useState(false);
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [sortBy, setSortBy] = useState("featured");
+  const [selectedWorkspaceIndex, setSelectedWorkspaceIndex] = useState(0);
 
   // Property detail state
   const [enquiryMessage, setEnquiryMessage] = useState("");
@@ -176,6 +204,29 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     () => properties.find((p) => p.id === selectedPropertyId),
     [properties, selectedPropertyId]
   );
+
+  const workspaceProperties = useMemo(() => {
+    const topProperties = sortedProperties.length > 0 ? sortedProperties : properties;
+    return topProperties.slice(0, 3);
+  }, [sortedProperties, properties]);
+
+  const workspaceCount = workspaceProperties.length;
+
+  const handleNextWorkspace = () => {
+    if (workspaceCount === 0) return;
+    setSelectedWorkspaceIndex((index) => (index + 1) % workspaceCount);
+  };
+
+  const selectedWorkspaceProperty = useMemo(
+    () => workspaceProperties[selectedWorkspaceIndex] || workspaceProperties[0] || null,
+    [workspaceProperties, selectedWorkspaceIndex]
+  );
+
+  useEffect(() => {
+    if (selectedWorkspaceIndex >= workspaceCount) {
+      setSelectedWorkspaceIndex(0);
+    }
+  }, [selectedWorkspaceIndex, workspaceCount]);
 
   const favoriteIds = useMemo(
     () => new Set(favorites.map((f) => f.id)),
@@ -418,6 +469,123 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
               <span>Avg budget (lakhs)</span>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* HOMESPHERE 360 COMMAND CENTER */}
+      <section className="homesphere-360-shell">
+        <div className="homesphere-360-header">
+          <div>
+            <div className="homesphere-360-kicker">HomeSphere 360</div>
+            <h2>Jump into a full property command center</h2>
+            <p>
+              Preview homes, compare trends, and take action from a unified workspace without leaving your search.
+            </p>
+            <div className="homesphere-360-view-cards">
+              {WORKSPACE_VIEWS.map((view) => (
+                <div key={view.id} className="homesphere-360-view-card">
+                  <strong>{view.title}</strong>
+                  <span>{view.subtitle}</span>
+                </div>
+              ))}
+            </div>
+           </div>
+           <div className="homesphere-360-toolbar">
+            <button
+              type="button"
+              className="realestate-secondary-button"
+              onClick={handleNextWorkspace}
+            >
+              Next workspace
+            </button>
+            <button
+              type="button"
+              className="realestate-primary-button"
+              onClick={() => {
+                if (selectedWorkspaceProperty) {
+                  setSelectedPropertyId(selectedWorkspaceProperty.id);
+                  pushToast(`Selected ${selectedWorkspaceProperty.title} for deeper review.`);
+                }
+              }}
+            >
+              Open listing
+            </button>
+          </div>
+        </div>
+
+        <div className="homesphere-360-panel">
+          <div className="homesphere-360-preview">
+            {selectedWorkspaceProperty ? (
+              <div
+                className="homesphere-360-preview-image"
+                style={{
+                  backgroundImage: `url(${selectedWorkspaceProperty.image || selectedWorkspaceProperty.mediaGallery[0]?.url || "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=1200&h=800&fit=crop"})`,
+                }}
+              >
+                <div className="homesphere-360-preview-badge">
+                  {selectedWorkspaceProperty.intent === "rent" ? "Rental" : "For Sale"}
+                </div>
+                <div className="homesphere-360-preview-copy">
+                  <strong>{selectedWorkspaceProperty.title}</strong>
+                  <span>{selectedWorkspaceProperty.location} • {selectedWorkspaceProperty.area}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="homesphere-360-placeholder">
+                <p>No workspace property is available right now.</p>
+              </div>
+            )}
+          </div>
+
+          <aside className="homesphere-360-sidebar">
+            <div className="homesphere-workspace-chips">
+              {workspaceProperties.map((property, index) => (
+                <button
+                  key={property.id}
+                  type="button"
+                  className={`homesphere-workspace-chip ${selectedWorkspaceIndex === index ? "active" : ""}`}
+                  onClick={() => setSelectedWorkspaceIndex(index)}
+                >
+                  <span>{property.location}</span>
+                  <small>{property.type}</small>
+                </button>
+              ))}
+            </div>
+            <div className="homesphere-workspace-details">
+              <h3>{selectedWorkspaceProperty?.title || "Workspace preview"}</h3>
+              <p>{selectedWorkspaceProperty?.description || "Select a workspace to preview property details, tour media, and launch action workflows."}</p>
+              {selectedWorkspaceProperty ? (
+                <ul>
+                  <li><strong>Price:</strong> {selectedWorkspaceProperty.priceLabel}</li>
+                  <li><strong>Area:</strong> {selectedWorkspaceProperty.area}</li>
+                  <li><strong>Bedrooms:</strong> {selectedWorkspaceProperty.bedrooms}</li>
+                  <li><strong>Bathrooms:</strong> {selectedWorkspaceProperty.bathrooms}</li>
+                </ul>
+              ) : null}
+            </div>
+            <div className="homesphere-workspace-actions">
+              <button
+                type="button"
+                className="realestate-primary-button"
+                onClick={() => {
+                  if (selectedWorkspaceProperty) {
+                    setSelectedPropertyId(selectedWorkspaceProperty.id);
+                    pushToast("Workspace item selected. Scroll to listing for full details.");
+                    listingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }
+                }}
+              >
+                Review listing
+              </button>
+              <button
+                type="button"
+                className="realestate-secondary-button"
+                onClick={() => pushToast("360 workspace insights loaded. Open property report to continue.")}
+              >
+                View insights
+              </button>
+            </div>
+          </aside>
         </div>
       </section>
 

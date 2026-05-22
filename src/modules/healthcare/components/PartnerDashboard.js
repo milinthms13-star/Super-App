@@ -22,15 +22,18 @@ const PartnerDashboard = ({
   dashboard,
   applications,
   adminApplications,
+  opsMetrics,
   loading,
   isAdmin,
   onCreateApplication,
   onReviewApplication,
+  onRunRetentionPurge,
 }) => {
   const [form, setForm] = useState(INITIAL_APPLICATION);
   const [documents, setDocuments] = useState([]);
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [purging, setPurging] = useState(false);
 
   const updateField = (key, value) => {
     setForm((previous) => ({
@@ -67,12 +70,64 @@ const PartnerDashboard = ({
 
   const stats = dashboard?.stats || {};
 
+  const handleRunPurge = async () => {
+    setPurging(true);
+    try {
+      const result = await onRunRetentionPurge?.();
+      setFeedbackMessage(
+        `Retention purge completed. Purged ${Number(result?.purged || 0)} record(s), S3 removed ${Number(result?.s3Deleted || 0)}.`
+      );
+    } catch (error) {
+      setFeedbackMessage(error?.message || "Unable to run retention purge.");
+    } finally {
+      setPurging(false);
+    }
+  };
+
   return (
     <section className="healthcare-section">
       <div className="healthcare-section-heading">
         <h2>Partner Dashboard And Admin Approval</h2>
         <p>Doctor, lab, and pharmacy onboarding with approval lifecycle and operational metrics.</p>
       </div>
+
+      {isAdmin && opsMetrics ? (
+        <div className="healthcare-record-list-card">
+          <h3>Healthcare Ops Metrics</h3>
+          <div className="healthcare-elderly-grid">
+            <article className="healthcare-care-card">
+              <h3>Pending Rx Reviews</h3>
+              <p>{opsMetrics.pendingPrescriptionReviews || 0}</p>
+            </article>
+            <article className="healthcare-care-card">
+              <h3>Critical Incidents</h3>
+              <p>{opsMetrics.criticalIncidents || 0}</p>
+            </article>
+            <article className="healthcare-care-card">
+              <h3>Open Incidents</h3>
+              <p>{opsMetrics.openIncidents || 0}</p>
+            </article>
+            <article className="healthcare-care-card">
+              <h3>Archived Pending Purge</h3>
+              <p>{opsMetrics.archivedRecordsPendingPurge || 0}</p>
+            </article>
+            <article className="healthcare-care-card">
+              <h3>Archived Expired Purge</h3>
+              <p>{opsMetrics.archivedRecordsExpiredPurge || 0}</p>
+            </article>
+          </div>
+          <div className="healthcare-pill-row">
+            <button
+              type="button"
+              className="healthcare-secondary-button"
+              onClick={handleRunPurge}
+              disabled={purging}
+            >
+              {purging ? "Purging..." : "Run Retention Purge"}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {feedbackMessage ? (
         <div className="healthcare-inline-alert" role="status">
@@ -96,6 +151,22 @@ const PartnerDashboard = ({
         <article className="healthcare-care-card">
           <h3>Total Pharmacy Orders</h3>
           <p>{stats.totalPharmacyOrders || 0}</p>
+        </article>
+        <article className="healthcare-care-card">
+          <h3>Pending SLA Breaches</h3>
+          <p>{stats.pendingSlaBreaches || 0}</p>
+        </article>
+        <article className="healthcare-care-card">
+          <h3>Avg Review TAT (hrs)</h3>
+          <p>{stats.avgReviewTurnaroundHours || 0}</p>
+        </article>
+        <article className="healthcare-care-card">
+          <h3>Avg Order Fulfillment (hrs)</h3>
+          <p>{stats.avgOrderFulfillmentHours || 0}</p>
+        </article>
+        <article className="healthcare-care-card">
+          <h3>Appointment Completion %</h3>
+          <p>{stats.appointmentCompletionRate || 0}</p>
         </article>
       </div>
 

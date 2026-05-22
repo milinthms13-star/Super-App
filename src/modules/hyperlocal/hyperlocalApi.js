@@ -1,102 +1,245 @@
-import axios from "axios";
 import { BACKEND_BASE_URL } from "../../utils/api";
 import { getStoredAuthToken } from "../../utils/auth";
 
 const BASE = `${BACKEND_BASE_URL}/api/hyperlocal`;
+const DEFAULT_TIMEOUT_MS = 12000;
+const RETRYABLE_METHODS = new Set(["GET"]);
+
+const toQueryString = (params = {}) => {
+  const searchParams = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    searchParams.set(key, String(value));
+  });
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+};
 
 const authHeaders = () => {
   const token = getStoredAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-const unwrap = (response) => response.data;
+const normalizeErrorMessage = (fallbackMessage, payload, status) => {
+  if (payload && typeof payload.message === "string" && payload.message.trim()) return payload.message;
+  if (status >= 500) return "Server unavailable. Please retry shortly.";
+  return fallbackMessage;
+};
+
+const parseJsonSafely = async (response) => {
+  try {
+    return await response.json();
+  } catch (_error) {
+    return null;
+  }
+};
+
+const apiRequest = async (path, options = {}) => {
+  const {
+    method = "GET",
+    params = undefined,
+    body = undefined,
+    headers = {},
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    retry = true,
+    fallbackError = "Request failed.",
+  } = options;
+
+  const url = `${BASE}${path}${toQueryString(params)}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  const mergedHeaders = {
+    ...authHeaders(),
+    ...(isFormData ? {} : body !== undefined ? { "Content-Type": "application/json" } : {}),
+    ...headers,
+  };
+
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: mergedHeaders,
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    const payload = await parseJsonSafely(response);
+    if (!response.ok) {
+      const message = normalizeErrorMessage(fallbackError, payload, response.status);
+      const error = new Error(message);
+      error.response = { status: response.status, data: payload || { message } };
+      throw error;
+    }
+
+    return payload;
+  } catch (error) {
+    const timedOut = error?.name === "AbortError";
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+    const shouldRetry =
+      retry &&
+      RETRYABLE_METHODS.has(String(method || "GET").toUpperCase()) &&
+      !timedOut &&
+      !offline &&
+      !error?.response;
+
+    if (shouldRetry) {
+      return apiRequest(path, { ...options, retry: false });
+    }
+
+    if (!error?.response) {
+      const message = timedOut ? "Request timed out. Please retry." : offline ? "You are offline. Please reconnect and retry." : fallbackError;
+      const wrappedError = new Error(message);
+      wrappedError.response = { status: 0, data: { message } };
+      throw wrappedError;
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
 
 export const hyperlocalApi = {
-  bootstrap: async () => unwrap(await axios.get(`${BASE}/bootstrap`)),
-  getShops: async (params = {}) => unwrap(await axios.get(`${BASE}/shops`, { params })),
-  getQuote: async (payload) => unwrap(await axios.post(`${BASE}/cart/quote`, payload, { headers: authHeaders() })),
-  placeOrder: async (formData) =>
-    unwrap(
-      await axios.post(`${BASE}/orders`, formData, {
-        headers: {
-          ...authHeaders(),
-          "Content-Type": "multipart/form-data",
-        },
-      })
-    ),
-  getOrders: async () => unwrap(await axios.get(`${BASE}/orders`, { headers: authHeaders() })),
-  trackOrder: async (orderId) =>
-    unwrap(await axios.get(`${BASE}/orders/${encodeURIComponent(orderId)}/track`, { headers: authHeaders() })),
+  bootstrap: async () => apiRequest("/bootstrap", { fallbackError: "Unable to load hyperlocal settings." }),
+  getShops: async (params = {}) => apiRequest("/shops", { params, fallbackError: "Unable to fetch nearby shops." }),
+  getQuote: async (payload) => apiRequest("/cart/quote", { method: "POST", body: payload, fallbackError: "Unable to calculate quote." }),
+  placeOrder: async (formData, options = {}) =>
+    apiRequest("/orders", {
+      method: "POST",
+      body: formData,
+      headers: options.idempotencyKey ? { "x-idempotency-key": options.idempotencyKey } : {},
+      fallbackError: "Unable to place order.",
+    }),
+  getOrders: async (params = {}) => apiRequest("/orders", { params, fallbackError: "Unable to fetch order history." }),
+  trackOrder: async (orderId) => apiRequest(`/orders/${encodeURIComponent(orderId)}/track`, { fallbackError: "Unable to track this order." }),
   cancelOrder: async (orderId, reason) =>
-    unwrap(await axios.post(`${BASE}/orders/${encodeURIComponent(orderId)}/cancel`, { reason }, { headers: authHeaders() })),
+    apiRequest(`/orders/${encodeURIComponent(orderId)}/cancel`, { method: "POST", body: { reason }, fallbackError: "Unable to cancel order." }),
   requestRefund: async (orderId, reason) =>
-    unwrap(await axios.post(`${BASE}/orders/${encodeURIComponent(orderId)}/refund-request`, { reason }, { headers: authHeaders() })),
+    apiRequest(`/orders/${encodeURIComponent(orderId)}/refund-request`, {
+      method: "POST",
+      body: { reason },
+      fallbackError: "Unable to request refund.",
+    }),
   createComplaint: async (orderId, issue) =>
-    unwrap(await axios.post(`${BASE}/orders/${encodeURIComponent(orderId)}/complaint`, { issue }, { headers: authHeaders() })),
-  saveAddress: async (payload) => unwrap(await axios.post(`${BASE}/addresses`, payload, { headers: authHeaders() })),
-  getAddresses: async () => unwrap(await axios.get(`${BASE}/addresses`, { headers: authHeaders() })),
-  applyVendorShop: async (payload) => unwrap(await axios.post(`${BASE}/vendor/shops`, payload, { headers: authHeaders() })),
-  getVendorShops: async () => unwrap(await axios.get(`${BASE}/vendor/shops`, { headers: authHeaders() })),
+    apiRequest(`/orders/${encodeURIComponent(orderId)}/complaint`, {
+      method: "POST",
+      body: { issue },
+      fallbackError: "Unable to submit complaint.",
+    }),
+  saveAddress: async (payload) => apiRequest("/addresses", { method: "POST", body: payload, fallbackError: "Unable to save address." }),
+  getAddresses: async () => apiRequest("/addresses", { fallbackError: "Unable to fetch saved addresses." }),
+
+  applyVendorShop: async (payload) => apiRequest("/vendor/shops", { method: "POST", body: payload, fallbackError: "Unable to submit vendor shop." }),
+  getVendorShops: async () => apiRequest("/vendor/shops", { fallbackError: "Unable to load vendor shops." }),
   addProduct: async (shopId, payload) =>
-    unwrap(await axios.post(`${BASE}/vendor/shops/${encodeURIComponent(shopId)}/products`, payload, { headers: authHeaders() })),
+    apiRequest(`/vendor/shops/${encodeURIComponent(shopId)}/products`, { method: "POST", body: payload, fallbackError: "Unable to add product." }),
   updateProduct: async (shopId, productId, payload) =>
-    unwrap(
-      await axios.patch(`${BASE}/vendor/shops/${encodeURIComponent(shopId)}/products/${encodeURIComponent(productId)}`, payload, {
-        headers: authHeaders(),
-      })
-    ),
+    apiRequest(`/vendor/shops/${encodeURIComponent(shopId)}/products/${encodeURIComponent(productId)}`, {
+      method: "PATCH",
+      body: payload,
+      fallbackError: "Unable to update product.",
+    }),
   updateShopOpenStatus: async (shopId, open) =>
-    unwrap(await axios.patch(`${BASE}/vendor/shops/${encodeURIComponent(shopId)}/open-status`, { open }, { headers: authHeaders() })),
+    apiRequest(`/vendor/shops/${encodeURIComponent(shopId)}/open-status`, {
+      method: "PATCH",
+      body: { open },
+      fallbackError: "Unable to update shop status.",
+    }),
   updateOpeningHours: async (shopId, openingHours) =>
-    unwrap(await axios.patch(`${BASE}/vendor/shops/${encodeURIComponent(shopId)}/opening-hours`, { openingHours }, { headers: authHeaders() })),
-  vendorOrders: async () => unwrap(await axios.get(`${BASE}/vendor/orders`, { headers: authHeaders() })),
-  vendorSettle: async () =>
-    unwrap(await axios.get(`${BASE}/vendor/settlements`, { headers: authHeaders() })),
-  vendorAnalytics: async () =>
-    unwrap(await axios.get(`${BASE}/vendor/analytics`, { headers: authHeaders() })),
+    apiRequest(`/vendor/shops/${encodeURIComponent(shopId)}/opening-hours`, {
+      method: "PATCH",
+      body: { openingHours },
+      fallbackError: "Unable to update opening hours.",
+    }),
+  vendorOrders: async (params = {}) => apiRequest("/vendor/orders", { params, fallbackError: "Unable to load vendor orders." }),
+  vendorSettle: async () => apiRequest("/vendor/settlements", { fallbackError: "Unable to load vendor settlement." }),
+  vendorAnalytics: async () => apiRequest("/vendor/analytics", { fallbackError: "Unable to load vendor analytics." }),
   vendorOrderAction: async (orderId, action) =>
-    unwrap(await axios.patch(`${BASE}/vendor/orders/${encodeURIComponent(orderId)}/action`, { action }, { headers: authHeaders() })),
+    apiRequest(`/vendor/orders/${encodeURIComponent(orderId)}/action`, {
+      method: "PATCH",
+      body: { action },
+      fallbackError: "Unable to update vendor order.",
+    }),
+
   applyPartner: async (formData) =>
-    unwrap(
-      await axios.post(`${BASE}/partners/apply`, formData, {
-        headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
-      })
-    ),
-  partnerProfile: async () => unwrap(await axios.get(`${BASE}/partners/me`, { headers: authHeaders() })),
-  partnerJobs: async () => unwrap(await axios.get(`${BASE}/partners/jobs`, { headers: authHeaders() })),
+    apiRequest("/partners/apply", { method: "POST", body: formData, fallbackError: "Unable to submit partner application." }),
+  partnerProfile: async () => apiRequest("/partners/me", { fallbackError: "Unable to load partner profile." }),
+  partnerJobs: async () => apiRequest("/partners/jobs", { fallbackError: "Unable to load partner jobs." }),
   partnerAvailability: async (partnerId, online) =>
-    unwrap(await axios.patch(`${BASE}/partners/${encodeURIComponent(partnerId)}/availability`, { online }, { headers: authHeaders() })),
+    apiRequest(`/partners/${encodeURIComponent(partnerId)}/availability`, {
+      method: "PATCH",
+      body: { online },
+      fallbackError: "Unable to update partner status.",
+    }),
   partnerAcceptJob: async (orderId) =>
-    unwrap(await axios.post(`${BASE}/partners/jobs/${encodeURIComponent(orderId)}/accept`, {}, { headers: authHeaders() })),
+    apiRequest(`/partners/jobs/${encodeURIComponent(orderId)}/accept`, { method: "POST", body: {}, fallbackError: "Unable to accept job." }),
   partnerRejectJob: async (orderId, note = "") =>
-    unwrap(await axios.post(`${BASE}/partners/jobs/${encodeURIComponent(orderId)}/reject`, { note }, { headers: authHeaders() })),
+    apiRequest(`/partners/jobs/${encodeURIComponent(orderId)}/reject`, {
+      method: "POST",
+      body: { note },
+      fallbackError: "Unable to reject job.",
+    }),
   partnerUpdateJob: async (orderId, status, note = "") =>
-    unwrap(await axios.post(`${BASE}/partners/jobs/${encodeURIComponent(orderId)}/update`, { status, note }, { headers: authHeaders() })),
-  partnerWallet: async (partnerId) => unwrap(await axios.get(`${BASE}/partners/${encodeURIComponent(partnerId)}/wallet`, { headers: authHeaders() })),
+    apiRequest(`/partners/jobs/${encodeURIComponent(orderId)}/update`, {
+      method: "POST",
+      body: { status, note },
+      fallbackError: "Unable to update delivery stage.",
+    }),
+  partnerWallet: async (partnerId) =>
+    apiRequest(`/partners/${encodeURIComponent(partnerId)}/wallet`, { fallbackError: "Unable to load partner wallet." }),
   partnerPayout: async (partnerId, amount) =>
-    unwrap(await axios.post(`${BASE}/partners/${encodeURIComponent(partnerId)}/payouts/request`, { amount }, { headers: authHeaders() })),
-  adminPendingShops: async () => unwrap(await axios.get(`${BASE}/admin/pending-shops`, { headers: authHeaders() })),
-  adminPendingPartners: async () => unwrap(await axios.get(`${BASE}/admin/pending-partners`, { headers: authHeaders() })),
+    apiRequest(`/partners/${encodeURIComponent(partnerId)}/payouts/request`, {
+      method: "POST",
+      body: { amount },
+      fallbackError: "Unable to request payout.",
+    }),
+
+  adminPendingShops: async (params = {}) => apiRequest("/admin/pending-shops", { params, fallbackError: "Unable to load pending shops." }),
+  adminPendingPartners: async (params = {}) =>
+    apiRequest("/admin/pending-partners", { params, fallbackError: "Unable to load pending partners." }),
   adminShopApproval: async (shopId, status) =>
-    unwrap(await axios.patch(`${BASE}/admin/shops/${encodeURIComponent(shopId)}/approval`, { status }, { headers: authHeaders() })),
+    apiRequest(`/admin/shops/${encodeURIComponent(shopId)}/approval`, {
+      method: "PATCH",
+      body: { status },
+      fallbackError: "Unable to update shop approval.",
+    }),
   adminPartnerApproval: async (partnerId, status) =>
-    unwrap(await axios.patch(`${BASE}/admin/partners/${encodeURIComponent(partnerId)}/approval`, { status }, { headers: authHeaders() })),
-  adminConfig: async (payload) => unwrap(await axios.patch(`${BASE}/admin/config`, payload, { headers: authHeaders() })),
-  adminAnalytics: async () => unwrap(await axios.get(`${BASE}/admin/analytics`, { headers: authHeaders() })),
-  adminRefunds: async () => unwrap(await axios.get(`${BASE}/admin/refunds`, { headers: authHeaders() })),
-  adminComplaints: async () => unwrap(await axios.get(`${BASE}/admin/complaints`, { headers: authHeaders() })),
-  getOverview360: async () => unwrap(await axios.get(`${BASE}/overview360`, { headers: authHeaders() })),
+    apiRequest(`/admin/partners/${encodeURIComponent(partnerId)}/approval`, {
+      method: "PATCH",
+      body: { status },
+      fallbackError: "Unable to update partner approval.",
+    }),
+  adminConfig: async (payload) => apiRequest("/admin/config", { method: "PATCH", body: payload, fallbackError: "Unable to update admin config." }),
+  adminAnalytics: async () => apiRequest("/admin/analytics", { fallbackError: "Unable to load admin analytics." }),
+  adminRefunds: async (params = {}) => apiRequest("/admin/refunds", { params, fallbackError: "Unable to load refunds." }),
+  adminComplaints: async (params = {}) => apiRequest("/admin/complaints", { params, fallbackError: "Unable to load complaints." }),
+  adminAuditLogs: async (params = {}) => apiRequest("/admin/audit-logs", { params, fallbackError: "Unable to load audit logs." }),
+  getOverview360: async () => apiRequest("/overview360", { fallbackError: "Unable to load Hyperlocal 360 data." }),
   resolveComplaint: async (complaintId, resolutionNote) =>
-    unwrap(await axios.patch(`${BASE}/admin/complaints/${encodeURIComponent(complaintId)}/resolve`, { resolutionNote }, { headers: authHeaders() })),
+    apiRequest(`/admin/complaints/${encodeURIComponent(complaintId)}/resolve`, {
+      method: "PATCH",
+      body: { resolutionNote },
+      fallbackError: "Unable to resolve complaint.",
+    }),
   reviewRefund: async (refundId, status) =>
-    unwrap(await axios.patch(`${BASE}/admin/refunds/${encodeURIComponent(refundId)}/review`, { status }, { headers: authHeaders() })),
-  adminSettlementReport: async () => unwrap(await axios.get(`${BASE}/admin/settlement-reports`, { headers: authHeaders() })),
-  wallet: async () => unwrap(await axios.get(`${BASE}/wallet/me`, { headers: authHeaders() })),
-  walletTopup: async (amount) =>
-    unwrap(await axios.post(`${BASE}/wallet/topup`, { amount }, { headers: authHeaders() })),
-  subscriptionPlans: async () => unwrap(await axios.get(`${BASE}/subscriptions/plans`, { headers: authHeaders() })),
-  subscribe: async (payload) => unwrap(await axios.post(`${BASE}/subscriptions/subscribe`, payload, { headers: authHeaders() })),
-  subscriptions: async () => unwrap(await axios.get(`${BASE}/subscriptions/me`, { headers: authHeaders() })),
-  createAd: async (payload) => unwrap(await axios.post(`${BASE}/ads`, payload, { headers: authHeaders() })),
-  ads: async (shopId = "") => unwrap(await axios.get(`${BASE}/ads`, { params: { shopId }, headers: authHeaders() })),
+    apiRequest(`/admin/refunds/${encodeURIComponent(refundId)}/review`, {
+      method: "PATCH",
+      body: { status },
+      fallbackError: "Unable to review refund.",
+    }),
+  adminSettlementReport: async () => apiRequest("/admin/settlement-reports", { fallbackError: "Unable to load settlement report." }),
+
+  wallet: async () => apiRequest("/wallet/me", { fallbackError: "Unable to load wallet." }),
+  walletTopup: async (payloadOrAmount) => {
+    const payload =
+      typeof payloadOrAmount === "object" && payloadOrAmount !== null
+        ? payloadOrAmount
+        : { amount: Number(payloadOrAmount || 0) };
+    return apiRequest("/wallet/topup", { method: "POST", body: payload, fallbackError: "Unable to top up wallet." });
+  },
+  subscriptionPlans: async () => apiRequest("/subscriptions/plans", { fallbackError: "Unable to load plans." }),
+  subscribe: async (payload) => apiRequest("/subscriptions/subscribe", { method: "POST", body: payload, fallbackError: "Unable to subscribe." }),
+  subscriptions: async () => apiRequest("/subscriptions/me", { fallbackError: "Unable to load subscriptions." }),
+  createAd: async (payload) => apiRequest("/ads", { method: "POST", body: payload, fallbackError: "Unable to create ad." }),
+  ads: async (params = {}) => apiRequest("/ads", { params, fallbackError: "Unable to load ads." }),
 };

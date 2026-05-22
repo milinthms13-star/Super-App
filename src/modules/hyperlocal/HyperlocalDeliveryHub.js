@@ -1,8 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { hyperlocalApi } from "./hyperlocalApi";
 import "./HyperlocalDeliveryHub.css";
+import HyperlocalEmptyState from "./components/HyperlocalEmptyState";
+import HyperlocalMetricCard from "./components/HyperlocalMetricCard";
+import HyperlocalStatusBadge from "./components/HyperlocalStatusBadge";
+import { hyperlocalStorage } from "./utils/hyperlocalStorage";
+import { hyperlocalActionQueue } from "./utils/hyperlocalActionQueue";
 
-const TABS = [
+const BASE_TABS = [
   { id: "user", label: "User Order Flow" },
   { id: "vendor", label: "Vendor Dashboard" },
   { id: "partner", label: "Partner Dashboard" },
@@ -71,12 +76,13 @@ const DEFAULT_ADMIN_CONFIG = {
 };
 
 const mapLink = (lat, lng) => `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=15/${lat}/${lng}`;
+const PAGE_SIZE = 20;
 
 const getUserProfile = () => {
   const keys = ["user", "authUser", "profile"];
   for (const key of keys) {
     try {
-      const raw = localStorage.getItem(key);
+      const raw = hyperlocalStorage.getItem(key);
       if (!raw) continue;
       const parsed = JSON.parse(raw);
       if (parsed && (parsed.email || parsed.phone || parsed.fullName || parsed.name)) {
@@ -94,6 +100,10 @@ const HyperlocalDeliveryHub = () => {
   const currentEmail = String(profile.email || "").trim().toLowerCase();
   const currentPhone = String(profile.phone || "").trim();
   const currentName = String(profile.fullName || profile.name || "").trim();
+  const role = String(profile.role || profile.registrationType || "").trim().toLowerCase();
+  const isAdmin = role === "admin";
+  const isVendor = isAdmin || ["vendor", "seller", "business", "shopowner", "shop_owner"].includes(role);
+  const isPartner = isAdmin || ["partner", "deliverypartner", "delivery_partner", "rider"].includes(role);
 
   const [activeTab, setActiveTab] = useState("user");
   const [categories, setCategories] = useState([]);
@@ -105,6 +115,8 @@ const HyperlocalDeliveryHub = () => {
   const [cart, setCart] = useState([]);
   const [couponCode, setCouponCode] = useState("");
   const [deliveryType, setDeliveryType] = useState("instant");
+  const [deliveryWindowStart, setDeliveryWindowStart] = useState("");
+  const [deliveryWindowEnd, setDeliveryWindowEnd] = useState("");
   const [paymentMode, setPaymentMode] = useState("UPI");
   const [multiShopMode, setMultiShopMode] = useState(false);
   const [emergencyMedicine, setEmergencyMedicine] = useState(false);
@@ -147,12 +159,34 @@ const HyperlocalDeliveryHub = () => {
   const [plans, setPlans] = useState([]);
   const [subs, setSubs] = useState([]);
   const [adForm, setAdForm] = useState({ shopId: "", title: "", description: "", budget: "" });
+  const [adFilterShopId, setAdFilterShopId] = useState("");
   const [ads, setAds] = useState([]);
 
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [overviewData, setOverviewData] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
+  const [queueProcessing, setQueueProcessing] = useState(false);
+  const [queuedActionCount, setQueuedActionCount] = useState(0);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditFilter, setAuditFilter] = useState("");
+  const [shopPagination, setShopPagination] = useState({ page: 1, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false });
+  const [orderPagination, setOrderPagination] = useState({ page: 1, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false });
+  const [adPagination, setAdPagination] = useState({ page: 1, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false });
+  const [adminPages, setAdminPages] = useState({
+    pendingShops: 1,
+    pendingPartners: 1,
+    refunds: 1,
+    complaints: 1,
+    auditLogs: 1,
+  });
+  const [adminPagination, setAdminPagination] = useState({
+    pendingShops: { page: 1, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false },
+    pendingPartners: { page: 1, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false },
+    refunds: { page: 1, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false },
+    complaints: { page: 1, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false },
+    auditLogs: { page: 1, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false },
+  });
   const [loading, setLoading] = useState({
     bootstrap: false,
     shops: false,
@@ -160,6 +194,17 @@ const HyperlocalDeliveryHub = () => {
     checkout: false,
     orders: false,
   });
+
+  const visibleTabs = useMemo(
+    () =>
+      BASE_TABS.filter((tab) => {
+        if (tab.id === "admin") return isAdmin;
+        if (tab.id === "vendor") return isVendor;
+        if (tab.id === "partner") return isPartner;
+        return true;
+      }),
+    [isAdmin, isPartner, isVendor]
+  );
 
   const showStatus = (message) => {
     setStatusMessage(message);
@@ -173,21 +218,58 @@ const HyperlocalDeliveryHub = () => {
   };
 
   const setLoadingFlag = (key, value) => setLoading((current) => ({ ...current, [key]: value }));
+  const syncQueuedActionCount = () => setQueuedActionCount(hyperlocalActionQueue.getAll().length);
+
+  const updateAdminPage = (key, page) => {
+    setAdminPages((current) => ({ ...current, [key]: Math.max(1, page) }));
+  };
 
   const filteredShops = useMemo(
-    () =>
-      shops.filter((shop) => {
-        const byCategory = category === "All" || shop.category === category;
-        const bySearch = `${shop.name} ${shop.category} ${shop.description}`.toLowerCase().includes(search.toLowerCase());
-        return byCategory && bySearch;
-      }),
-    [shops, search, category]
+    () => shops,
+    [shops]
   );
 
   const cartSubtotal = useMemo(
     () => cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.qty || 0), 0),
     [cart]
   );
+
+  const orderIdempotencyKey = useMemo(() => {
+    const basis = JSON.stringify({
+      email: currentEmail,
+      deliveryType,
+      deliveryWindowStart,
+      deliveryWindowEnd,
+      paymentMode,
+      couponCode,
+      multiShopMode,
+      emergencyMedicine,
+      address: {
+        line1: addressForm.line1,
+        pincode: addressForm.pincode,
+        phone: addressForm.phone,
+      },
+      items: cart.map((entry) => ({ shopId: entry.shopId, productId: entry.productId, qty: entry.qty })),
+    });
+    let hash = 0;
+    for (let i = 0; i < basis.length; i += 1) {
+      hash = (hash * 31 + basis.charCodeAt(i)) >>> 0;
+    }
+    return `HL-ORD-${hash.toString(16).toUpperCase()}`;
+  }, [
+    addressForm.line1,
+    addressForm.phone,
+    addressForm.pincode,
+    cart,
+    couponCode,
+    currentEmail,
+    deliveryType,
+    deliveryWindowEnd,
+    deliveryWindowStart,
+    emergencyMedicine,
+    multiShopMode,
+    paymentMode,
+  ]);
 
   const canCheckout = cart.length > 0 && addressForm.line1.trim() && addressForm.pincode.trim() && addressForm.phone.trim();
 
@@ -205,7 +287,7 @@ const HyperlocalDeliveryHub = () => {
     }
   };
 
-  const loadShops = async (withLocation = location) => {
+  const loadShops = async (withLocation = location, page = shopPagination.page) => {
     setLoadingFlag("shops", true);
     try {
       const response = await hyperlocalApi.getShops({
@@ -213,8 +295,11 @@ const HyperlocalDeliveryHub = () => {
         search,
         lat: withLocation.lat || undefined,
         lng: withLocation.lng || undefined,
+        page,
+        limit: PAGE_SIZE,
       });
       setShops(response?.data?.shops || []);
+      setShopPagination(response?.data?.pagination || { page, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false });
     } catch (error) {
       showError(error?.response?.data?.message || "Unable to fetch nearby shops.");
       setShops([]);
@@ -224,7 +309,6 @@ const HyperlocalDeliveryHub = () => {
   };
 
   const loadAddresses = async () => {
-    if (!currentEmail) return;
     try {
       const response = await hyperlocalApi.getAddresses();
       const list = response?.data?.addresses || [];
@@ -249,12 +333,12 @@ const HyperlocalDeliveryHub = () => {
     }
   };
 
-  const loadOrders = async () => {
-    if (!currentEmail) return;
+  const loadOrders = async (page = orderPagination.page) => {
     setLoadingFlag("orders", true);
     try {
-      const response = await hyperlocalApi.getOrders();
+      const response = await hyperlocalApi.getOrders({ page, limit: PAGE_SIZE });
       setOrders(response?.data?.orders || []);
+      setOrderPagination(response?.data?.pagination || { page, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false });
     } catch (error) {
       showError(error?.response?.data?.message || "Unable to fetch order history.");
     } finally {
@@ -264,14 +348,16 @@ const HyperlocalDeliveryHub = () => {
 
   useEffect(() => {
     loadBootstrap();
-    loadShops();
+    loadShops(location, 1);
     loadAddresses();
-    loadOrders();
+    loadOrders(1);
+    syncQueuedActionCount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    loadShops();
+    setShopPagination((current) => ({ ...current, page: 1 }));
+    loadShops(location, 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, search]);
 
@@ -311,6 +397,10 @@ const HyperlocalDeliveryHub = () => {
       showError("Address, phone, and cart items are required to calculate quote.");
       return;
     }
+    if (deliveryType === "scheduled" && (!deliveryWindowStart || !deliveryWindowEnd)) {
+      showError("Select both scheduled delivery window start and end times.");
+      return;
+    }
     setLoadingFlag("quote", true);
     try {
       const response = await hyperlocalApi.getQuote({
@@ -321,6 +411,8 @@ const HyperlocalDeliveryHub = () => {
         couponCode,
         multiShopMode,
         emergencyMedicine,
+        deliveryWindowStart: deliveryType === "scheduled" ? deliveryWindowStart : "",
+        deliveryWindowEnd: deliveryType === "scheduled" ? deliveryWindowEnd : "",
         prescriptionAttached: Boolean(prescriptionFile),
         address: {
           ...addressForm,
@@ -344,28 +436,43 @@ const HyperlocalDeliveryHub = () => {
       showError("Please complete address and cart details.");
       return;
     }
+    if (deliveryType === "scheduled" && (!deliveryWindowStart || !deliveryWindowEnd)) {
+      showError("Select both scheduled delivery window start and end times.");
+      return;
+    }
+    const orderPayload = {
+      userEmail: currentEmail || "guest@nilahub.local",
+      userPhone: addressForm.phone,
+      deliveryType,
+      paymentMode,
+      couponCode,
+      multiShopMode,
+      emergencyMedicine,
+      deliveryWindowStart: deliveryType === "scheduled" ? deliveryWindowStart : "",
+      deliveryWindowEnd: deliveryType === "scheduled" ? deliveryWindowEnd : "",
+      items: cart.map((entry) => ({ shopId: entry.shopId, productId: entry.productId, qty: entry.qty })),
+      address: {
+        ...addressForm,
+        lat: Number(addressForm.lat || location.lat || 0),
+        lng: Number(addressForm.lng || location.lng || 0),
+      },
+      idempotencyKey: orderIdempotencyKey,
+    };
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      if (prescriptionFile) {
+        showError("Prescription orders require online upload. Please reconnect and retry.");
+        return;
+      }
+      queueAction({ type: "place_order", payload: orderPayload });
+      return;
+    }
+
     setLoadingFlag("checkout", true);
     try {
-      const formData = new FormData();
-      formData.append("userEmail", currentEmail || "guest@nilahub.local");
-      formData.append("userPhone", addressForm.phone);
-      formData.append("deliveryType", deliveryType);
-      formData.append("paymentMode", paymentMode);
-      formData.append("couponCode", couponCode);
-      formData.append("multiShopMode", String(multiShopMode));
-      formData.append("emergencyMedicine", String(emergencyMedicine));
-      formData.append("items", JSON.stringify(cart.map((entry) => ({ shopId: entry.shopId, productId: entry.productId, qty: entry.qty }))));
-      formData.append(
-        "address",
-        JSON.stringify({
-          ...addressForm,
-          lat: Number(addressForm.lat || location.lat || 0),
-          lng: Number(addressForm.lng || location.lng || 0),
-        })
-      );
+      const formData = buildOrderFormData(orderPayload);
       if (prescriptionFile) formData.append("prescription", prescriptionFile);
 
-      const response = await hyperlocalApi.placeOrder(formData);
+      const response = await hyperlocalApi.placeOrder(formData, { idempotencyKey: orderIdempotencyKey });
       showStatus(response?.message || "Order placed.");
       setCart([]);
       setQuote(null);
@@ -401,8 +508,9 @@ const HyperlocalDeliveryHub = () => {
           label: "Live location detected",
         };
         setLocation(next);
+        setShopPagination((current) => ({ ...current, page: 1 }));
         setAddressForm((current) => ({ ...current, lat: next.lat, lng: next.lng }));
-        loadShops(next);
+        loadShops(next, 1);
         showStatus("Live location updated for distance-based shop results.");
       },
       () => showError("Unable to fetch live location.")
@@ -593,8 +701,17 @@ const HyperlocalDeliveryHub = () => {
 
   const requestPayout = async () => {
     if (!partnerId) return showError("Set partnerId first.");
+    const amount = Number(payoutAmount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showError("Enter a valid payout amount.");
+      return;
+    }
+    if (amount > Number(partnerWallet?.walletBalance || 0)) {
+      showError("Requested amount exceeds available partner wallet balance.");
+      return;
+    }
     try {
-      await hyperlocalApi.partnerPayout(partnerId, Number(payoutAmount || 0));
+      await hyperlocalApi.partnerPayout(partnerId, amount);
       setPayoutAmount("");
       showStatus("Payout request created.");
       await loadPartnerData();
@@ -603,15 +720,16 @@ const HyperlocalDeliveryHub = () => {
     }
   };
 
-  const loadAdminData = async () => {
+  const loadAdminData = async (pageState = adminPages) => {
     try {
-      const [shopsRes, partnersRes, analyticsRes, refundsRes, complaintsRes, settlementRes] = await Promise.all([
-        hyperlocalApi.adminPendingShops(),
-        hyperlocalApi.adminPendingPartners(),
+      const [shopsRes, partnersRes, analyticsRes, refundsRes, complaintsRes, settlementRes, auditRes] = await Promise.all([
+        hyperlocalApi.adminPendingShops({ page: pageState.pendingShops, limit: PAGE_SIZE }),
+        hyperlocalApi.adminPendingPartners({ page: pageState.pendingPartners, limit: PAGE_SIZE }),
         hyperlocalApi.adminAnalytics(),
-        hyperlocalApi.adminRefunds(),
-        hyperlocalApi.adminComplaints(),
+        hyperlocalApi.adminRefunds({ page: pageState.refunds, limit: PAGE_SIZE }),
+        hyperlocalApi.adminComplaints({ page: pageState.complaints, limit: PAGE_SIZE }),
         hyperlocalApi.adminSettlementReport(),
+        hyperlocalApi.adminAuditLogs({ page: pageState.auditLogs, limit: PAGE_SIZE, action: auditFilter || undefined }),
       ]);
       setPendingShops(shopsRes?.data?.shops || []);
       setPendingPartners(partnersRes?.data?.partners || []);
@@ -619,6 +737,14 @@ const HyperlocalDeliveryHub = () => {
       setRefunds(refundsRes?.data?.refunds || []);
       setComplaints(complaintsRes?.data?.complaints || []);
       setSettlementReport(settlementRes?.data || null);
+      setAuditLogs(auditRes?.data?.auditLogs || []);
+      setAdminPagination({
+        pendingShops: shopsRes?.data?.pagination || { page: pageState.pendingShops, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false },
+        pendingPartners: partnersRes?.data?.pagination || { page: pageState.pendingPartners, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false },
+        refunds: refundsRes?.data?.pagination || { page: pageState.refunds, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false },
+        complaints: complaintsRes?.data?.pagination || { page: pageState.complaints, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false },
+        auditLogs: auditRes?.data?.pagination || { page: pageState.auditLogs, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false },
+      });
     } catch (error) {
       showError(error?.response?.data?.message || "Unable to load admin data.");
     }
@@ -635,21 +761,191 @@ const HyperlocalDeliveryHub = () => {
     }
   };
 
-  const loadGrowthData = async () => {
-    if (!currentEmail) return;
+  const loadGrowthData = async (page = adPagination.page) => {
     try {
       const [walletRes, plansRes, subsRes, adsRes] = await Promise.all([
         hyperlocalApi.wallet(),
         hyperlocalApi.subscriptionPlans(),
         hyperlocalApi.subscriptions(),
-        hyperlocalApi.ads(adForm.shopId || ""),
+        hyperlocalApi.ads({ shopId: adFilterShopId || "", page, limit: PAGE_SIZE }),
       ]);
       setWallet(walletRes?.data?.wallet || null);
       setPlans(plansRes?.data?.plans || []);
       setSubs(subsRes?.data?.subscriptions || []);
       setAds(adsRes?.data?.ads || []);
+      setAdPagination(adsRes?.data?.pagination || { page, limit: PAGE_SIZE, totalPages: 0, hasNext: false, hasPrev: false });
     } catch (error) {
       showError(error?.response?.data?.message || "Unable to load growth features.");
+    }
+  };
+
+  const buildOrderFormData = (payload) => {
+    const formData = new FormData();
+    formData.append("userEmail", payload.userEmail);
+    formData.append("userPhone", payload.userPhone);
+    formData.append("deliveryType", payload.deliveryType);
+    formData.append("paymentMode", payload.paymentMode);
+    formData.append("couponCode", payload.couponCode || "");
+    formData.append("multiShopMode", String(Boolean(payload.multiShopMode)));
+    formData.append("emergencyMedicine", String(Boolean(payload.emergencyMedicine)));
+    formData.append("deliveryWindowStart", payload.deliveryWindowStart || "");
+    formData.append("deliveryWindowEnd", payload.deliveryWindowEnd || "");
+    formData.append("items", JSON.stringify(payload.items || []));
+    formData.append("address", JSON.stringify(payload.address || {}));
+    return formData;
+  };
+
+  const executeQueuedAction = async (action) => {
+    const type = String(action?.type || "");
+    const payload = action?.payload || {};
+    if (!type) return;
+
+    if (type === "place_order") {
+      const formData = buildOrderFormData(payload);
+      await hyperlocalApi.placeOrder(formData, { idempotencyKey: payload.idempotencyKey });
+      await loadOrders(1);
+      return;
+    }
+    if (type === "cancel_order") {
+      await hyperlocalApi.cancelOrder(payload.orderId, payload.reason || "Cancelled by user");
+      await loadOrders(orderPagination.page);
+      return;
+    }
+    if (type === "request_refund") {
+      await hyperlocalApi.requestRefund(payload.orderId, payload.reason || "Need refund review");
+      await loadOrders(orderPagination.page);
+      return;
+    }
+    if (type === "create_complaint") {
+      await hyperlocalApi.createComplaint(payload.orderId, payload.issue || "Delivery issue");
+      return;
+    }
+    if (type === "wallet_topup") {
+      await hyperlocalApi.walletTopup(payload);
+      await loadGrowthData(adPagination.page);
+      return;
+    }
+    if (type === "subscribe_plan") {
+      await hyperlocalApi.subscribe({ planCode: payload.planCode });
+      await loadGrowthData(adPagination.page);
+      return;
+    }
+    if (type === "create_ad") {
+      await hyperlocalApi.createAd(payload);
+      await loadGrowthData(adPagination.page);
+    }
+  };
+
+  const processQueuedActions = async () => {
+    if (queueProcessing) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+
+    const queue = hyperlocalActionQueue.getAll();
+    if (!queue.length) {
+      syncQueuedActionCount();
+      return;
+    }
+
+    setQueueProcessing(true);
+    const pending = [...queue];
+    const failed = [];
+    for (const action of pending) {
+      try {
+        await executeQueuedAction(action);
+      } catch (_error) {
+        failed.push(action);
+      }
+    }
+    hyperlocalActionQueue.replace(failed);
+    syncQueuedActionCount();
+    if (!failed.length) showStatus("Queued offline actions synced.");
+    setQueueProcessing(false);
+  };
+
+  const queueAction = (action) => {
+    hyperlocalActionQueue.push(action);
+    syncQueuedActionCount();
+    showStatus("Action queued offline. It will auto-sync once connection is restored.");
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      queueAction({ type: "cancel_order", payload: { orderId, reason: "Cancelled by user" } });
+      return;
+    }
+    try {
+      await hyperlocalApi.cancelOrder(orderId, "Cancelled by user");
+      showStatus("Order cancelled.");
+      await loadOrders(orderPagination.page);
+    } catch (error) {
+      showError(error?.response?.data?.message || "Unable to cancel order.");
+    }
+  };
+
+  const handleRequestRefund = async (orderId) => {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      queueAction({ type: "request_refund", payload: { orderId, reason: "Need refund review" } });
+      return;
+    }
+    try {
+      await hyperlocalApi.requestRefund(orderId, "Need refund review");
+      showStatus("Refund request submitted.");
+      await loadOrders(orderPagination.page);
+    } catch (error) {
+      showError(error?.response?.data?.message || "Unable to request refund.");
+    }
+  };
+
+  const handleCreateComplaint = async (orderId) => {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      queueAction({ type: "create_complaint", payload: { orderId, issue: "Delivery issue" } });
+      return;
+    }
+    try {
+      await hyperlocalApi.createComplaint(orderId, "Delivery issue");
+      showStatus("Complaint submitted.");
+    } catch (error) {
+      showError(error?.response?.data?.message || "Unable to submit complaint.");
+    }
+  };
+
+  const handleAdminShopApproval = async (shopId, status) => {
+    try {
+      await hyperlocalApi.adminShopApproval(shopId, status);
+      showStatus(`Shop ${status}.`);
+      await loadAdminData();
+    } catch (error) {
+      showError(error?.response?.data?.message || "Unable to update shop approval.");
+    }
+  };
+
+  const handleAdminPartnerApproval = async (partnerIdValue, status) => {
+    try {
+      await hyperlocalApi.adminPartnerApproval(partnerIdValue, status);
+      showStatus(`Partner ${status}.`);
+      await loadAdminData();
+    } catch (error) {
+      showError(error?.response?.data?.message || "Unable to update partner approval.");
+    }
+  };
+
+  const handleRefundReview = async (refundId, status) => {
+    try {
+      await hyperlocalApi.reviewRefund(refundId, status);
+      showStatus(`Refund ${status}.`);
+      await loadAdminData();
+    } catch (error) {
+      showError(error?.response?.data?.message || "Unable to review refund.");
+    }
+  };
+
+  const handleResolveComplaint = async (complaintId) => {
+    try {
+      await hyperlocalApi.resolveComplaint(complaintId, "Resolved by support team");
+      showStatus("Complaint resolved.");
+      await loadAdminData();
+    } catch (error) {
+      showError(error?.response?.data?.message || "Unable to resolve complaint.");
     }
   };
 
@@ -669,11 +965,60 @@ const HyperlocalDeliveryHub = () => {
   useEffect(() => {
     if (activeTab === "vendor") loadVendorData();
     if (activeTab === "partner") loadPartnerData();
-    if (activeTab === "admin") loadAdminData();
+    if (activeTab === "admin") loadAdminData(adminPages);
     if (activeTab === "overview360") loadOverview360();
-    if (activeTab === "growth") loadGrowthData();
+    if (activeTab === "growth") loadGrowthData(adPagination.page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "admin") return;
+    loadAdminData(adminPages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminPages, auditFilter]);
+
+  useEffect(() => {
+    if (activeTab !== "growth") return;
+    loadGrowthData(1);
+    setAdPagination((current) => ({ ...current, page: 1 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adFilterShopId]);
+
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab("user");
+    }
+  }, [activeTab, visibleTabs]);
+
+  useEffect(() => {
+    const onOnline = () => {
+      processQueuedActions();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("online", onOnline);
+    }
+    processQueuedActions();
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", onOnline);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const autoRefreshTabs = new Set(["partner", "admin", "overview360"]);
+    if (!autoRefreshTabs.has(activeTab)) return undefined;
+
+    const timer = window.setInterval(() => {
+      if (activeTab === "partner") loadPartnerData();
+      if (activeTab === "admin") loadAdminData(adminPages);
+      if (activeTab === "overview360") loadOverview360();
+    }, 30000);
+
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, adminPages, auditFilter]);
 
   return (
     <div className="hyperlocal-page">
@@ -691,7 +1036,7 @@ const HyperlocalDeliveryHub = () => {
           </button>
           <span className="hyperlocal-chip">{location.label}</span>
           <div className="hyperlocal-chip-row">
-            {TABS.map((tab) => (
+            {visibleTabs.map((tab) => (
               <button key={tab.id} type="button" className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)}>
                 {tab.label}
               </button>
@@ -702,6 +1047,18 @@ const HyperlocalDeliveryHub = () => {
 
       {statusMessage ? <p className="hyperlocal-status">{statusMessage}</p> : null}
       {errorMessage ? <p className="hyperlocal-error">{errorMessage}</p> : null}
+      {queuedActionCount > 0 ? (
+        <div className="hyperlocal-summary-card">
+          <p>
+            Offline queue: {queuedActionCount} pending action{queuedActionCount > 1 ? "s" : ""}.
+          </p>
+          <div className="hyperlocal-inline-actions">
+            <button type="button" disabled={queueProcessing} onClick={processQueuedActions}>
+              {queueProcessing ? "Syncing..." : "Sync queued actions"}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {activeTab === "user" && (
         <>
@@ -733,7 +1090,7 @@ const HyperlocalDeliveryHub = () => {
                 <div className="hyperlocal-skeleton-card" />
               </div>
             ) : filteredShops.length === 0 ? (
-              <div className="hyperlocal-empty-card">No shops found for this filter. Try another category or search.</div>
+              <HyperlocalEmptyState title="No shops found for this filter." subtitle="Try another category or search." />
             ) : (
               <div className="hyperlocal-card-grid">
                 {filteredShops.map((shop) => (
@@ -755,6 +1112,35 @@ const HyperlocalDeliveryHub = () => {
                 ))}
               </div>
             )}
+            <div className="hyperlocal-inline-actions">
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!shopPagination.hasPrev}
+                onClick={() => {
+                  const nextPage = Math.max(1, Number(shopPagination.page || 1) - 1);
+                  setShopPagination((current) => ({ ...current, page: nextPage }));
+                  loadShops(location, nextPage);
+                }}
+              >
+                Prev shops
+              </button>
+              <span className="hyperlocal-muted">
+                Page {shopPagination.page || 1} / {shopPagination.totalPages || 1}
+              </span>
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!shopPagination.hasNext}
+                onClick={() => {
+                  const nextPage = Number(shopPagination.page || 1) + 1;
+                  setShopPagination((current) => ({ ...current, page: nextPage }));
+                  loadShops(location, nextPage);
+                }}
+              >
+                Next shops
+              </button>
+            </div>
           </section>
 
           <section className="hyperlocal-dual-grid">
@@ -776,7 +1162,7 @@ const HyperlocalDeliveryHub = () => {
                   </ul>
                 </>
               ) : (
-                <div className="hyperlocal-empty-card">Select a shop to view and add products.</div>
+                <HyperlocalEmptyState title="Select a shop to view and add products." compact />
               )}
 
               <div className="hyperlocal-form">
@@ -787,6 +1173,26 @@ const HyperlocalDeliveryHub = () => {
                     <option value="scheduled">scheduled</option>
                   </select>
                 </label>
+                {deliveryType === "scheduled" ? (
+                  <>
+                    <label>
+                      Delivery window start
+                      <input
+                        type="datetime-local"
+                        value={deliveryWindowStart}
+                        onChange={(event) => setDeliveryWindowStart(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Delivery window end
+                      <input
+                        type="datetime-local"
+                        value={deliveryWindowEnd}
+                        onChange={(event) => setDeliveryWindowEnd(event.target.value)}
+                      />
+                    </label>
+                  </>
+                ) : null}
                 <label>
                   Payment mode
                   <select value={paymentMode} onChange={(event) => setPaymentMode(event.target.value)}>
@@ -879,7 +1285,7 @@ const HyperlocalDeliveryHub = () => {
 
               <h3>Cart</h3>
               {cart.length === 0 ? (
-                <div className="hyperlocal-empty-card">Cart is empty. Add products to continue.</div>
+                <HyperlocalEmptyState title="Cart is empty." subtitle="Add products to continue." compact />
               ) : (
                 <ul className="hyperlocal-list">
                   {cart.map((item) => (
@@ -930,7 +1336,7 @@ const HyperlocalDeliveryHub = () => {
               {loading.orders ? (
                 <div className="hyperlocal-skeleton-card" />
               ) : orders.length === 0 ? (
-                <div className="hyperlocal-empty-card">No orders yet. Place your first hyperlocal order.</div>
+                <HyperlocalEmptyState title="No orders yet." subtitle="Place your first hyperlocal order." compact />
               ) : (
                 <ul className="hyperlocal-list">
                   {orders.map((order) => (
@@ -941,14 +1347,14 @@ const HyperlocalDeliveryHub = () => {
                           Track
                         </button>
                         {order.status !== "Delivered" && order.status !== "Cancelled/Refunded" ? (
-                          <button type="button" onClick={() => hyperlocalApi.cancelOrder(order.orderId, "Cancelled by user").then(loadOrders)}>
+                          <button type="button" onClick={() => handleCancelOrder(order.orderId)}>
                             Cancel
                           </button>
                         ) : null}
-                        <button type="button" onClick={() => hyperlocalApi.requestRefund(order.orderId, "Need refund review").then(loadOrders)}>
+                        <button type="button" onClick={() => handleRequestRefund(order.orderId)}>
                           Refund
                         </button>
-                        <button type="button" onClick={() => hyperlocalApi.createComplaint(order.orderId, "Delivery issue").then(() => showStatus("Complaint submitted."))}>
+                        <button type="button" onClick={() => handleCreateComplaint(order.orderId)}>
                           Complaint
                         </button>
                         <a
@@ -964,12 +1370,41 @@ const HyperlocalDeliveryHub = () => {
                   ))}
                 </ul>
               )}
+              <div className="hyperlocal-inline-actions">
+                <button
+                  type="button"
+                  className="hyperlocal-secondary-btn"
+                  disabled={!orderPagination.hasPrev}
+                  onClick={() => {
+                    const nextPage = Math.max(1, Number(orderPagination.page || 1) - 1);
+                    setOrderPagination((current) => ({ ...current, page: nextPage }));
+                    loadOrders(nextPage);
+                  }}
+                >
+                  Prev orders
+                </button>
+                <span className="hyperlocal-muted">
+                  Page {orderPagination.page || 1} / {orderPagination.totalPages || 1}
+                </span>
+                <button
+                  type="button"
+                  className="hyperlocal-secondary-btn"
+                  disabled={!orderPagination.hasNext}
+                  onClick={() => {
+                    const nextPage = Number(orderPagination.page || 1) + 1;
+                    setOrderPagination((current) => ({ ...current, page: nextPage }));
+                    loadOrders(nextPage);
+                  }}
+                >
+                  Next orders
+                </button>
+              </div>
             </article>
 
             <article className="hyperlocal-panel">
               <h2>Timeline</h2>
               {!tracking ? (
-                <div className="hyperlocal-empty-card">Track an order to view full status timeline.</div>
+                <HyperlocalEmptyState title="Track an order to view full status timeline." compact />
               ) : (
                 <ul className="hyperlocal-list">
                   {(tracking.timeline || []).map((entry, idx) => (
@@ -1009,7 +1444,7 @@ const HyperlocalDeliveryHub = () => {
               Refresh vendor data
             </button>
             {vendorShops.length === 0 ? (
-              <div className="hyperlocal-empty-card">No vendor shops yet.</div>
+              <HyperlocalEmptyState title="No vendor shops yet." compact />
             ) : (
               <ul className="hyperlocal-list">
                 {vendorShops.map((shop) => (
@@ -1107,7 +1542,7 @@ const HyperlocalDeliveryHub = () => {
                 <p>Net settlement: INR {vendorSettlement.netSettlement}</p>
               </div>
             ) : (
-              <div className="hyperlocal-empty-card">Settlement history will appear here.</div>
+              <HyperlocalEmptyState title="Settlement history will appear here." compact />
             )}
 
             {vendorAnalytics ? (
@@ -1120,7 +1555,7 @@ const HyperlocalDeliveryHub = () => {
             ) : null}
 
             {vendorOrders.length === 0 ? (
-              <div className="hyperlocal-empty-card">No vendor orders yet.</div>
+              <HyperlocalEmptyState title="No vendor orders yet." compact />
             ) : (
               <ul className="hyperlocal-list">
                 {vendorOrders.map((order) => (
@@ -1180,7 +1615,7 @@ const HyperlocalDeliveryHub = () => {
           <article className="hyperlocal-panel">
             <h2>Delivery Jobs + Navigation + Wallet</h2>
             {partnerJobs.length === 0 ? (
-              <div className="hyperlocal-empty-card">No delivery jobs available now.</div>
+              <HyperlocalEmptyState title="No delivery jobs available now." compact />
             ) : (
               <ul className="hyperlocal-list">
                 {partnerJobs.map((job) => (
@@ -1284,16 +1719,16 @@ const HyperlocalDeliveryHub = () => {
             </button>
 
             <h3>Pending shop approvals</h3>
-            {pendingShops.length === 0 ? <div className="hyperlocal-empty-card">No pending shops.</div> : (
+            {pendingShops.length === 0 ? <HyperlocalEmptyState title="No pending shops." compact /> : (
               <ul className="hyperlocal-list">
                 {pendingShops.map((shop) => (
                   <li key={shop.shopId}>
                     {shop.name} ({shop.category})
                     <div className="hyperlocal-inline-actions">
-                      <button type="button" onClick={() => hyperlocalApi.adminShopApproval(shop.shopId, "approved").then(loadAdminData)}>
+                      <button type="button" onClick={() => handleAdminShopApproval(shop.shopId, "approved")}>
                         Approve
                       </button>
-                      <button type="button" onClick={() => hyperlocalApi.adminShopApproval(shop.shopId, "rejected").then(loadAdminData)}>
+                      <button type="button" onClick={() => handleAdminShopApproval(shop.shopId, "rejected")}>
                         Reject
                       </button>
                     </div>
@@ -1301,18 +1736,39 @@ const HyperlocalDeliveryHub = () => {
                 ))}
               </ul>
             )}
+            <div className="hyperlocal-inline-actions">
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adminPagination.pendingShops?.hasPrev}
+                onClick={() => updateAdminPage("pendingShops", Number(adminPages.pendingShops || 1) - 1)}
+              >
+                Prev shops
+              </button>
+              <span className="hyperlocal-muted">
+                Page {adminPagination.pendingShops?.page || 1} / {adminPagination.pendingShops?.totalPages || 1}
+              </span>
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adminPagination.pendingShops?.hasNext}
+                onClick={() => updateAdminPage("pendingShops", Number(adminPages.pendingShops || 1) + 1)}
+              >
+                Next shops
+              </button>
+            </div>
 
             <h3>Pending partner approvals</h3>
-            {pendingPartners.length === 0 ? <div className="hyperlocal-empty-card">No pending partners.</div> : (
+            {pendingPartners.length === 0 ? <HyperlocalEmptyState title="No pending partners." subtitle="New partner applications will appear here." compact /> : (
               <ul className="hyperlocal-list">
                 {pendingPartners.map((partner) => (
                   <li key={partner.partnerId}>
                     {partner.fullName} ({partner.phone})
                     <div className="hyperlocal-inline-actions">
-                      <button type="button" onClick={() => hyperlocalApi.adminPartnerApproval(partner.partnerId, "approved").then(loadAdminData)}>
+                      <button type="button" onClick={() => handleAdminPartnerApproval(partner.partnerId, "approved")}>
                         Approve
                       </button>
-                      <button type="button" onClick={() => hyperlocalApi.adminPartnerApproval(partner.partnerId, "rejected").then(loadAdminData)}>
+                      <button type="button" onClick={() => handleAdminPartnerApproval(partner.partnerId, "rejected")}>
                         Reject
                       </button>
                     </div>
@@ -1320,39 +1776,60 @@ const HyperlocalDeliveryHub = () => {
                 ))}
               </ul>
             )}
+            <div className="hyperlocal-inline-actions">
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adminPagination.pendingPartners?.hasPrev}
+                onClick={() => updateAdminPage("pendingPartners", Number(adminPages.pendingPartners || 1) - 1)}
+              >
+                Prev partners
+              </button>
+              <span className="hyperlocal-muted">
+                Page {adminPagination.pendingPartners?.page || 1} / {adminPagination.pendingPartners?.totalPages || 1}
+              </span>
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adminPagination.pendingPartners?.hasNext}
+                onClick={() => updateAdminPage("pendingPartners", Number(adminPages.pendingPartners || 1) + 1)}
+              >
+                Next partners
+              </button>
+            </div>
           </article>
 
           <article className="hyperlocal-panel">
             <h2>Complaints + Refunds + Reports</h2>
             {adminAnalytics ? (
-              <div className="hyperlocal-summary-card">
-                <p>Total orders: {adminAnalytics.totalOrders}</p>
-                <p>Total revenue: INR {adminAnalytics.totalRevenue}</p>
-                <p>Delivered: {adminAnalytics.deliveredOrders}</p>
-                <p>Cancelled: {adminAnalytics.cancelledOrders}</p>
+              <div className="hyperlocal-metrics-grid">
+                <HyperlocalMetricCard label="Total Orders" value={adminAnalytics.totalOrders} />
+                <HyperlocalMetricCard label="Total Revenue" value={`INR ${adminAnalytics.totalRevenue}`} />
+                <HyperlocalMetricCard label="Delivered" value={adminAnalytics.deliveredOrders} />
+                <HyperlocalMetricCard label="Cancelled" value={adminAnalytics.cancelledOrders} />
               </div>
             ) : null}
 
             {settlementReport ? (
-              <div className="hyperlocal-summary-card">
-                <p>Gross sales: INR {settlementReport.grossSales}</p>
-                <p>Commission collected: INR {settlementReport.commissionCollected}</p>
-                <p>Vendor payouts: INR {settlementReport.netPayoutToVendors}</p>
+              <div className="hyperlocal-metrics-grid">
+                <HyperlocalMetricCard label="Gross Sales" value={`INR ${settlementReport.grossSales}`} />
+                <HyperlocalMetricCard label="Commission" value={`INR ${settlementReport.commissionCollected}`} />
+                <HyperlocalMetricCard label="Vendor Payouts" value={`INR ${settlementReport.netPayoutToVendors}`} />
               </div>
             ) : null}
 
             <h3>Refund queue</h3>
-            {refunds.length === 0 ? <div className="hyperlocal-empty-card">No refund requests.</div> : (
+            {refunds.length === 0 ? <HyperlocalEmptyState title="No refund requests." compact /> : (
               <ul className="hyperlocal-list">
                 {refunds.map((refund) => (
                   <li key={refund.refundId}>
-                    {refund.orderId} | INR {refund.amount} | {refund.status}
+                    {refund.orderId} | INR {refund.amount} | <HyperlocalStatusBadge label={refund.status} tone={refund.status === "pending" ? "warning" : "neutral"} />
                     {refund.status === "pending" ? (
                       <div className="hyperlocal-inline-actions">
-                        <button type="button" onClick={() => hyperlocalApi.reviewRefund(refund.refundId, "approved").then(loadAdminData)}>
+                        <button type="button" onClick={() => handleRefundReview(refund.refundId, "approved")}>
                           Approve
                         </button>
-                        <button type="button" onClick={() => hyperlocalApi.reviewRefund(refund.refundId, "rejected").then(loadAdminData)}>
+                        <button type="button" onClick={() => handleRefundReview(refund.refundId, "rejected")}>
                           Reject
                         </button>
                       </div>
@@ -1361,15 +1838,37 @@ const HyperlocalDeliveryHub = () => {
                 ))}
               </ul>
             )}
+            <div className="hyperlocal-inline-actions">
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adminPagination.refunds?.hasPrev}
+                onClick={() => updateAdminPage("refunds", Number(adminPages.refunds || 1) - 1)}
+              >
+                Prev refunds
+              </button>
+              <span className="hyperlocal-muted">
+                Page {adminPagination.refunds?.page || 1} / {adminPagination.refunds?.totalPages || 1}
+              </span>
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adminPagination.refunds?.hasNext}
+                onClick={() => updateAdminPage("refunds", Number(adminPages.refunds || 1) + 1)}
+              >
+                Next refunds
+              </button>
+            </div>
 
             <h3>Complaints</h3>
-            {complaints.length === 0 ? <div className="hyperlocal-empty-card">No complaints submitted.</div> : (
+            {complaints.length === 0 ? <HyperlocalEmptyState title="No complaints submitted." compact /> : (
               <ul className="hyperlocal-list">
                 {complaints.map((complaint) => (
                   <li key={complaint.complaintId}>
-                    {complaint.orderId} | {complaint.issue} | {complaint.status}
+                    {complaint.orderId} | {complaint.issue} |{" "}
+                    <HyperlocalStatusBadge label={complaint.status} tone={complaint.status === "resolved" ? "success" : "warning"} />
                     {complaint.status !== "resolved" ? (
-                      <button type="button" onClick={() => hyperlocalApi.resolveComplaint(complaint.complaintId, "Resolved by support team").then(loadAdminData)}>
+                      <button type="button" onClick={() => handleResolveComplaint(complaint.complaintId)}>
                         Resolve
                       </button>
                     ) : null}
@@ -1377,6 +1876,75 @@ const HyperlocalDeliveryHub = () => {
                 ))}
               </ul>
             )}
+            <div className="hyperlocal-inline-actions">
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adminPagination.complaints?.hasPrev}
+                onClick={() => updateAdminPage("complaints", Number(adminPages.complaints || 1) - 1)}
+              >
+                Prev complaints
+              </button>
+              <span className="hyperlocal-muted">
+                Page {adminPagination.complaints?.page || 1} / {adminPagination.complaints?.totalPages || 1}
+              </span>
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adminPagination.complaints?.hasNext}
+                onClick={() => updateAdminPage("complaints", Number(adminPages.complaints || 1) + 1)}
+              >
+                Next complaints
+              </button>
+            </div>
+
+            <h3>Audit Logs</h3>
+            <div className="hyperlocal-inline-actions">
+              <input
+                value={auditFilter}
+                onChange={(event) => {
+                  setAuditFilter(event.target.value);
+                  updateAdminPage("auditLogs", 1);
+                }}
+                placeholder="Filter by action (refund.review, complaint.resolve...)"
+              />
+              <button type="button" className="hyperlocal-secondary-btn" onClick={() => loadAdminData(adminPages)}>
+                Refresh audit logs
+              </button>
+            </div>
+            {auditLogs.length === 0 ? (
+              <HyperlocalEmptyState title="No audit logs found for this filter." compact />
+            ) : (
+              <ul className="hyperlocal-list">
+                {auditLogs.map((entry) => (
+                  <li key={entry.auditId}>
+                    {entry.action} | {entry.actorEmail || "unknown"} |{" "}
+                    {entry.at ? new Date(entry.at).toLocaleString() : "N/A"}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="hyperlocal-inline-actions">
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adminPagination.auditLogs?.hasPrev}
+                onClick={() => updateAdminPage("auditLogs", Number(adminPages.auditLogs || 1) - 1)}
+              >
+                Prev logs
+              </button>
+              <span className="hyperlocal-muted">
+                Page {adminPagination.auditLogs?.page || 1} / {adminPagination.auditLogs?.totalPages || 1}
+              </span>
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adminPagination.auditLogs?.hasNext}
+                onClick={() => updateAdminPage("auditLogs", Number(adminPages.auditLogs || 1) + 1)}
+              >
+                Next logs
+              </button>
+            </div>
           </article>
         </section>
       )}
@@ -1395,22 +1963,25 @@ const HyperlocalDeliveryHub = () => {
                 <div className="hyperlocal-skeleton-card" />
               </div>
             ) : overviewData ? (
-              <div className="hyperlocal-summary-card">
-                <p>Total orders: {overviewData.totalOrders}</p>
-                <p>Delivered orders: {overviewData.deliveredOrders}</p>
-                <p>Cancelled orders: {overviewData.cancelledOrders}</p>
-                <p>Active delivery jobs: {overviewData.activeJobs}</p>
-                <p>Total revenue: INR {overviewData.totalRevenue}</p>
-                <p>Average order value: INR {overviewData.averageOrderValue}</p>
-                <p>Approved shops: {overviewData.approvedShopCount}</p>
-                <p>Approved partners: {overviewData.approvedPartnerCount}</p>
-                <p>Partners currently online: {overviewData.activePartnerCount}</p>
-                <p>Subscriptions active: {overviewData.subscriptionCount}</p>
-                <p>Open complaints: {overviewData.openComplaints}</p>
-                <p>Pending refunds: {overviewData.pendingRefunds}</p>
+              <div className="hyperlocal-metrics-grid">
+                <HyperlocalMetricCard label="Total Orders" value={overviewData.totalOrders} />
+                <HyperlocalMetricCard label="Delivered" value={overviewData.deliveredOrders} />
+                <HyperlocalMetricCard label="Cancelled" value={overviewData.cancelledOrders} />
+                <HyperlocalMetricCard label="Active Jobs" value={overviewData.activeJobs} />
+                <HyperlocalMetricCard label="Total Revenue" value={`INR ${overviewData.totalRevenue}`} />
+                <HyperlocalMetricCard label="AOV" value={`INR ${overviewData.averageOrderValue}`} />
+                <HyperlocalMetricCard label="Approved Shops" value={overviewData.approvedShopCount} />
+                <HyperlocalMetricCard label="Approved Partners" value={overviewData.approvedPartnerCount} />
+                <HyperlocalMetricCard label="Partners Online" value={overviewData.activePartnerCount} />
+                <HyperlocalMetricCard label="Subscriptions" value={overviewData.subscriptionCount} />
+                <HyperlocalMetricCard label="Open Complaints" value={overviewData.openComplaints} />
+                <HyperlocalMetricCard label="Pending Refunds" value={overviewData.pendingRefunds} />
               </div>
             ) : (
-              <div className="hyperlocal-empty-card">Switch to 360 Dashboard to load the full hyperlocal operations view.</div>
+              <HyperlocalEmptyState
+                title="Switch to 360 Dashboard to load the full hyperlocal operations view."
+                subtitle="Use Refresh 360 data after role-level operations begin."
+              />
             )}
           </article>
 
@@ -1428,7 +1999,7 @@ const HyperlocalDeliveryHub = () => {
                     ))}
                   </ol>
                 ) : (
-                  <div className="hyperlocal-empty-card">No shop revenue data yet.</div>
+                  <HyperlocalEmptyState title="No shop revenue data yet." compact />
                 )}
 
                 <h3>Top products by quantity sold</h3>
@@ -1441,7 +2012,7 @@ const HyperlocalDeliveryHub = () => {
                     ))}
                   </ol>
                 ) : (
-                  <div className="hyperlocal-empty-card">No product movement yet.</div>
+                  <HyperlocalEmptyState title="No product movement yet." compact />
                 )}
               </div>
 
@@ -1456,7 +2027,7 @@ const HyperlocalDeliveryHub = () => {
                     ))}
                   </ul>
                 ) : (
-                  <div className="hyperlocal-empty-card">No category revenue data available.</div>
+                  <HyperlocalEmptyState title="No category revenue data available." compact />
                 )}
               </div>
 
@@ -1471,7 +2042,7 @@ const HyperlocalDeliveryHub = () => {
                     ))}
                   </ul>
                 ) : (
-                  <div className="hyperlocal-empty-card">No city-level order data yet.</div>
+                  <HyperlocalEmptyState title="No city-level order data yet." compact />
                 )}
               </div>
             </article>
@@ -1494,9 +2065,24 @@ const HyperlocalDeliveryHub = () => {
                 type="button"
                 onClick={async () => {
                   try {
-                    await hyperlocalApi.walletTopup(Number(walletTopup || 0));
+                    const amount = Number(walletTopup || 0);
+                    if (!Number.isFinite(amount) || amount <= 0) {
+                      showError("Enter a valid topup amount.");
+                      return;
+                    }
+                    const payload = {
+                      amount,
+                      paymentReference: `MOCK-${Date.now()}`,
+                      paymentStatus: "verified",
+                    };
+                    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+                      queueAction({ type: "wallet_topup", payload });
+                      setWalletTopup("");
+                      return;
+                    }
+                    await hyperlocalApi.walletTopup(payload);
                     setWalletTopup("");
-                    await loadGrowthData();
+                    await loadGrowthData(adPagination.page);
                     showStatus("Wallet topped up.");
                   } catch (error) {
                     showError(error?.response?.data?.message || "Unable to top up wallet.");
@@ -1508,7 +2094,7 @@ const HyperlocalDeliveryHub = () => {
             </div>
 
             <h3>Delivery pass plans</h3>
-            {plans.length === 0 ? <div className="hyperlocal-empty-card">No plans available.</div> : (
+            {plans.length === 0 ? <HyperlocalEmptyState title="No plans available." compact /> : (
               <ul className="hyperlocal-list">
                 {plans.map((plan) => (
                   <li key={plan.planCode}>
@@ -1518,8 +2104,12 @@ const HyperlocalDeliveryHub = () => {
                       type="button"
                       onClick={async () => {
                         try {
-                          await hyperlocalApi.subscribe({ planCode: plan.planCode, amount: plan.amount });
-                          await loadGrowthData();
+                          if (typeof navigator !== "undefined" && navigator.onLine === false) {
+                            queueAction({ type: "subscribe_plan", payload: { planCode: plan.planCode } });
+                            return;
+                          }
+                          await hyperlocalApi.subscribe({ planCode: plan.planCode });
+                          await loadGrowthData(adPagination.page);
                           showStatus(`${plan.title} activated.`);
                         } catch (error) {
                           showError(error?.response?.data?.message || "Unable to subscribe.");
@@ -1534,7 +2124,7 @@ const HyperlocalDeliveryHub = () => {
             )}
 
             <h3>My subscriptions</h3>
-            {subs.length === 0 ? <div className="hyperlocal-empty-card">No active subscriptions.</div> : (
+            {subs.length === 0 ? <HyperlocalEmptyState title="No active subscriptions." compact /> : (
               <ul className="hyperlocal-list">
                 {subs.map((sub) => (
                   <li key={sub.subscriptionId}>
@@ -1553,9 +2143,15 @@ const HyperlocalDeliveryHub = () => {
               onSubmit={async (event) => {
                 event.preventDefault();
                 try {
-                  await hyperlocalApi.createAd({ ...adForm, budget: Number(adForm.budget || 0) });
+                  const payload = { ...adForm, budget: Number(adForm.budget || 0) };
+                  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+                    queueAction({ type: "create_ad", payload });
+                    setAdForm({ shopId: "", title: "", description: "", budget: "" });
+                    return;
+                  }
+                  await hyperlocalApi.createAd(payload);
                   setAdForm({ shopId: "", title: "", description: "", budget: "" });
-                  await loadGrowthData();
+                  await loadGrowthData(adPagination.page);
                   showStatus("Ad campaign created.");
                 } catch (error) {
                   showError(error?.response?.data?.message || "Unable to create ad.");
@@ -1569,8 +2165,22 @@ const HyperlocalDeliveryHub = () => {
               <button type="submit">Create ad</button>
             </form>
 
+            <div className="hyperlocal-inline-actions">
+              <input
+                placeholder="Filter ads by Shop ID"
+                value={adFilterShopId}
+                onChange={(event) => {
+                  setAdFilterShopId(event.target.value);
+                  setAdPagination((current) => ({ ...current, page: 1 }));
+                }}
+              />
+              <button type="button" className="hyperlocal-secondary-btn" onClick={() => loadGrowthData(1)}>
+                Apply ad filter
+              </button>
+            </div>
+
             {ads.length === 0 ? (
-              <div className="hyperlocal-empty-card">No ads created yet.</div>
+              <HyperlocalEmptyState title="No ads created yet." compact />
             ) : (
               <ul className="hyperlocal-list">
                 {ads.map((ad) => (
@@ -1580,6 +2190,35 @@ const HyperlocalDeliveryHub = () => {
                 ))}
               </ul>
             )}
+            <div className="hyperlocal-inline-actions">
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adPagination.hasPrev}
+                onClick={() => {
+                  const nextPage = Math.max(1, Number(adPagination.page || 1) - 1);
+                  setAdPagination((current) => ({ ...current, page: nextPage }));
+                  loadGrowthData(nextPage);
+                }}
+              >
+                Prev ads
+              </button>
+              <span className="hyperlocal-muted">
+                Page {adPagination.page || 1} / {adPagination.totalPages || 1}
+              </span>
+              <button
+                type="button"
+                className="hyperlocal-secondary-btn"
+                disabled={!adPagination.hasNext}
+                onClick={() => {
+                  const nextPage = Number(adPagination.page || 1) + 1;
+                  setAdPagination((current) => ({ ...current, page: nextPage }));
+                  loadGrowthData(nextPage);
+                }}
+              >
+                Next ads
+              </button>
+            </div>
 
             <div className="hyperlocal-summary-card">
               <p>Referral system hook: enabled in growth layer (wallet + subscription bundle).</p>

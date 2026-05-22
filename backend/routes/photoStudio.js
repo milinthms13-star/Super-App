@@ -1228,6 +1228,7 @@ router.post('/ai/360-style', authenticate, async (req, res, next) => {
         outputUrl: uploaded.url,
         mode: '360-style',
         style,
+        viewerType: 'equirectangular',
         width: canvasWidth,
         height: canvasHeight,
         interactiveViewerRecommended: true,

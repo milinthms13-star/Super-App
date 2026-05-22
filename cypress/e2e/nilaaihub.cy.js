@@ -1,6 +1,6 @@
 describe('NilaAIHub Module', () => {
   beforeEach(() => {
-    cy.visit('/nilaaihub'); // Adjust URL as needed
+    cy.visit('/nila-ai-hub');
   });
 
   it('should load the Nila AI Hub page', () => {

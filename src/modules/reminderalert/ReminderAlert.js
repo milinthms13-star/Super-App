@@ -124,6 +124,7 @@ const ReminderAlert = () => {
   const [submitError, setSubmitError] = useState(null);
   const [trustedContacts, setTrustedContacts] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [selectedWorkspaceIndex, setSelectedWorkspaceIndex] = useState(0);
 
   // Load trusted contacts
   useEffect(() => {
@@ -180,6 +181,45 @@ const ReminderAlert = () => {
       return aTime - bTime;
     })[0];
   }, [reminders]);
+
+  // Memoized workspace reminders (top 3 by urgency: High → Medium → Low)
+  const workspaceReminders = useMemo(() => {
+    const pending = reminders.filter(r => !r.completed);
+    const priorityOrder = { High: 0, Medium: 1, Low: 2 };
+    return pending
+      .sort((a, b) => {
+        const aPriority = priorityOrder[a.priority] ?? 2;
+        const bPriority = priorityOrder[b.priority] ?? 2;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        const aTime = getDueDateTime(a.dueDate, a.dueTime)?.getTime() ?? Number.POSITIVE_INFINITY;
+        const bTime = getDueDateTime(b.dueDate, b.dueTime)?.getTime() ?? Number.POSITIVE_INFINITY;
+        return aTime - bTime;
+      })
+      .slice(0, 3);
+  }, [reminders]);
+
+  // Memoized selected workspace reminder
+  const selectedWorkspaceReminder = useMemo(() => {
+    if (workspaceReminders.length === 0) return null;
+    const validIndex = Math.min(Math.max(selectedWorkspaceIndex, 0), workspaceReminders.length - 1);
+    return workspaceReminders[validIndex] || null;
+  }, [workspaceReminders, selectedWorkspaceIndex]);
+
+  useEffect(() => {
+    if (workspaceReminders.length === 0) {
+      setSelectedWorkspaceIndex(0);
+      return;
+    }
+    if (selectedWorkspaceIndex >= workspaceReminders.length) {
+      setSelectedWorkspaceIndex(0);
+    }
+  }, [workspaceReminders.length, selectedWorkspaceIndex]);
+
+  // Safe workspace navigation
+  const handleNextWorkspace = useCallback(() => {
+    if (workspaceReminders.length === 0) return;
+    setSelectedWorkspaceIndex(prev => (prev + 1) % workspaceReminders.length);
+  }, [workspaceReminders.length]);
 
   // Form handlers
   const clearEditorValues = useCallback(() => {
@@ -648,7 +688,185 @@ const ReminderAlert = () => {
           </p>
         </aside>
       </section>
-      <button
+
+      {/* 360 Workspace Command Center */}
+      {workspaceReminders.length > 0 && selectedWorkspaceReminder && (
+        <div className="reminderalert-360-shell">
+          <header className="reminderalert-360-header">
+            <div className="reminderalert-360-header-left">
+              <h2>Workspace Command Center</h2>
+              <p>Your top urgent reminders at a glance</p>
+            </div>
+            <div className="reminderalert-360-toolbar">
+              <button
+                type="button"
+                className="reminderalert-360-nav-btn"
+                onClick={handleNextWorkspace}
+                aria-label="Next reminder in workspace carousel"
+                title="Next"
+              >
+                → Next ({selectedWorkspaceIndex + 1}/{workspaceReminders.length})
+              </button>
+            </div>
+          </header>
+
+          <div className="reminderalert-360-panel">
+            {/* Preview Section */}
+            <div className="reminderalert-360-preview">
+              <div
+                className="reminderalert-360-preview-content"
+                style={{
+                  borderLeft: `4px solid ${
+                    selectedWorkspaceReminder.priority === 'High'
+                      ? '#ef4444'
+                      : selectedWorkspaceReminder.priority === 'Medium'
+                        ? '#f59e0b'
+                        : '#10b981'
+                  }`,
+                }}
+              >
+                <div className="reminderalert-360-preview-badges">
+                  <span
+                    className="reminderalert-360-priority-badge"
+                    style={{
+                      backgroundColor:
+                        selectedWorkspaceReminder.priority === 'High'
+                          ? '#ef4444'
+                          : selectedWorkspaceReminder.priority === 'Medium'
+                            ? '#f59e0b'
+                            : '#10b981',
+                    }}
+                  >
+                    {selectedWorkspaceReminder.priority}
+                  </span>
+                  <span
+                    className="reminderalert-360-category-badge"
+                    style={{
+                      backgroundColor:
+                        selectedWorkspaceReminder.category === 'Work'
+                          ? '#3b82f6'
+                          : selectedWorkspaceReminder.category === 'Urgent'
+                            ? '#dc2626'
+                            : '#8b5cf6',
+                    }}
+                  >
+                    {selectedWorkspaceReminder.category}
+                  </span>
+                </div>
+
+                <h3 className="reminderalert-360-preview-title">
+                  {selectedWorkspaceReminder.title}
+                </h3>
+                {selectedWorkspaceReminder.description && (
+                  <p className="reminderalert-360-preview-description">
+                    {selectedWorkspaceReminder.description}
+                  </p>
+                )}
+
+                <div className="reminderalert-360-preview-meta">
+                  <span className="reminderalert-360-due-date">
+                    📅{' '}
+                    {new Date(selectedWorkspaceReminder.dueDate).toLocaleDateString('en-IN', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </span>
+                  {selectedWorkspaceReminder.dueTime && (
+                    <span className="reminderalert-360-due-time">
+                      🕐 {selectedWorkspaceReminder.dueTime}
+                    </span>
+                  )}
+                </div>
+
+                {selectedWorkspaceReminder.reminders?.length > 0 && (
+                  <div className="reminderalert-360-channels">
+                    <span className="reminderalert-360-channels-label">Reminders:</span>
+                    <div className="reminderalert-360-channels-list">
+                      {selectedWorkspaceReminder.reminders.map(channel => (
+                        <span
+                          key={channel}
+                          className="reminderalert-360-channel-badge"
+                        >
+                          {channel}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Sidebar */}
+            <aside className="reminderalert-360-sidebar">
+              <h3 className="reminderalert-360-sidebar-heading">Quick Actions</h3>
+
+              {/* Workspace Chips Navigation */}
+              <div className="reminderalert-workspace-chips">
+                {workspaceReminders.map((reminder, idx) => (
+                  <button
+                    key={reminder._id}
+                    type="button"
+                    className={`reminderalert-workspace-chip ${
+                      idx === selectedWorkspaceIndex ? 'active' : ''
+                    }`}
+                    onClick={() => setSelectedWorkspaceIndex(idx)}
+                    aria-label={`Reminder ${idx + 1}: ${reminder.title}`}
+                  >
+                    <span className="reminderalert-chip-priority">
+                      {reminder.priority[0]}
+                    </span>
+                    <span className="reminderalert-chip-title">{reminder.title}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="reminderalert-360-actions">
+                <button
+                  type="button"
+                  className="reminderalert-360-action-btn reminderalert-360-action-primary"
+                  onClick={() => {
+                    handleEdit(selectedWorkspaceReminder);
+                  }}
+                >
+                  ✎ Edit
+                </button>
+                {selectedWorkspaceReminder.reminders?.includes('Call') && (
+                  <button
+                    type="button"
+                    className="reminderalert-360-action-btn reminderalert-360-action-secondary"
+                    onClick={() => handleTriggerVoiceCall(selectedWorkspaceReminder._id)}
+                    disabled={submitting}
+                  >
+                    📞 Voice Call
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="reminderalert-360-action-btn reminderalert-360-action-secondary"
+                  onClick={async () => {
+                    await handleToggleComplete(selectedWorkspaceReminder._id);
+                  }}
+                  disabled={submitting}
+                >
+                  ✓ Mark Done
+                </button>
+                <button
+                  type="button"
+                  className="reminderalert-360-action-btn reminderalert-360-action-danger"
+                  onClick={() => handleDelete(selectedWorkspaceReminder._id)}
+                  disabled={submitting}
+                >
+                  🗑 Delete
+                </button>
+              </div>
+            </aside>
+          </div>
+        </div>
+      )}
+
+      
         type="button"
         className="reminderalert-floating-add-btn"
         onClick={() => {
