@@ -421,7 +421,7 @@ const LaunchPage = ({
           </div>
           <div className="launch-hero-grid">
             <div className="launch-hero-main">
-              <img src="/logo.svg" alt="MGRAND HUB" className="launch-logo" />
+              <img src="/logo.png" alt="MGRAND HUB" className="launch-logo" />
               <p className="launch-eyebrow">{launch.brand}</p>
               <h1>{launch.title}</h1>
               <div className="registration-actions" aria-label="Registration options">
@@ -620,3 +620,4 @@ const LaunchPage = ({
 };
 
 export default LaunchPage;
+

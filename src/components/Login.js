@@ -847,7 +847,7 @@ const Login = ({
         )}
 
         <div className={`login-header ${isLoginFlow ? "login-header-compact" : ""}`}>
-          <img src="/logo.svg" alt="MGRAND HUB" className="login-logo" />
+          <img src="/logo.png" alt="MGRAND HUB" className="login-logo" />
           <p className="login-kicker">{headerKicker}</p>
           <h1>MGRAND HUB</h1>
           <p className="login-subtitle">{loginSubtitle}</p>
@@ -1361,3 +1361,4 @@ const Login = ({
 };
 
 export default Login;
+

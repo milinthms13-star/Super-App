@@ -52,7 +52,7 @@ const MPINLogin = ({ onSuccess, onError }) => {
   return (
     <div className="login-card mpin-login-card">
       <div className="login-header">
-        <img src="/logo.svg" alt="MGRAND HUB" className="login-logo" />
+        <img src="/logo.png" alt="MGRAND HUB" className="login-logo" />
         <p className="login-kicker">SECURE LOGIN</p>
         <h1>MGRAND HUB</h1>
         <p className="login-subtitle">Login using your MPIN</p>
@@ -104,3 +104,4 @@ const MPINLogin = ({ onSuccess, onError }) => {
 };
 
 export default MPINLogin;
+

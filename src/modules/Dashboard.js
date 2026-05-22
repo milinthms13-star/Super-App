@@ -1485,7 +1485,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null, mo
           <>
             {isSeller && (
               <div className={`welcome-section seller-welcome-section`}>
-                <img src="/logo.svg" alt="MGRAND HUB" className="welcome-logo" />
+                <img src="/logo.png" alt="MGRAND HUB" className="welcome-logo" />
                 <h1>{businessName} Seller Dashboard</h1>
                 <p>
                   Manage your subscribed MGRAND HUB business categories, monitor seller orders,
@@ -2231,5 +2231,6 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null, mo
 };
 
 export default Dashboard;
+
 
 

@@ -282,7 +282,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [], moduleBrandin
               className="nav-logo"
               onClick={() => handleModuleClick(defaultHomeModule)}
             >
-              <img src="/logo.svg" alt="MGRAND HUB Logo" className="logo-image" />
+              <img src="/logo.png" alt="MGRAND HUB Logo" className="logo-image" />
               <span>MGRAND HUB</span>
             </div>
 
@@ -481,5 +481,6 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [], moduleBrandin
 };
 
 export default Navigation;
+
 
 
