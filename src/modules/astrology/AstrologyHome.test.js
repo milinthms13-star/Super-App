@@ -52,6 +52,7 @@ const createControllerMock = (overrides = {}) => ({
   signsNotice: "",
   readingNotice: "",
   saveState: { type: "", message: "" },
+  requiredProfileFields: [],
   festivals: [],
   panchangam: null,
   panchangamNotice: "",
@@ -59,8 +60,11 @@ const createControllerMock = (overrides = {}) => ({
   aiQuestion: "",
   setAiQuestion: jest.fn(),
   assistantAnswer: null,
+  assistantHistory: [],
+  assistantRetryQuestion: "",
   aiLoading: false,
   downloadingHoroscopePeriod: "",
+  downloadRetryPeriod: "",
   selectedSignDetails: { sign: "aries", label: "Aries", dateRange: "Mar 21 - Apr 19" },
   heroPrediction: "Prediction",
   filteredSigns: [{ sign: "aries", label: "Aries", dateRange: "Mar 21 - Apr 19" }],
@@ -134,9 +138,12 @@ const createControllerMock = (overrides = {}) => ({
   handleBirthTimezoneChange: jest.fn(),
   handleNakshatraChange: jest.fn(),
   handleQuickSave: jest.fn(),
+  handleRestoreSavedReading: jest.fn(),
   handleGenerateReport: jest.fn(),
   handleAskAssistant: jest.fn(),
+  handleRetryAssistantQuestion: jest.fn(),
   handleDownloadHoroscopeReport: jest.fn(),
+  handleRetryHoroscopeDownload: jest.fn(),
   ...overrides,
 });
 
@@ -165,4 +172,3 @@ describe("AstrologyHome component entrypoints", () => {
     expect(mockController.handleSectionChange).toHaveBeenCalledWith("ai");
   });
 });
-

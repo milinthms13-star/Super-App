@@ -768,10 +768,19 @@ const BillPayHub = () => {
   };
 
   const collectPaymentGatewayResult = async (orderData, amount) => {
+    if (String(orderData?.gateway || "").toLowerCase() === "setu") {
+      return {
+        orderId: orderData.orderId,
+        paymentId: orderData.paymentRefId || `setu_pay_${Date.now()}`,
+        signature: "setu-not-applicable",
+        gateway: "setu",
+      };
+    }
+
     if (orderData.razorpayKeyId === "test_key") {
       const paymentId = `pay_test_${Date.now()}`;
       const signature = await createTestSignature(orderData.orderId, paymentId);
-      return { orderId: orderData.orderId, paymentId, signature };
+      return { orderId: orderData.orderId, paymentId, signature, gateway: "razorpay" };
     }
 
     await loadRazorpayScript();
@@ -789,6 +798,7 @@ const BillPayHub = () => {
             orderId: response.razorpay_order_id,
             paymentId: response.razorpay_payment_id,
             signature: response.razorpay_signature,
+            gateway: "razorpay",
           }),
         modal: {
           ondismiss: () => reject(new Error("Payment cancelled by user")),
@@ -843,6 +853,7 @@ const BillPayHub = () => {
         orderId: paymentResult.orderId,
         paymentId: paymentResult.paymentId,
         signature: paymentResult.signature,
+        gateway: paymentResult.gateway || orderResponse.gateway || "razorpay",
         billId: selectedBill.id,
         amount,
         method: payForm.method,

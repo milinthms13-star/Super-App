@@ -61,6 +61,8 @@ const buildEntriesFromLogs = (logs = []) =>
 const BeautyProgressTracker = ({
   request,
   logs = [],
+  planId = "",
+  planLabel = "",
   latestScore = 0,
   selfiePreview = "",
   snapshotScopeKey = "anonymous",
@@ -101,6 +103,7 @@ const BeautyProgressTracker = ({
     setSavingDay(day);
     try {
       await request.post(buildApiUrl("/beauty-ai/progress-log"), {
+        planId,
         day,
         done: nextDone,
         note: nextDone ? "Challenge completed" : "",
@@ -170,6 +173,7 @@ const BeautyProgressTracker = ({
         <h3>7-Day Glow Challenge</h3>
         <span>{completionScore}% complete</span>
       </div>
+      {planId ? <p>Tracking plan: {planLabel || "Selected plan"}</p> : <p>Tracking plan: Current session plan</p>}
 
       <div className="beauty-progress-grid">
         {entries.map((entry) => (

@@ -305,6 +305,30 @@ const HEADER_HIGHLIGHTS = [
   "Mobile-first execution with premium UX",
 ];
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^[6-9]\d{9}$/;
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const PINCODE_REGEX = /^[1-9][0-9]{5}$/;
+const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const RESERVED_SLUGS = new Set([
+  "admin",
+  "api",
+  "app",
+  "assets",
+  "auth",
+  "billing",
+  "checkout",
+  "dashboard",
+  "help",
+  "login",
+  "logout",
+  "orders",
+  "payment",
+  "public",
+  "settings",
+  "support",
+]);
+
 const formatINR = (value) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -335,6 +359,127 @@ const hasValue = (value) => {
 const loadFromStorage = (key, fallback) => {
   if (typeof window === "undefined") return fallback;
   return safeParse(window.localStorage.getItem(key), fallback);
+};
+
+const buildScopedStorageKey = (key, businessId) => `${key}__${businessId || "draft"}`;
+
+const loadScopedState = (key, businessId, fallback) => {
+  return loadFromStorage(buildScopedStorageKey(key, businessId), fallback);
+};
+
+const cleanSlug = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const buildErrorMessage = (error, fallback) => {
+  const apiMessage = error?.response?.data?.message;
+  if (apiMessage && typeof apiMessage === "string") {
+    return apiMessage;
+  }
+  return fallback;
+};
+
+const validateBusinessForm = (form = {}) => {
+  const errors = {};
+  if (!hasValue(form.businessName)) {
+    errors.businessName = "Business name is required.";
+  }
+  if (!hasValue(form.phone)) {
+    errors.phone = "Phone number is required.";
+  } else if (!PHONE_REGEX.test(String(form.phone).trim())) {
+    errors.phone = "Enter a valid 10-digit Indian mobile number.";
+  }
+  if (!hasValue(form.email)) {
+    errors.email = "Email is required.";
+  } else if (!EMAIL_REGEX.test(String(form.email).trim())) {
+    errors.email = "Enter a valid email address.";
+  }
+  if (hasValue(form.gstin) && !GSTIN_REGEX.test(String(form.gstin).trim().toUpperCase())) {
+    errors.gstin = "Enter a valid GSTIN format.";
+  }
+  if (hasValue(form.addressPincode) && !PINCODE_REGEX.test(String(form.addressPincode).trim())) {
+    errors.addressPincode = "PIN code must be 6 digits.";
+  }
+  return errors;
+};
+
+const validateInvoiceForm = (form = {}) => {
+  const errors = {};
+  const itemErrors = [];
+  if (!hasValue(form.customerName)) {
+    errors.customerName = "Customer name is required.";
+  }
+  if (!hasValue(form.customerPhone) && !hasValue(form.customerEmail)) {
+    errors.customerContact = "Add at least phone or email.";
+  }
+  if (hasValue(form.customerPhone) && !PHONE_REGEX.test(String(form.customerPhone).trim())) {
+    errors.customerPhone = "Enter a valid 10-digit Indian mobile number.";
+  }
+  if (hasValue(form.customerEmail) && !EMAIL_REGEX.test(String(form.customerEmail).trim())) {
+    errors.customerEmail = "Enter a valid email address.";
+  }
+  if (hasValue(form.customerGSTIN) && !GSTIN_REGEX.test(String(form.customerGSTIN).trim().toUpperCase())) {
+    errors.customerGSTIN = "Enter a valid GSTIN format.";
+  }
+  if (!hasValue(form.dueDate)) {
+    errors.dueDate = "Due date is required.";
+  }
+  if (!Array.isArray(form.items) || form.items.length === 0) {
+    errors.items = "Add at least one invoice item.";
+  } else {
+    form.items.forEach((item, index) => {
+      const currentErrors = {};
+      if (!hasValue(item.name) && !hasValue(item.description)) {
+        currentErrors.name = "Item name is required.";
+      }
+      if (Number(item.quantity || 0) <= 0) {
+        currentErrors.quantity = "Quantity must be at least 1.";
+      }
+      if (Number(item.unitPrice || 0) < 0) {
+        currentErrors.unitPrice = "Unit price cannot be negative.";
+      }
+      if (Number(item.taxRate || 0) < 0) {
+        currentErrors.taxRate = "Tax cannot be negative.";
+      }
+      itemErrors[index] = currentErrors;
+    });
+  }
+  return { errors, itemErrors };
+};
+
+const validateMiniAppForm = (form = {}) => {
+  const errors = {};
+  const slug = cleanSlug(form.slug || form.appName);
+  if (!hasValue(form.appName)) {
+    errors.appName = "App display name is required.";
+  }
+  if (!hasValue(slug)) {
+    errors.slug = "App slug is required.";
+  } else if (slug.length < 3 || slug.length > 40) {
+    errors.slug = "Slug must be between 3 and 40 characters.";
+  } else if (!SLUG_REGEX.test(slug)) {
+    errors.slug = "Use lowercase letters, numbers, and single hyphens only.";
+  } else if (RESERVED_SLUGS.has(slug)) {
+    errors.slug = "This slug is reserved. Choose a different one.";
+  }
+  if (hasValue(form.email) && !EMAIL_REGEX.test(String(form.email).trim())) {
+    errors.email = "Enter a valid email address.";
+  }
+  if (hasValue(form.phone) && !PHONE_REGEX.test(String(form.phone).trim())) {
+    errors.phone = "Enter a valid 10-digit Indian mobile number.";
+  }
+  return { errors, slug };
+};
+
+const validateAiAssetForm = (form = {}) => {
+  const errors = {};
+  if (!hasValue(form.prompt)) {
+    errors.prompt = "Prompt is required to generate an asset.";
+  }
+  return errors;
 };
 
 const buildPlanFromInputs = ({ businessForm, launchForm, costForm }) => {
@@ -514,7 +659,7 @@ const BusinessBuilder = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
 
   const [businessForm, setBusinessForm] = useState(INITIAL_BUSINESS_FORM);
-  const [launchForm, setLaunchForm] = useState(() => loadFromStorage(STORAGE_KEYS.launchForm, INITIAL_LAUNCH_FORM));
+  const [launchForm, setLaunchForm] = useState(() => loadScopedState(STORAGE_KEYS.launchForm, "", INITIAL_LAUNCH_FORM));
   const [wizardStep, setWizardStep] = useState(0);
 
   const [invoiceForm, setInvoiceForm] = useState(INITIAL_INVOICE_FORM);
@@ -522,16 +667,16 @@ const BusinessBuilder = () => {
   const [productForm, setProductForm] = useState(INITIAL_PRODUCT_FORM);
   const [documentForm, setDocumentForm] = useState(INITIAL_DOCUMENT_FORM);
 
-  const [costForm, setCostForm] = useState(() => loadFromStorage(STORAGE_KEYS.costForm, INITIAL_COST_FORM));
-  const [schemeProfile, setSchemeProfile] = useState(() => loadFromStorage(STORAGE_KEYS.schemeProfile, INITIAL_SCHEME_PROFILE));
-  const [checklist, setChecklist] = useState(() => loadFromStorage(STORAGE_KEYS.checklist, DEFAULT_CHECKLIST));
+  const [costForm, setCostForm] = useState(() => loadScopedState(STORAGE_KEYS.costForm, "", INITIAL_COST_FORM));
+  const [schemeProfile, setSchemeProfile] = useState(() => loadScopedState(STORAGE_KEYS.schemeProfile, "", INITIAL_SCHEME_PROFILE));
+  const [checklist, setChecklist] = useState(() => loadScopedState(STORAGE_KEYS.checklist, "", DEFAULT_CHECKLIST));
 
-  const [businessPlan, setBusinessPlan] = useState(() => loadFromStorage(STORAGE_KEYS.businessPlan, null));
+  const [businessPlan, setBusinessPlan] = useState(() => loadScopedState(STORAGE_KEYS.businessPlan, "", null));
   const [brandingIdeas, setBrandingIdeas] = useState(null);
   const [documentPreview, setDocumentPreview] = useState("");
-  const [generatedDocuments, setGeneratedDocuments] = useState(() => loadFromStorage(STORAGE_KEYS.generatedDocs, []));
-  const [builder10Form, setBuilder10Form] = useState(() => loadFromStorage(STORAGE_KEYS.builder10Form, INITIAL_BUILDER10_FORM));
-  const [builder10Plans, setBuilder10Plans] = useState(() => loadFromStorage(STORAGE_KEYS.builder10Plans, []));
+  const [generatedDocuments, setGeneratedDocuments] = useState(() => loadScopedState(STORAGE_KEYS.generatedDocs, "", []));
+  const [builder10Form, setBuilder10Form] = useState(() => loadScopedState(STORAGE_KEYS.builder10Form, "", INITIAL_BUILDER10_FORM));
+  const [builder10Plans, setBuilder10Plans] = useState(() => loadScopedState(STORAGE_KEYS.builder10Plans, "", []));
   const [builder10AiPlan, setBuilder10AiPlan] = useState(null);
   const [builder10Generating, setBuilder10Generating] = useState(false);
 
@@ -550,6 +695,25 @@ const BusinessBuilder = () => {
   const [aiAssets, setAiAssets] = useState([]);
   const [statusMessage, setStatusMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [savingBusiness, setSavingBusiness] = useState(false);
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [creatingMiniApp, setCreatingMiniApp] = useState(false);
+  const [savingSubscription, setSavingSubscription] = useState(false);
+  const [creatingProduct, setCreatingProduct] = useState(false);
+  const [deletingProductId, setDeletingProductId] = useState("");
+  const [generatingAsset, setGeneratingAsset] = useState(false);
+  const [updatingOrderId, setUpdatingOrderId] = useState("");
+  const [generatingDocument, setGeneratingDocument] = useState(false);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState("");
+  const [downloadingBuilderPdf, setDownloadingBuilderPdf] = useState(false);
+
+  const [businessErrors, setBusinessErrors] = useState({});
+  const [invoiceErrors, setInvoiceErrors] = useState({});
+  const [invoiceItemErrors, setInvoiceItemErrors] = useState([]);
+  const [miniAppErrors, setMiniAppErrors] = useState({});
+  const [aiAssetErrors, setAiAssetErrors] = useState({});
+
+  const workspaceScopeId = activeBusinessId || "draft";
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -592,36 +756,55 @@ const BusinessBuilder = () => {
   }, [selectedMiniAppId]);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.launchForm, JSON.stringify(launchForm));
-  }, [launchForm]);
+    setLaunchForm(loadScopedState(STORAGE_KEYS.launchForm, workspaceScopeId, INITIAL_LAUNCH_FORM));
+    setCostForm(loadScopedState(STORAGE_KEYS.costForm, workspaceScopeId, INITIAL_COST_FORM));
+    setChecklist(loadScopedState(STORAGE_KEYS.checklist, workspaceScopeId, DEFAULT_CHECKLIST));
+    setBusinessPlan(loadScopedState(STORAGE_KEYS.businessPlan, workspaceScopeId, null));
+    setGeneratedDocuments(loadScopedState(STORAGE_KEYS.generatedDocs, workspaceScopeId, []));
+    setSchemeProfile(loadScopedState(STORAGE_KEYS.schemeProfile, workspaceScopeId, INITIAL_SCHEME_PROFILE));
+    setBuilder10Form(loadScopedState(STORAGE_KEYS.builder10Form, workspaceScopeId, INITIAL_BUILDER10_FORM));
+    setBuilder10Plans(loadScopedState(STORAGE_KEYS.builder10Plans, workspaceScopeId, []));
+    setBuilder10AiPlan(null);
+    setDocumentPreview("");
+    setWizardStep(0);
+    setBusinessErrors({});
+    setInvoiceErrors({});
+    setInvoiceItemErrors([]);
+    setMiniAppErrors({});
+    setAiAssetErrors({});
+  }, [workspaceScopeId]);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.costForm, JSON.stringify(costForm));
-  }, [costForm]);
+    window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.launchForm, workspaceScopeId), JSON.stringify(launchForm));
+  }, [launchForm, workspaceScopeId]);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.checklist, JSON.stringify(checklist));
-  }, [checklist]);
+    window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.costForm, workspaceScopeId), JSON.stringify(costForm));
+  }, [costForm, workspaceScopeId]);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.businessPlan, JSON.stringify(businessPlan));
-  }, [businessPlan]);
+    window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.checklist, workspaceScopeId), JSON.stringify(checklist));
+  }, [checklist, workspaceScopeId]);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.generatedDocs, JSON.stringify(generatedDocuments));
-  }, [generatedDocuments]);
+    window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.businessPlan, workspaceScopeId), JSON.stringify(businessPlan));
+  }, [businessPlan, workspaceScopeId]);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.schemeProfile, JSON.stringify(schemeProfile));
-  }, [schemeProfile]);
+    window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.generatedDocs, workspaceScopeId), JSON.stringify(generatedDocuments));
+  }, [generatedDocuments, workspaceScopeId]);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.builder10Form, JSON.stringify(builder10Form));
-  }, [builder10Form]);
+    window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.schemeProfile, workspaceScopeId), JSON.stringify(schemeProfile));
+  }, [schemeProfile, workspaceScopeId]);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.builder10Plans, JSON.stringify(builder10Plans));
-  }, [builder10Plans]);
+    window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.builder10Form, workspaceScopeId), JSON.stringify(builder10Form));
+  }, [builder10Form, workspaceScopeId]);
+
+  useEffect(() => {
+    window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.builder10Plans, workspaceScopeId), JSON.stringify(builder10Plans));
+  }, [builder10Plans, workspaceScopeId]);
 
   useEffect(() => {
     setBuilder10Form((current) => {
@@ -653,6 +836,52 @@ const BusinessBuilder = () => {
     });
   };
 
+  const hydrateWorkspaceFromBusiness = (business = {}) => {
+    if (!business || typeof business !== "object") return;
+    const scopeId = business.businessId || "draft";
+
+    if (business.launchForm && typeof business.launchForm === "object") {
+      const nextLaunchForm = {
+        ...INITIAL_LAUNCH_FORM,
+        ...business.launchForm,
+      };
+      setLaunchForm(nextLaunchForm);
+      window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.launchForm, scopeId), JSON.stringify(nextLaunchForm));
+    }
+    if (business.costForm && typeof business.costForm === "object") {
+      const nextCostForm = {
+        ...INITIAL_COST_FORM,
+        ...business.costForm,
+      };
+      setCostForm(nextCostForm);
+      window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.costForm, scopeId), JSON.stringify(nextCostForm));
+    }
+    if (business.schemeProfile && typeof business.schemeProfile === "object") {
+      const nextSchemeProfile = {
+        ...INITIAL_SCHEME_PROFILE,
+        ...business.schemeProfile,
+      };
+      setSchemeProfile(nextSchemeProfile);
+      window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.schemeProfile, scopeId), JSON.stringify(nextSchemeProfile));
+    }
+    if (Array.isArray(business.checklist) && business.checklist.length > 0) {
+      const nextChecklist = business.checklist.map((item) => ({
+        id: item.id,
+        title: item.title,
+        completed: Boolean(item.completed),
+      }));
+      setChecklist(nextChecklist);
+      window.localStorage.setItem(buildScopedStorageKey(STORAGE_KEYS.checklist, scopeId), JSON.stringify(nextChecklist));
+    }
+    if (business.businessPlan && typeof business.businessPlan === "object") {
+      setBusinessPlan(business.businessPlan);
+      window.localStorage.setItem(
+        buildScopedStorageKey(STORAGE_KEYS.businessPlan, scopeId),
+        JSON.stringify(business.businessPlan)
+      );
+    }
+  };
+
   const fetchBusiness = async () => {
     try {
       const response = await axios.get("/api/business-builder/businesses");
@@ -663,6 +892,7 @@ const BusinessBuilder = () => {
           const selected = list.find((business) => business.businessId === activeBusinessId) || list[0];
           setActiveBusinessId(selected.businessId);
           applyBusinessToForm(selected);
+          hydrateWorkspaceFromBusiness(selected);
         } else {
           setActiveBusinessId("");
         }
@@ -802,6 +1032,10 @@ const BusinessBuilder = () => {
   };
 
   const handleBusinessChange = (field, value) => {
+    setBusinessErrors((current) => {
+      if (!current[field]) return current;
+      return { ...current, [field]: "" };
+    });
     setBusinessForm((current) => ({ ...current, [field]: value }));
   };
 
@@ -814,10 +1048,24 @@ const BusinessBuilder = () => {
   };
 
   const handleInvoiceChange = (field, value) => {
+    setInvoiceErrors((current) => {
+      if (!current[field] && !(field === "customerPhone" || field === "customerEmail")) return current;
+      const next = { ...current, [field]: "" };
+      if (field === "customerPhone" || field === "customerEmail") {
+        next.customerContact = "";
+      }
+      return next;
+    });
     setInvoiceForm((current) => ({ ...current, [field]: value }));
   };
 
   const handleInvoiceItemChange = (index, field, value) => {
+    setInvoiceItemErrors((current) =>
+      current.map((itemErrors, idx) => {
+        if (idx !== index || !itemErrors || !itemErrors[field]) return itemErrors;
+        return { ...itemErrors, [field]: "" };
+      })
+    );
     setInvoiceForm((current) => {
       const items = [...current.items];
       items[index] = {
@@ -829,6 +1077,8 @@ const BusinessBuilder = () => {
   };
 
   const handleAddInvoiceItem = () => {
+    setInvoiceErrors((current) => ({ ...current, items: "" }));
+    setInvoiceItemErrors((current) => [...current, {}]);
     setInvoiceForm((current) => ({
       ...current,
       items: [
@@ -845,6 +1095,14 @@ const BusinessBuilder = () => {
   };
 
   const handleMiniAppChange = (field, value) => {
+    setMiniAppErrors((current) => {
+      if (!current[field] && !(field === "slug" || field === "appName")) return current;
+      const next = { ...current, [field]: "" };
+      if (field === "slug" || field === "appName") {
+        next.slug = "";
+      }
+      return next;
+    });
     setMiniAppForm((current) => ({ ...current, [field]: value }));
   };
 
@@ -853,6 +1111,10 @@ const BusinessBuilder = () => {
   };
 
   const handleAiAssetChange = (field, value) => {
+    setAiAssetErrors((current) => {
+      if (!current[field]) return current;
+      return { ...current, [field]: "" };
+    });
     setAiAssetForm((current) => ({ ...current, [field]: value }));
   };
 
@@ -866,19 +1128,27 @@ const BusinessBuilder = () => {
 
   const handleSaveBusiness = async (event) => {
     event.preventDefault();
+    const validationErrors = validateBusinessForm(businessForm);
+    if (Object.keys(validationErrors).length > 0) {
+      setBusinessErrors(validationErrors);
+      showStatus("Please fix highlighted business profile fields.");
+      return;
+    }
+
+    setSavingBusiness(true);
     try {
       const payload = {
-        businessName: businessForm.businessName,
+        businessName: String(businessForm.businessName || "").trim(),
         businessType: businessForm.businessType,
-        phone: businessForm.phone,
-        email: businessForm.email,
-        website: businessForm.website,
-        gstin: businessForm.gstin,
+        phone: String(businessForm.phone || "").trim(),
+        email: String(businessForm.email || "").trim(),
+        website: String(businessForm.website || "").trim(),
+        gstin: String(businessForm.gstin || "").trim().toUpperCase(),
         address: {
-          street: businessForm.addressStreet,
-          city: businessForm.addressCity,
-          state: businessForm.addressState,
-          pincode: businessForm.addressPincode,
+          street: String(businessForm.addressStreet || "").trim(),
+          city: String(businessForm.addressCity || "").trim(),
+          state: String(businessForm.addressState || "").trim(),
+          pincode: String(businessForm.addressPincode || "").trim(),
           country: "India",
         },
         primaryColor: businessForm.primaryColor,
@@ -893,10 +1163,23 @@ const BusinessBuilder = () => {
           setActiveBusinessId(savedBusiness.businessId);
         }
         await fetchBusiness();
+        setBusinessErrors({});
         showStatus("Business profile saved successfully.");
       }
     } catch (error) {
-      showStatus("Unable to save business profile. Check fields and try again.");
+      const message = buildErrorMessage(error, "Unable to save business profile. Check fields and try again.");
+      if (message.includes("phone")) {
+        setBusinessErrors((current) => ({ ...current, phone: "Enter a valid 10-digit Indian mobile number." }));
+      }
+      if (message.includes("email")) {
+        setBusinessErrors((current) => ({ ...current, email: "Enter a valid email address." }));
+      }
+      if (message.toLowerCase().includes("gstin")) {
+        setBusinessErrors((current) => ({ ...current, gstin: "Enter a valid GSTIN format." }));
+      }
+      showStatus(message);
+    } finally {
+      setSavingBusiness(false);
     }
   };
 
@@ -906,15 +1189,24 @@ const BusinessBuilder = () => {
       showStatus("Create and save a business profile before creating invoices.");
       return;
     }
+    const validation = validateInvoiceForm(invoiceForm);
+    const hasItemErrors = validation.itemErrors.some((itemError) => Object.keys(itemError || {}).length > 0);
+    if (Object.keys(validation.errors).length > 0 || hasItemErrors) {
+      setInvoiceErrors(validation.errors);
+      setInvoiceItemErrors(validation.itemErrors);
+      showStatus("Please fix highlighted invoice fields.");
+      return;
+    }
+    setCreatingInvoice(true);
     try {
       const payload = {
         businessId: activeBusinessId,
         customer: {
-          name: invoiceForm.customerName,
-          phone: invoiceForm.customerPhone,
-          email: invoiceForm.customerEmail,
-          gstin: invoiceForm.customerGSTIN,
-          address: invoiceForm.customerAddress,
+          name: String(invoiceForm.customerName || "").trim(),
+          phone: String(invoiceForm.customerPhone || "").trim(),
+          email: String(invoiceForm.customerEmail || "").trim(),
+          gstin: String(invoiceForm.customerGSTIN || "").trim().toUpperCase(),
+          address: String(invoiceForm.customerAddress || "").trim(),
         },
         dueDate: invoiceForm.dueDate,
         discount: Number(invoiceForm.discountAmount || 0),
@@ -934,11 +1226,22 @@ const BusinessBuilder = () => {
       const response = await axios.post("/api/business-builder/invoices", payload);
       if (response.data?.success) {
         setInvoiceForm(INITIAL_INVOICE_FORM);
+        setInvoiceErrors({});
+        setInvoiceItemErrors([]);
         await fetchInvoices();
         showStatus("Invoice created successfully.");
       }
     } catch (error) {
-      showStatus("Unable to create invoice. Please verify item details and try again.");
+      const message = buildErrorMessage(error, "Unable to create invoice. Please verify item details and try again.");
+      if (message.includes("customer.name")) {
+        setInvoiceErrors((current) => ({ ...current, customerName: "Customer name is required." }));
+      }
+      if (message.toLowerCase().includes("due date")) {
+        setInvoiceErrors((current) => ({ ...current, dueDate: "Due date is required." }));
+      }
+      showStatus(message);
+    } finally {
+      setCreatingInvoice(false);
     }
   };
 
@@ -948,37 +1251,64 @@ const BusinessBuilder = () => {
       showStatus("Create and save a business profile before launching a mini app.");
       return;
     }
+    if (isMiniAppLimitReached) {
+      showStatus("Mini app limit reached for your current plan. Upgrade to create more mini apps.");
+      return;
+    }
+    const validation = validateMiniAppForm(miniAppForm);
+    const slugAlreadyExists = miniApps.some((app) => String(app.slug || "").toLowerCase() === validation.slug);
+    if (slugAlreadyExists) {
+      validation.errors.slug = "This slug already exists in your mini apps. Try another slug.";
+    }
+    if (Object.keys(validation.errors).length > 0) {
+      setMiniAppErrors(validation.errors);
+      showStatus("Please fix highlighted mini app fields.");
+      return;
+    }
+    setCreatingMiniApp(true);
     try {
       const payload = {
         businessId: activeBusinessId,
-        appName: miniAppForm.appName,
-        slug: miniAppForm.slug,
+        appName: String(miniAppForm.appName || "").trim(),
+        slug: validation.slug,
         appType: miniAppForm.appType,
-        appDescription: miniAppForm.description,
+        appDescription: String(miniAppForm.description || "").trim(),
         branding: {
           primaryColor: miniAppForm.primaryColor,
           secondaryColor: miniAppForm.secondaryColor,
         },
         content: {
-          heroTitle: miniAppForm.appName,
-          heroSubtitle: miniAppForm.description,
-          aboutText: miniAppForm.description,
+          heroTitle: String(miniAppForm.appName || "").trim(),
+          heroSubtitle: String(miniAppForm.description || "").trim(),
+          aboutText: String(miniAppForm.description || "").trim(),
           contactInfo: {
-            email: miniAppForm.email,
-            phone: miniAppForm.phone,
-            address: miniAppForm.address,
-            website: miniAppForm.website,
+            email: String(miniAppForm.email || "").trim(),
+            phone: String(miniAppForm.phone || "").trim(),
+            address: String(miniAppForm.address || "").trim(),
+            website: String(miniAppForm.website || "").trim(),
           },
         },
       };
       const response = await axios.post("/api/business-builder/mini-apps", payload);
       if (response.data?.success) {
         setMiniAppForm(INITIAL_MINIAPP_FORM);
+        setMiniAppErrors({});
         await Promise.all([fetchMiniApps(), fetchEntitlements()]);
         showStatus("Mini app created successfully.");
       }
     } catch (error) {
-      showStatus("Unable to create mini app. Try a different slug and check required fields.");
+      const message = buildErrorMessage(error, "Unable to create mini app. Try a different slug and check required fields.");
+      const normalizedMessage = message.toLowerCase();
+      if (normalizedMessage.includes("duplicate key") || normalizedMessage.includes("slug")) {
+        setMiniAppErrors((current) => ({ ...current, slug: "This slug is already in use. Please choose another." }));
+      }
+      if (normalizedMessage.includes("limit reached")) {
+        showStatus("Mini app limit reached for your current plan. Upgrade to create more mini apps.");
+        return;
+      }
+      showStatus(message);
+    } finally {
+      setCreatingMiniApp(false);
     }
   };
 
@@ -988,6 +1318,7 @@ const BusinessBuilder = () => {
       showStatus("Create and save a business profile before changing subscription.");
       return;
     }
+    setSavingSubscription(true);
     try {
       const payload = {
         plan: subscriptionPlan,
@@ -999,7 +1330,9 @@ const BusinessBuilder = () => {
         showStatus("Subscription settings updated.");
       }
     } catch (error) {
-      showStatus("Unable to update subscription. Please try again.");
+      showStatus(buildErrorMessage(error, "Unable to update subscription. Please try again."));
+    } finally {
+      setSavingSubscription(false);
     }
   };
 
@@ -1009,6 +1342,7 @@ const BusinessBuilder = () => {
       showStatus("Create/select a mini app before adding products.");
       return;
     }
+    setCreatingProduct(true);
     try {
       const payload = {
         name: productForm.name,
@@ -1025,12 +1359,17 @@ const BusinessBuilder = () => {
         showStatus("Mini app product added successfully.");
       }
     } catch (error) {
-      showStatus("Unable to add product. Check fields and try again.");
+      showStatus(buildErrorMessage(error, "Unable to add product. Check fields and try again."));
+    } finally {
+      setCreatingProduct(false);
     }
   };
 
   const handleDeleteProduct = async (productId) => {
     if (!selectedMiniAppId) return;
+    const confirmed = window.confirm("Remove this product from your mini app? This action cannot be undone.");
+    if (!confirmed) return;
+    setDeletingProductId(productId);
     try {
       const response = await axios.delete(`/api/business-builder/mini-apps/${selectedMiniAppId}/products/${productId}`);
       if (response.data?.success) {
@@ -1038,7 +1377,9 @@ const BusinessBuilder = () => {
         showStatus("Product removed.");
       }
     } catch (error) {
-      showStatus("Unable to remove product right now.");
+      showStatus(buildErrorMessage(error, "Unable to remove product right now."));
+    } finally {
+      setDeletingProductId("");
     }
   };
 
@@ -1048,6 +1389,17 @@ const BusinessBuilder = () => {
       showStatus("Create and save a business profile before generating assets.");
       return;
     }
+    if (isAiAssetLimitReached) {
+      showStatus("You've reached your monthly AI asset limit. Upgrade your plan to continue.");
+      return;
+    }
+    const validationErrors = validateAiAssetForm(aiAssetForm);
+    if (Object.keys(validationErrors).length > 0) {
+      setAiAssetErrors(validationErrors);
+      showStatus("Please fix highlighted AI asset fields.");
+      return;
+    }
+    setGeneratingAsset(true);
     try {
       const payload = {
         assetType: aiAssetForm.assetType,
@@ -1058,15 +1410,26 @@ const BusinessBuilder = () => {
       const response = await axios.post(`/api/business-builder/businesses/${activeBusinessId}/ai/assets/generate`, payload);
       if (response.data?.success) {
         setAiAssetForm((current) => ({ ...current, prompt: "", offer: "", cta: "" }));
+        setAiAssetErrors({});
         await Promise.all([fetchAIAssets(), fetchEntitlements()]);
         showStatus("AI asset generated and saved.");
       }
     } catch (error) {
-      showStatus(error?.response?.data?.message || "Unable to generate AI asset.");
+      const message = buildErrorMessage(error, "Unable to generate AI asset.");
+      if (message.toLowerCase().includes("limit reached")) {
+        showStatus("You've reached your monthly AI asset limit. Upgrade your plan to continue.");
+        return;
+      }
+      showStatus(message);
+    } finally {
+      setGeneratingAsset(false);
     }
   };
 
   const handleOrderStatusUpdate = async (orderId, status) => {
+    const confirmed = window.confirm(`Change order status to "${status}"?`);
+    if (!confirmed) return;
+    setUpdatingOrderId(orderId);
     try {
       const response = await axios.patch(`/api/business-builder/orders/${orderId}/status`, { status });
       if (response.data?.success) {
@@ -1074,11 +1437,14 @@ const BusinessBuilder = () => {
         showStatus("Order status updated.");
       }
     } catch (error) {
-      showStatus("Unable to update order status.");
+      showStatus(buildErrorMessage(error, "Unable to update order status."));
+    } finally {
+      setUpdatingOrderId("");
     }
   };
 
   const downloadPdf = async (invoiceId, invoiceNumber) => {
+    setDownloadingInvoiceId(invoiceId);
     try {
       const response = await axios.get(`/api/business-builder/invoices/${invoiceId}/pdf`, {
         responseType: "blob",
@@ -1093,7 +1459,9 @@ const BusinessBuilder = () => {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      showStatus("Unable to download PDF. Please try again later.");
+      showStatus(buildErrorMessage(error, "Unable to download PDF. Please try again later."));
+    } finally {
+      setDownloadingInvoiceId("");
     }
   };
 
@@ -1109,26 +1477,31 @@ const BusinessBuilder = () => {
     showStatus("Branding suggestions generated.");
   };
 
-  const generateDocument = () => {
-    const content = createDocumentContent({
-      type: documentForm.type,
-      businessForm,
-      launchForm,
-      documentForm,
-      plan: businessPlan,
-    });
+  const generateDocument = async () => {
+    setGeneratingDocument(true);
+    try {
+      const content = createDocumentContent({
+        type: documentForm.type,
+        businessForm,
+        launchForm,
+        documentForm,
+        plan: businessPlan,
+      });
 
-    const doc = {
-      id: `doc-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      type: documentForm.type,
-      title: `${documentForm.type} - ${documentForm.customerName || "General"}`,
-      content,
-    };
+      const doc = {
+        id: `doc-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        type: documentForm.type,
+        title: `${documentForm.type} - ${documentForm.customerName || "General"}`,
+        content,
+      };
 
-    setDocumentPreview(content);
-    setGeneratedDocuments((current) => [doc, ...current].slice(0, 30));
-    showStatus(`${documentForm.type} generated successfully.`);
+      setDocumentPreview(content);
+      setGeneratedDocuments((current) => [doc, ...current].slice(0, 30));
+      showStatus(`${documentForm.type} generated locally (offline preview).`);
+    } finally {
+      setGeneratingDocument(false);
+    }
   };
 
   const downloadDocument = () => {
@@ -1238,7 +1611,7 @@ const BusinessBuilder = () => {
         showStatus("AI 10X plan generated successfully.");
       }
     } catch (error) {
-      showStatus("Unable to generate AI 10X plan right now.");
+      showStatus(buildErrorMessage(error, "Unable to generate AI 10X plan right now."));
     } finally {
       setBuilder10Generating(false);
     }
@@ -1251,6 +1624,7 @@ const BusinessBuilder = () => {
     }
 
     try {
+      setDownloadingBuilderPdf(true);
       const response = await axios.post(
         `/api/business-builder/businesses/${activeBusinessId}/ai-plan/pdf`,
         {
@@ -1271,16 +1645,27 @@ const BusinessBuilder = () => {
       window.URL.revokeObjectURL(url);
       showStatus("Business plan PDF downloaded.");
     } catch (error) {
-      showStatus("Unable to export business plan PDF.");
+      showStatus(buildErrorMessage(error, "Unable to export business plan PDF."));
+    } finally {
+      setDownloadingBuilderPdf(false);
     }
   };
 
-  const toggleChecklist = (id) => {
-    setChecklist((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, completed: !item.completed } : item
-      )
+  const toggleChecklist = async (id) => {
+    const nextChecklist = checklist.map((item) =>
+      item.id === id ? { ...item, completed: !item.completed } : item
     );
+    setChecklist(nextChecklist);
+
+    if (!activeBusinessId) return;
+
+    try {
+      await axios.put(`/api/business-builder/businesses/${activeBusinessId}/checklist`, {
+        checklistUpdates: nextChecklist,
+      });
+    } catch (error) {
+      showStatus("Checklist update saved locally. Server sync failed and will retry on next change.");
+    }
   };
 
   const moveWizard = (delta) => {
@@ -1423,8 +1808,28 @@ const BusinessBuilder = () => {
   }, [businessForm.businessType]);
 
   const currentWizardConfig = WIZARD_STEPS[wizardStep];
+  const selectedBusiness = businesses.find((business) => business.businessId === activeBusinessId) || null;
   const selectedMiniApp = miniApps.find((app) => (app.miniAppId || app._id) === selectedMiniAppId) || null;
   const activeTabConfig = TAB_CONFIG.find((tab) => tab.id === activeTab) || TAB_CONFIG[0];
+  const effectiveMiniAppSlug = cleanSlug(miniAppForm.slug || miniAppForm.appName);
+  const slugAlreadyInUse = Boolean(
+    effectiveMiniAppSlug &&
+      miniApps.some((app) => String(app.slug || "").toLowerCase() === effectiveMiniAppSlug)
+  );
+  const slugIsReserved = RESERVED_SLUGS.has(effectiveMiniAppSlug);
+  const isAiAssetLimitReached = useMemo(() => {
+    if (!entitlements?.limits || !entitlements?.usage) return false;
+    const used = Number(entitlements.usage.aiAssetsGenerated || 0);
+    const allowed = Number(entitlements.limits.maxAiAssetsPerMonth);
+    if (!Number.isFinite(allowed)) return false;
+    return used >= allowed;
+  }, [entitlements]);
+  const isMiniAppLimitReached = useMemo(() => {
+    if (!entitlements?.limits) return false;
+    const allowed = Number(entitlements.limits.maxMiniApps);
+    if (!Number.isFinite(allowed)) return false;
+    return miniApps.length >= allowed;
+  }, [entitlements, miniApps.length]);
 
   return (
     <div className="business-builder-page">
@@ -1473,8 +1878,15 @@ const BusinessBuilder = () => {
         <p>{activeTabConfig.subtitle}</p>
       </div>
 
+      <div className="workspace-banner">
+        <strong>Workspace business:</strong>{" "}
+        {selectedBusiness ? `${selectedBusiness.businessName} (${selectedBusiness.businessType})` : "Draft (not yet saved)"}
+      </div>
+
       {statusMessage && <div className="status-banner">{statusMessage}</div>}
       {loading && <div className="status-banner info">Refreshing data...</div>}
+      {generatingAsset && <div className="status-banner info">Generating AI asset... this may take around 30-60 seconds.</div>}
+      {builder10Generating && <div className="status-banner info">Generating AI 10X plan... this may take around 30-60 seconds.</div>}
 
       {activeTab === "dashboard" && (
         <div className="section-card">
@@ -1775,8 +2187,8 @@ const BusinessBuilder = () => {
                 <button type="button" className="button-primary" onClick={generateBuilder10AiPlan} disabled={builder10Generating}>
                   {builder10Generating ? "Generating AI Plan..." : "Generate AI 10X Plan"}
                 </button>
-                <button type="button" className="button-secondary" onClick={downloadBuilder10PlanPdf}>
-                  Download Plan PDF
+                <button type="button" className="button-secondary" onClick={downloadBuilder10PlanPdf} disabled={downloadingBuilderPdf}>
+                  {downloadingBuilderPdf ? "Downloading PDF..." : "Download Plan PDF"}
                 </button>
               </div>
             </aside>
@@ -2016,6 +2428,7 @@ const BusinessBuilder = () => {
         <div className="section-card">
           <h2>Document Generator</h2>
           <p className="section-subtitle">Create ready-to-use business documents for operations and sales.</p>
+          <p className="section-note">Current mode: local/offline preview. Generated documents are saved in this browser workspace and download as `.txt`.</p>
 
           <form className="form-grid" onSubmit={(event) => event.preventDefault()}>
             <label>
@@ -2053,9 +2466,11 @@ const BusinessBuilder = () => {
           </form>
 
           <div className="ai-actions-row">
-            <button type="button" className="button-primary" onClick={generateDocument}>Generate Document</button>
-            <button type="button" className="button-secondary" onClick={copyDocument}>Copy</button>
-            <button type="button" className="button-secondary" onClick={downloadDocument}>Download .txt</button>
+            <button type="button" className="button-primary" onClick={generateDocument} disabled={generatingDocument}>
+              {generatingDocument ? "Generating..." : "Generate Document"}
+            </button>
+            <button type="button" className="button-secondary" onClick={copyDocument} disabled={generatingDocument}>Copy</button>
+            <button type="button" className="button-secondary" onClick={downloadDocument} disabled={generatingDocument}>Download .txt</button>
           </div>
 
           <div className="document-preview">
@@ -2085,6 +2500,7 @@ const BusinessBuilder = () => {
         <div className="section-card">
           <h2>Business Launch Checklist</h2>
           <p className="section-subtitle">Execution tracker after planning. Keep this at 100% before scaling spend.</p>
+          <p className="section-note">{activeBusinessId ? "Checklist changes sync to this business profile." : "Checklist is currently in draft mode until you save a business profile."}</p>
 
           <div className="wizard-progress-wrap">
             <div className="wizard-progress-row">
@@ -2116,34 +2532,40 @@ const BusinessBuilder = () => {
 
           <form className="form-grid" onSubmit={handleSaveBusiness}>
             {businesses.length > 1 ? (
-              <label className="full-width">
-                Select business profile
-                <select
-                  value={activeBusinessId}
-                  onChange={(event) => {
-                    const nextId = event.target.value;
-                    setActiveBusinessId(nextId);
-                    const selected = businesses.find((business) => business.businessId === nextId);
-                    if (selected) {
-                      applyBusinessToForm(selected);
-                    }
-                  }}
-                >
-                  {businesses.map((business) => (
-                    <option key={business.businessId} value={business.businessId}>
-                      {business.businessName} ({business.businessType})
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <>
+                <label className="full-width">
+                  Select business profile
+                  <select
+                    value={activeBusinessId}
+                    onChange={(event) => {
+                      const nextId = event.target.value;
+                      setActiveBusinessId(nextId);
+                      const selected = businesses.find((business) => business.businessId === nextId);
+                      if (selected) {
+                        applyBusinessToForm(selected);
+                        hydrateWorkspaceFromBusiness(selected);
+                      }
+                    }}
+                  >
+                    {businesses.map((business) => (
+                      <option key={business.businessId} value={business.businessId}>
+                        {business.businessName} ({business.businessType})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="section-note full-width">Workspace forms are loaded per selected business.</p>
+              </>
             ) : null}
             <label>
               Business name
               <input
+                className={businessErrors.businessName ? "input-invalid" : ""}
                 value={businessForm.businessName}
                 onChange={(event) => handleBusinessChange("businessName", event.target.value)}
                 required
               />
+              {businessErrors.businessName ? <span className="field-error">{businessErrors.businessName}</span> : null}
             </label>
             <label>
               Business type
@@ -2161,19 +2583,23 @@ const BusinessBuilder = () => {
             <label>
               Contact phone
               <input
+                className={businessErrors.phone ? "input-invalid" : ""}
                 value={businessForm.phone}
                 onChange={(event) => handleBusinessChange("phone", event.target.value)}
                 required
               />
+              {businessErrors.phone ? <span className="field-error">{businessErrors.phone}</span> : null}
             </label>
             <label>
               Contact email
               <input
                 type="email"
+                className={businessErrors.email ? "input-invalid" : ""}
                 value={businessForm.email}
                 onChange={(event) => handleBusinessChange("email", event.target.value)}
                 required
               />
+              {businessErrors.email ? <span className="field-error">{businessErrors.email}</span> : null}
             </label>
             <label>
               Website
@@ -2185,9 +2611,11 @@ const BusinessBuilder = () => {
             <label>
               GSTIN
               <input
+                className={businessErrors.gstin ? "input-invalid" : ""}
                 value={businessForm.gstin}
-                onChange={(event) => handleBusinessChange("gstin", event.target.value)}
+                onChange={(event) => handleBusinessChange("gstin", event.target.value.toUpperCase())}
               />
+              {businessErrors.gstin ? <span className="field-error">{businessErrors.gstin}</span> : null}
             </label>
             <label>
               Street address
@@ -2213,9 +2641,11 @@ const BusinessBuilder = () => {
             <label>
               PIN code
               <input
+                className={businessErrors.addressPincode ? "input-invalid" : ""}
                 value={businessForm.addressPincode}
                 onChange={(event) => handleBusinessChange("addressPincode", event.target.value)}
               />
+              {businessErrors.addressPincode ? <span className="field-error">{businessErrors.addressPincode}</span> : null}
             </label>
             <label>
               Primary accent
@@ -2233,8 +2663,8 @@ const BusinessBuilder = () => {
                 onChange={(event) => handleBusinessChange("secondaryColor", event.target.value)}
               />
             </label>
-            <button type="submit" className="button-primary">
-              Save business profile
+            <button type="submit" className="button-primary" disabled={savingBusiness}>
+              {savingBusiness ? "Saving..." : "Save business profile"}
             </button>
           </form>
         </div>
@@ -2251,33 +2681,42 @@ const BusinessBuilder = () => {
             <label>
               Customer name
               <input
+                className={invoiceErrors.customerName ? "input-invalid" : ""}
                 value={invoiceForm.customerName}
                 onChange={(event) => handleInvoiceChange("customerName", event.target.value)}
                 required
               />
+              {invoiceErrors.customerName ? <span className="field-error">{invoiceErrors.customerName}</span> : null}
             </label>
             <label>
               Customer phone
               <input
+                className={invoiceErrors.customerPhone || invoiceErrors.customerContact ? "input-invalid" : ""}
                 value={invoiceForm.customerPhone}
                 onChange={(event) => handleInvoiceChange("customerPhone", event.target.value)}
               />
+              {invoiceErrors.customerPhone ? <span className="field-error">{invoiceErrors.customerPhone}</span> : null}
             </label>
             <label>
               Customer email
               <input
                 type="email"
+                className={invoiceErrors.customerEmail || invoiceErrors.customerContact ? "input-invalid" : ""}
                 value={invoiceForm.customerEmail}
                 onChange={(event) => handleInvoiceChange("customerEmail", event.target.value)}
               />
+              {invoiceErrors.customerEmail ? <span className="field-error">{invoiceErrors.customerEmail}</span> : null}
             </label>
             <label>
               Customer GSTIN
               <input
+                className={invoiceErrors.customerGSTIN ? "input-invalid" : ""}
                 value={invoiceForm.customerGSTIN}
-                onChange={(event) => handleInvoiceChange("customerGSTIN", event.target.value)}
+                onChange={(event) => handleInvoiceChange("customerGSTIN", event.target.value.toUpperCase())}
               />
+              {invoiceErrors.customerGSTIN ? <span className="field-error">{invoiceErrors.customerGSTIN}</span> : null}
             </label>
+            {invoiceErrors.customerContact ? <p className="field-error full-width">{invoiceErrors.customerContact}</p> : null}
             <label className="full-width">
               Customer address
               <textarea
@@ -2289,10 +2728,12 @@ const BusinessBuilder = () => {
               Due date
               <input
                 type="date"
+                className={invoiceErrors.dueDate ? "input-invalid" : ""}
                 value={invoiceForm.dueDate}
                 onChange={(event) => handleInvoiceChange("dueDate", event.target.value)}
                 required
               />
+              {invoiceErrors.dueDate ? <span className="field-error">{invoiceErrors.dueDate}</span> : null}
             </label>
             <label>
               Discount (INR)
@@ -2325,12 +2766,14 @@ const BusinessBuilder = () => {
               <div className="invoice-item-row" key={`item-${index}`}>
                 <input
                   type="text"
+                  className={invoiceItemErrors?.[index]?.name ? "input-invalid" : ""}
                   value={item.name}
                   onChange={(event) => handleInvoiceItemChange(index, "name", event.target.value)}
                   placeholder="Item name"
                 />
                 <input
                   type="number"
+                  className={invoiceItemErrors?.[index]?.quantity ? "input-invalid" : ""}
                   value={item.quantity}
                   onChange={(event) => handleInvoiceItemChange(index, "quantity", event.target.value)}
                   min="1"
@@ -2338,6 +2781,7 @@ const BusinessBuilder = () => {
                 />
                 <input
                   type="number"
+                  className={invoiceItemErrors?.[index]?.unitPrice ? "input-invalid" : ""}
                   value={item.unitPrice}
                   onChange={(event) => handleInvoiceItemChange(index, "unitPrice", event.target.value)}
                   min="0"
@@ -2345,18 +2789,25 @@ const BusinessBuilder = () => {
                 />
                 <input
                   type="number"
+                  className={invoiceItemErrors?.[index]?.taxRate ? "input-invalid" : ""}
                   value={item.taxRate}
                   onChange={(event) => handleInvoiceItemChange(index, "taxRate", event.target.value)}
                   min="0"
                   placeholder="Tax %"
                 />
+                {(invoiceItemErrors?.[index]?.name || invoiceItemErrors?.[index]?.quantity || invoiceItemErrors?.[index]?.unitPrice || invoiceItemErrors?.[index]?.taxRate) ? (
+                  <p className="field-error full-width">
+                    {invoiceItemErrors?.[index]?.name || invoiceItemErrors?.[index]?.quantity || invoiceItemErrors?.[index]?.unitPrice || invoiceItemErrors?.[index]?.taxRate}
+                  </p>
+                ) : null}
               </div>
             ))}
-            <button type="button" className="button-secondary" onClick={handleAddInvoiceItem}>
+            {invoiceErrors.items ? <p className="field-error full-width">{invoiceErrors.items}</p> : null}
+            <button type="button" className="button-secondary" onClick={handleAddInvoiceItem} disabled={creatingInvoice}>
               Add item
             </button>
-            <button type="submit" className="button-primary">
-              Create invoice
+            <button type="submit" className="button-primary" disabled={creatingInvoice}>
+              {creatingInvoice ? "Creating..." : "Create invoice"}
             </button>
           </form>
 
@@ -2376,9 +2827,10 @@ const BusinessBuilder = () => {
                     <div className="invoice-card-actions">
                       <button
                         type="button"
+                        disabled={downloadingInvoiceId === (invoice.invoiceId || invoice._id)}
                         onClick={() => downloadPdf(invoice.invoiceId || invoice._id, invoice.invoiceNumber)}
                       >
-                        Download PDF
+                        {downloadingInvoiceId === (invoice.invoiceId || invoice._id) ? "Downloading..." : "Download PDF"}
                       </button>
                       <span className="invoice-status">{invoice.status}</span>
                     </div>
@@ -2401,19 +2853,26 @@ const BusinessBuilder = () => {
             <label>
               App display name
               <input
+                className={miniAppErrors.appName ? "input-invalid" : ""}
                 value={miniAppForm.appName}
                 onChange={(event) => handleMiniAppChange("appName", event.target.value)}
                 required
               />
+              {miniAppErrors.appName ? <span className="field-error">{miniAppErrors.appName}</span> : null}
             </label>
             <label>
               App slug
               <input
+                className={miniAppErrors.slug ? "input-invalid" : ""}
                 value={miniAppForm.slug}
-                onChange={(event) => handleMiniAppChange("slug", event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                onChange={(event) => handleMiniAppChange("slug", cleanSlug(event.target.value))}
                 required
                 placeholder="my-store"
               />
+              <span className="slug-preview">Public path preview: /{effectiveMiniAppSlug || "your-slug"}</span>
+              {slugIsReserved ? <span className="field-error">This slug is reserved. Choose another.</span> : null}
+              {slugAlreadyInUse ? <span className="field-error">This slug is already in use in your account.</span> : null}
+              {miniAppErrors.slug ? <span className="field-error">{miniAppErrors.slug}</span> : null}
             </label>
             <label>
               App type
@@ -2439,16 +2898,20 @@ const BusinessBuilder = () => {
               Email
               <input
                 type="email"
+                className={miniAppErrors.email ? "input-invalid" : ""}
                 value={miniAppForm.email}
                 onChange={(event) => handleMiniAppChange("email", event.target.value)}
               />
+              {miniAppErrors.email ? <span className="field-error">{miniAppErrors.email}</span> : null}
             </label>
             <label>
               Phone
               <input
+                className={miniAppErrors.phone ? "input-invalid" : ""}
                 value={miniAppForm.phone}
                 onChange={(event) => handleMiniAppChange("phone", event.target.value)}
               />
+              {miniAppErrors.phone ? <span className="field-error">{miniAppErrors.phone}</span> : null}
             </label>
             <label>
               Website
@@ -2480,9 +2943,12 @@ const BusinessBuilder = () => {
                 onChange={(event) => handleMiniAppChange("secondaryColor", event.target.value)}
               />
             </label>
-            <button type="submit" className="button-primary">
-              Launch mini app
+            <button type="submit" className="button-primary" disabled={creatingMiniApp || isMiniAppLimitReached}>
+              {creatingMiniApp ? "Launching..." : "Launch mini app"}
             </button>
+            {isMiniAppLimitReached ? (
+              <p className="field-error full-width">Mini app limit reached for your plan. Upgrade to create more mini apps.</p>
+            ) : null}
           </form>
 
           <div className="list-section">
@@ -2558,7 +3024,9 @@ const BusinessBuilder = () => {
                     ))}
                   </select>
                 </label>
-                <button type="submit" className="button-primary">Save plan</button>
+                <button type="submit" className="button-primary" disabled={savingSubscription}>
+                  {savingSubscription ? "Saving..." : "Save plan"}
+                </button>
               </form>
               <p className="section-note">
                 Featured directory: {entitlements?.monetization?.featuredDirectory ? "Enabled" : "Disabled"}
@@ -2586,9 +3054,19 @@ const BusinessBuilder = () => {
                 </label>
                 <label className="full-width">
                   Prompt
-                  <textarea value={aiAssetForm.prompt} onChange={(event) => handleAiAssetChange("prompt", event.target.value)} />
+                  <textarea
+                    className={aiAssetErrors.prompt ? "input-invalid" : ""}
+                    value={aiAssetForm.prompt}
+                    onChange={(event) => handleAiAssetChange("prompt", event.target.value)}
+                  />
+                  {aiAssetErrors.prompt ? <span className="field-error">{aiAssetErrors.prompt}</span> : null}
                 </label>
-                <button type="submit" className="button-primary">Generate</button>
+                <button type="submit" className="button-primary" disabled={generatingAsset || isAiAssetLimitReached}>
+                  {generatingAsset ? "Generating..." : "Generate"}
+                </button>
+                {isAiAssetLimitReached ? (
+                  <p className="field-error full-width">You've reached your monthly AI asset limit. Upgrade plan to continue.</p>
+                ) : null}
               </form>
             </div>
           </div>
@@ -2682,7 +3160,9 @@ const BusinessBuilder = () => {
                         Stock
                         <input type="number" min="0" value={productForm.stock} onChange={(event) => handleProductChange("stock", event.target.value)} />
                       </label>
-                      <button type="submit" className="button-primary">Add product</button>
+                      <button type="submit" className="button-primary" disabled={creatingProduct}>
+                        {creatingProduct ? "Adding..." : "Add product"}
+                      </button>
                     </form>
                   </div>
 
@@ -2697,8 +3177,13 @@ const BusinessBuilder = () => {
                             <strong>{product.name}</strong>
                             <p>{formatINR(product.price)}{product.discountedPrice ? ` -> ${formatINR(product.discountedPrice)}` : ""}</p>
                             <p>{product.category || "General"} | Stock: {product.stock ?? "-"}</p>
-                            <button type="button" className="button-secondary" onClick={() => handleDeleteProduct(product.productId || product._id)}>
-                              Remove
+                            <button
+                              type="button"
+                              className="button-secondary"
+                              disabled={deletingProductId === (product.productId || product._id)}
+                              onClick={() => handleDeleteProduct(product.productId || product._id)}
+                            >
+                              {deletingProductId === (product.productId || product._id) ? "Removing..." : "Remove"}
                             </button>
                           </div>
                         ))}
@@ -2722,9 +3207,27 @@ const BusinessBuilder = () => {
                             <p>Status: {order.status}</p>
                           </div>
                           <div className="invoice-card-actions">
-                            <button type="button" onClick={() => handleOrderStatusUpdate(order.orderId || order._id, "confirmed")}>Confirm</button>
-                            <button type="button" onClick={() => handleOrderStatusUpdate(order.orderId || order._id, "completed")}>Complete</button>
-                            <button type="button" onClick={() => handleOrderStatusUpdate(order.orderId || order._id, "cancelled")}>Cancel</button>
+                            <button
+                              type="button"
+                              disabled={updatingOrderId === (order.orderId || order._id)}
+                              onClick={() => handleOrderStatusUpdate(order.orderId || order._id, "confirmed")}
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              type="button"
+                              disabled={updatingOrderId === (order.orderId || order._id)}
+                              onClick={() => handleOrderStatusUpdate(order.orderId || order._id, "completed")}
+                            >
+                              Complete
+                            </button>
+                            <button
+                              type="button"
+                              disabled={updatingOrderId === (order.orderId || order._id)}
+                              onClick={() => handleOrderStatusUpdate(order.orderId || order._id, "cancelled")}
+                            >
+                              Cancel
+                            </button>
                           </div>
                         </div>
                       ))}

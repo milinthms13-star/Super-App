@@ -130,8 +130,14 @@ describe("useAstrologyHomeController", () => {
       result.current.handleSectionChange("ai");
     });
 
-    expect(result.current.activeSection).toBe("today");
+    expect(result.current.activeSection).toBe("profile");
     expect(result.current.saveState.type).toBe("error");
+    expect(result.current.requiredProfileFields).toEqual([
+      "birthDate",
+      "birthTime",
+      "birthPlace",
+      "gender",
+    ]);
   });
 
   test("generate report transitions to today and marks personalized ready", async () => {
@@ -173,6 +179,26 @@ describe("useAstrologyHomeController", () => {
       "year",
       "en"
     );
+    expect(result.current.saveState.type).toBe("error");
+  });
+
+  test("assistant failure stores retry question", async () => {
+    astrologyService.askAstrologyAssistant.mockRejectedValue(new Error("Assistant unavailable"));
+    const { result } = renderHook(() => useAstrologyHomeController());
+
+    await waitFor(() => {
+      expect(result.current.selectedSign).toBe("aries");
+    });
+
+    act(() => {
+      result.current.setAiQuestion("Will this month improve?");
+    });
+
+    await act(async () => {
+      await result.current.handleAskAssistant();
+    });
+
+    expect(result.current.assistantRetryQuestion).toBe("Will this month improve?");
     expect(result.current.saveState.type).toBe("error");
   });
 });

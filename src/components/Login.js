@@ -871,10 +871,10 @@ const Login = ({
                     className="btn btn-google"
                     onClick={() => handleSelectAuthMethod("gmail")}
                     disabled={loading}
-                    aria-label={isLoginFlow ? "Continue with Gmail" : "Sign up with Gmail"}
+                    aria-label={isLoginFlow ? "Continue with Google" : "Sign up with Google"}
                   >
                     <img src="/google-icon.svg" alt="Google" width="20" height="20" />
-                    {isLoginFlow ? "Continue with Gmail" : "Sign up with Gmail"}
+                    {isLoginFlow ? "Continue with Google" : "Sign up with Google"}
                   </button>
                   <div className="form-divider">OR</div>
                 </div>
@@ -1096,7 +1096,7 @@ const Login = ({
                   disabled={loading}
                 >
                   <img src="/google-icon.svg" alt="Google" width="32" height="32" />
-                  <span>Gmail</span>
+                  <span>Google</span>
                 </button>
 
                 <button
@@ -1139,20 +1139,20 @@ const Login = ({
 
               <div className="trust-indicators">
                 <div className="trust-indicator">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm-.997-15h2v9h-2v-9zm.5-5a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"/>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 6L9 17l-5-5"/>
                   </svg>
                   Secure authentication
                 </div>
                 <div className="trust-indicator">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M10 15.172l9.192-9.193 1.415 1.414L10 18 .393 8.393 1.808 6.979z"/>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 6L9 17l-5-5"/>
                   </svg>
                   OTP verified
                 </div>
                 <div className="trust-indicator">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M3 11h2v2H3v-2zm4-7h2v9H7V4zm4-2h2v11h-2V2zm4 3h2v8h-2V5zm4-2h2v10h-2V3z"/>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 6L9 17l-5-5"/>
                   </svg>
                   Encrypted access
                 </div>

@@ -98,6 +98,30 @@ const billpayTransactionSchema = new mongoose.Schema(
       type: String,
       maxlength: 100,
     },
+    provider: {
+      type: String,
+      enum: ["razorpay", "setu"],
+      default: "razorpay",
+      index: true,
+    },
+    providerOrderId: {
+      type: String,
+      maxlength: 100,
+      index: true,
+    },
+    providerPaymentId: {
+      type: String,
+      maxlength: 100,
+      index: true,
+    },
+    providerReference: {
+      type: String,
+      maxlength: 200,
+    },
+    providerPayload: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
     paidAt: {
       type: Date,
     },

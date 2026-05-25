@@ -17,18 +17,7 @@ const billSchema = new mongoose.Schema(
     billerId: {
       type: String,
       required: true,
-      enum: [
-        "KSEB",
-        "KWA",
-        "BSES-LPG",
-        "AIRTEL-DTH",
-        "JIO-BB",
-        "AXIS-INS",
-        "HDFC-EMI",
-        "SBI-CC",
-        "KOCHI-MUNI",
-        "FASTAG-NHAI",
-      ],
+      maxlength: 100,
     },
     billerName: {
       type: String,
@@ -116,6 +105,15 @@ const billSchema = new mongoose.Schema(
       type: String,
       enum: ["Manual", "BBPS Directory", "Auto-Fetch"],
       default: "Manual",
+    },
+    provider: {
+      type: String,
+      enum: ["mock", "razorpay", "setu"],
+      default: "mock",
+    },
+    providerMeta: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
     lastPaidDate: {
       type: Date,

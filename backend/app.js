@@ -291,6 +291,7 @@ app.use('/api/astrology', require('./routes/astrology'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/giftcards', require('./routes/giftcards'));
 app.use('/api/health', require('./routes/health'));
+app.use('/api/billpay', require('./routes/billpay'));
 app.use('/api', require('./routes/healthcare'));
 app.use('/api/localmarket', require('./routes/localmarket'));
 app.use('/api/localservices', require('./routes/localservices'));

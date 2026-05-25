@@ -49,6 +49,7 @@ const AstrologyHome = () => {
     signsNotice,
     readingNotice,
     saveState,
+    requiredProfileFields,
     festivals,
     panchangam,
     panchangamNotice,
@@ -56,8 +57,11 @@ const AstrologyHome = () => {
     aiQuestion,
     setAiQuestion,
     assistantAnswer,
+    assistantHistory,
+    assistantRetryQuestion,
     aiLoading,
     downloadingHoroscopePeriod,
+    downloadRetryPeriod,
     selectedSignDetails,
     heroPrediction,
     filteredSigns,
@@ -77,10 +81,15 @@ const AstrologyHome = () => {
     handleBirthTimezoneChange,
     handleNakshatraChange,
     handleQuickSave,
+    handleRestoreSavedReading,
     handleGenerateReport,
     handleAskAssistant,
+    handleRetryAssistantQuestion,
     handleDownloadHoroscopeReport,
+    handleRetryHoroscopeDownload,
   } = useAstrologyHomeController();
+
+  const isProfileFieldMissing = (fieldName) => requiredProfileFields.includes(fieldName);
   return (
     <section className="astrology-home" lang={language === "ml" ? "ml" : "en"}>
       <div className="astrology-shell">
@@ -102,7 +111,7 @@ const AstrologyHome = () => {
           </form>
           <div className="astro-top-actions">
             <button type="button" className="astrology-secondary-button" onClick={() => setLanguage((prev) => (prev === "en" ? "ml" : "en"))}>
-              {language === "en" ? "മലയാളം" : "English"}
+              {language === "en" ? "Switch to Malayalam" : "Switch to English"}
             </button>
             <button type="button" className="astrology-secondary-button" onClick={() => setActiveSection("profile")}>
               Profile
@@ -203,6 +212,8 @@ const AstrologyHome = () => {
               readingNotice={readingNotice}
               signsNotice={signsNotice}
               todayEnergyScore={todayEnergyScore}
+              downloadRetryPeriod={downloadRetryPeriod}
+              handleRetryHoroscopeDownload={handleRetryHoroscopeDownload}
             />
           ) : null}
 
@@ -239,6 +250,16 @@ const AstrologyHome = () => {
                 >
                   {downloadingHoroscopePeriod === "year" ? "Downloading yearly..." : "Download yearly horoscope"}
                 </button>
+                {downloadRetryPeriod === "year" ? (
+                  <button
+                    type="button"
+                    className="astrology-secondary-button"
+                    disabled={downloadingHoroscopePeriod !== ""}
+                    onClick={handleRetryHoroscopeDownload}
+                  >
+                    Retry yearly download
+                  </button>
+                ) : null}
               </article>
             </div>
           ) : null}
@@ -270,6 +291,16 @@ const AstrologyHome = () => {
                   >
                     {downloadingHoroscopePeriod === "total" ? "Downloading total..." : "Download total horoscope"}
                   </button>
+                  {downloadRetryPeriod === "total" ? (
+                    <button
+                      type="button"
+                      className="astrology-secondary-button"
+                      disabled={downloadingHoroscopePeriod !== ""}
+                      onClick={handleRetryHoroscopeDownload}
+                    >
+                      Retry total download
+                    </button>
+                  ) : null}
                 </div>
               </article>
             </div>
@@ -299,6 +330,8 @@ const AstrologyHome = () => {
               squarePlanetChart={squarePlanetChart}
               downloadingHoroscopePeriod={downloadingHoroscopePeriod}
               handleDownloadHoroscopeReport={handleDownloadHoroscopeReport}
+              downloadRetryPeriod={downloadRetryPeriod}
+              handleRetryHoroscopeDownload={handleRetryHoroscopeDownload}
             />
           ) : null}
 
@@ -333,15 +366,40 @@ const AstrologyHome = () => {
               <article className="astrology-panel astro-result-card astro-span-2">
                 <h4>Ask AI Astrology</h4>
                 <label className="astrology-field"><span>Your question</span><textarea rows={4} value={aiQuestion} onChange={(event) => setAiQuestion(event.target.value)} /></label>
-                <button type="button" className="astrology-save-button" onClick={handleAskAssistant}>{aiLoading ? "Thinking..." : "Ask now"}</button>
+                <div className="astrology-inline-actions">
+                  <button type="button" className="astrology-save-button" onClick={handleAskAssistant} disabled={aiLoading}>{aiLoading ? "Thinking..." : "Ask now"}</button>
+                  {assistantRetryQuestion ? (
+                    <button type="button" className="astrology-secondary-button" disabled={aiLoading} onClick={handleRetryAssistantQuestion}>
+                      Retry last question
+                    </button>
+                  ) : null}
+                </div>
               </article>
               {assistantAnswer ? <article className="astrology-panel astro-result-card astro-span-2"><h4>Answer</h4><p>{assistantAnswer.answer}</p>{assistantAnswer.tips?.length ? <ul>{assistantAnswer.tips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul> : null}{assistantAnswer?.quality?.note ? <p className="astrology-inline-message astrology-inline-message-warning">{assistantAnswer.quality.note}</p> : null}</article> : null}
+              {assistantHistory.length ? (
+                <article className="astrology-panel astro-result-card astro-span-2">
+                  <h4>Question history</h4>
+                  <div className="astrology-mini-history-list">
+                    {assistantHistory.slice(0, 6).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="astrology-mini-history-item"
+                        onClick={() => setAiQuestion(item.question)}
+                      >
+                        <strong>{item.question}</strong>
+                        <span>{item.answer || "No answer captured."}</span>
+                      </button>
+                    ))}
+                  </div>
+                </article>
+              ) : null}
             </div>
           ) : null}
 
           {activeSection === "saved" ? (
             <div className="astro-card-grid">
-              <article className="astrology-panel astro-result-card"><h4>Saved daily reports</h4>{profileApi.recentSavedReadings.length ? <div className="astrology-mini-history-list">{profileApi.recentSavedReadings.map((item) => <button key={`${item.sign}-${item.readingDate}`} type="button" className="astrology-mini-history-item" onClick={() => { setSelectedSign(item.sign); setActiveSection("today"); }}><strong>{astrologyService.getFallbackSign(item.sign).label}</strong><span>{formatSavedReadingDate(item.readingDate)}</span></button>)}</div> : <p className="astrology-history-empty">No saved daily reports.</p>}</article>
+              <article className="astrology-panel astro-result-card"><h4>Saved daily reports</h4>{profileApi.recentSavedReadings.length ? <div className="astrology-mini-history-list">{profileApi.recentSavedReadings.map((item) => <button key={`${item.sign}-${item.readingDate}`} type="button" className="astrology-mini-history-item" onClick={() => handleRestoreSavedReading(item)}><strong>{astrologyService.getFallbackSign(item.sign).label}</strong><span>{formatSavedReadingDate(item.readingDate)}</span></button>)}</div> : <p className="astrology-history-empty">No saved daily reports.</p>}</article>
               <article className="astrology-panel astro-result-card"><h4>Saved Kundli</h4>{kundliApi.kundliHistory.length ? <div className="astrology-mini-history-list">{kundliApi.kundliHistory.slice(0, 6).map((item) => <button key={item.id} type="button" className="astrology-mini-history-item" onClick={() => { kundliApi.handleRestoreKundliSnapshot(item); setActiveSection("kundli"); }}><strong>{item.profileName || "Profile"}</strong><span>{formatSavedReadingDate(item.createdAt)}</span></button>)}</div> : <p className="astrology-history-empty">No saved Kundli reports.</p>}</article>
             </div>
           ) : null}
@@ -351,11 +409,11 @@ const AstrologyHome = () => {
               <article className="astrology-panel astro-result-card astro-span-2">
                 <h4>Profile settings</h4>
                 <div className="astro-compact-form">
-                  <label className="astrology-field"><span>Birth date</span><input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => profileApi.handleDraftChange("birthDate", event.target.value)} /></label>
-                  <label className="astrology-field"><span>Birth time</span><input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} /></label>
-                  <label className="astrology-field"><span>Birth place</span><input type="text" list="astro-birth-place-options-profile" value={profileApi.profileDraft.birthPlace} onChange={(event) => handleBirthPlaceChange(event.target.value)} /><datalist id="astro-birth-place-options-profile">{BIRTH_LOCATION_OPTIONS.map((option) => <option key={option.label} value={option.label} />)}</datalist></label>
+                  <label className={`astrology-field ${isProfileFieldMissing("birthDate") ? "astrology-field-missing" : ""}`}><span>Birth date</span><input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => profileApi.handleDraftChange("birthDate", event.target.value)} /></label>
+                  <label className={`astrology-field ${isProfileFieldMissing("birthTime") ? "astrology-field-missing" : ""}`}><span>Birth time</span><input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} /></label>
+                  <label className={`astrology-field ${isProfileFieldMissing("birthPlace") ? "astrology-field-missing" : ""}`}><span>Birth place</span><input type="text" list="astro-birth-place-options-profile" value={profileApi.profileDraft.birthPlace} onChange={(event) => handleBirthPlaceChange(event.target.value)} /><datalist id="astro-birth-place-options-profile">{BIRTH_LOCATION_OPTIONS.map((option) => <option key={option.label} value={option.label} />)}</datalist></label>
                   <label className="astrology-field"><span>Birth timezone</span><select value={profileApi.profileDraft.birthTimezone || DEFAULT_BIRTH_TIME_ZONE} onChange={(event) => handleBirthTimezoneChange(event.target.value)}>{BIRTH_TIMEZONE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-                  <label className="astrology-field"><span>Gender</span><select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>{GENDER_OPTIONS.map((option) => <option key={option.value || "unset"} value={option.value}>{option.label}</option>)}</select></label>
+                  <label className={`astrology-field ${isProfileFieldMissing("gender") ? "astrology-field-missing" : ""}`}><span>Gender</span><select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>{GENDER_OPTIONS.map((option) => <option key={option.value || "unset"} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="astrology-field"><span>Favorite topics</span><input type="text" value={profileApi.profileDraft.favoriteTopics} onChange={(event) => profileApi.handleDraftChange("favoriteTopics", event.target.value)} /></label>
                 </div>
                 <button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save profile</button>

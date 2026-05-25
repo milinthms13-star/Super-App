@@ -39,7 +39,9 @@ jest.mock("../services/billpayService", () => ({
   updateBillAutopay: jest.fn(),
   discoverBill: jest.fn(),
   createPaymentOrder: jest.fn(),
+  getProviderName: jest.fn(() => "razorpay"),
   verifyPaymentSignature: jest.fn(),
+  verifySetuPaymentStatus: jest.fn(),
   recordPayment: jest.fn(),
   getTransactionHistory: jest.fn(),
   getReceipt: jest.fn(),
@@ -49,6 +51,7 @@ jest.mock("../services/billpayService", () => ({
   getUserMandates: jest.fn(),
   updateMandateStatus: jest.fn(),
   getAdminAnalytics: jest.fn(),
+  getProviderDiagnostics: jest.fn(),
 }));
 
 const billpayService = require("../services/billpayService");
@@ -129,6 +132,31 @@ describe("billpay routes integration", () => {
     expect(response.body.currency).toBe("INR");
   });
 
+  test("POST /api/billpay/pay/create-order returns Setu payload when provider is setu", async () => {
+    billpayService.createPaymentOrder.mockResolvedValue({
+      gateway: "setu",
+      orderId: "SETU_REF_123",
+      amount: 125000,
+      currency: "INR",
+      paymentRefId: "MBBP-123",
+    });
+
+    const response = await request(app)
+      .post("/api/billpay/pay/create-order")
+      .send({
+        billId: "bill-1",
+        amount: 1250,
+        method: "UPI",
+        authMode: "PIN + OTP",
+      })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.gateway).toBe("setu");
+    expect(response.body.orderId).toBe("SETU_REF_123");
+    expect(response.body.paymentRefId).toBe("MBBP-123");
+  });
+
   test("POST /api/billpay/pay/verify verifies signature and records transaction", async () => {
     billpayService.verifyPaymentSignature.mockResolvedValue(true);
     billpayService.recordPayment.mockResolvedValue({
@@ -172,6 +200,47 @@ describe("billpay routes integration", () => {
     );
   });
 
+  test("POST /api/billpay/pay/verify uses Setu verification when gateway is setu", async () => {
+    billpayService.verifySetuPaymentStatus.mockResolvedValue({
+      status: "success",
+      refId: "SETU_REF_123",
+    });
+    billpayService.recordPayment.mockResolvedValue({
+      transactionId: "txn-2",
+      txnId: "TXN-222222",
+      receiptId: "RCPT-222222",
+      billerReference: "BBPS-KSEB-222222",
+      amount: 1250,
+    });
+
+    const response = await request(app)
+      .post("/api/billpay/pay/verify")
+      .send({
+        gateway: "setu",
+        orderId: "SETU_REF_123",
+        paymentId: "PAY_REF_123",
+        signature: "not-applicable",
+        billId: "bill-1",
+        amount: 1250,
+        method: "UPI",
+        authMode: "PIN + OTP",
+        otp: "123456",
+        pin: "1234",
+      })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(billpayService.verifySetuPaymentStatus).toHaveBeenCalledWith("SETU_REF_123");
+    expect(billpayService.recordPayment).toHaveBeenCalledWith(
+      "billpay-user-1",
+      "bill-1",
+      1250,
+      expect.objectContaining({
+        provider: "setu",
+      })
+    );
+  });
+
   test("GET /api/billpay/admin/analytics blocks non-admin users", async () => {
     const response = await request(app)
       .get("/api/billpay/admin/analytics")
@@ -200,5 +269,38 @@ describe("billpay routes integration", () => {
     expect(response.body.success).toBe(true);
     expect(response.body.totalTransactions).toBe(7);
     expect(billpayService.getAdminAnalytics).toHaveBeenCalledWith("thisMonth");
+  });
+
+  test("GET /api/billpay/health/provider blocks non-admin users", async () => {
+    const response = await request(app)
+      .get("/api/billpay/health/provider")
+      .set("x-test-role", "user")
+      .expect(403);
+
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain("Admin access required");
+  });
+
+  test("GET /api/billpay/health/provider returns provider diagnostics for admin users", async () => {
+    billpayService.getProviderDiagnostics.mockReturnValue({
+      provider: "setu",
+      setuEnabled: true,
+      configured: true,
+      strictMode: false,
+      baseUrl: "https://dg.setu.co",
+      apiVersion: "v1",
+      maxPollAttempts: 5,
+      pollIntervalMs: 1200,
+      missingConfig: [],
+    });
+
+    const response = await request(app)
+      .get("/api/billpay/health/provider")
+      .set("x-test-role", "admin")
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.provider).toBe("setu");
+    expect(billpayService.getProviderDiagnostics).toHaveBeenCalledTimes(1);
   });
 });

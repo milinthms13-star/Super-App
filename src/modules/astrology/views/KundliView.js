@@ -23,6 +23,8 @@ const KundliView = ({
   squarePlanetChart,
   downloadingHoroscopePeriod,
   handleDownloadHoroscopeReport,
+  downloadRetryPeriod,
+  handleRetryHoroscopeDownload,
 }) => (
   <div className="astro-card-grid">
     <article className="astrology-panel astro-result-card astro-span-2">
@@ -76,6 +78,16 @@ const KundliView = ({
       >
         {downloadingHoroscopePeriod === "year" ? "Downloading yearly..." : "Download yearly horoscope"}
       </button>
+      {downloadRetryPeriod === "year" ? (
+        <button
+          type="button"
+          className="astrology-secondary-button"
+          disabled={downloadingHoroscopePeriod !== ""}
+          onClick={handleRetryHoroscopeDownload}
+        >
+          Retry yearly download
+        </button>
+      ) : null}
       <button
         type="button"
         className="astrology-secondary-button"
@@ -84,10 +96,19 @@ const KundliView = ({
       >
         {downloadingHoroscopePeriod === "total" ? "Downloading total..." : "Download total horoscope"}
       </button>
+      {downloadRetryPeriod === "total" ? (
+        <button
+          type="button"
+          className="astrology-secondary-button"
+          disabled={downloadingHoroscopePeriod !== ""}
+          onClick={handleRetryHoroscopeDownload}
+        >
+          Retry total download
+        </button>
+      ) : null}
       {kundliApi.activeKundliSnapshotId ? <button type="button" className="astrology-secondary-button" onClick={kundliApi.handleLoadLiveKundli}>Use live generation</button> : null}
     </article>
   </div>
 );
 
 export default KundliView;
-

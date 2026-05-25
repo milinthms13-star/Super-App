@@ -130,20 +130,40 @@ router.post(
   validatePaymentMethod,
   async (req, res) => {
     try {
-      const { billId, amount } = req.body;
+      const { billId, amount, method } = req.body;
 
       // Get order data from service
       const orderData = await billpayService.createPaymentOrder(
         req.user._id,
         billId,
-        amount
+        amount,
+        method
       );
 
+      if (orderData.gateway === "setu") {
+        return res.json({
+          success: true,
+          gateway: "setu",
+          provider: "setu",
+          orderId: orderData.orderId,
+          amount: orderData.amount,
+          currency: orderData.currency || "INR",
+          paymentRefId: orderData.paymentRefId,
+          message: "Setu payment request created successfully",
+        });
+      }
+
       // Create Razorpay order
-      const razorpayOrder = await razorpay.orders.create(orderData);
+      const razorpayOrder = await razorpay.orders.create({
+        amount: orderData.amount,
+        currency: orderData.currency,
+        receipt: orderData.receipt,
+        notes: orderData.notes,
+      });
 
       res.json({
         success: true,
+        gateway: "razorpay",
         orderId: razorpayOrder.id,
         amount: razorpayOrder.amount,
         currency: razorpayOrder.currency,
@@ -173,10 +193,19 @@ router.post(
         amount,
         method,
         authMode,
+        gateway,
       } = req.body;
 
-      // Verify signature
-      await billpayService.verifyPaymentSignature(orderId, paymentId, signature);
+      const normalizedGateway = String(gateway || "").trim().toLowerCase();
+      const isSetuGateway =
+        normalizedGateway === "setu" || billpayService.getProviderName() === "setu";
+
+      if (isSetuGateway) {
+        await billpayService.verifySetuPaymentStatus(orderId);
+      } else {
+        // Verify signature for Razorpay flow
+        await billpayService.verifyPaymentSignature(orderId, paymentId, signature);
+      }
 
       // Record payment
       const paymentResult = await billpayService.recordPayment(req.user._id, billId, amount, {
@@ -185,6 +214,15 @@ router.post(
         razorpayOrderId: orderId,
         razorpayPaymentId: paymentId,
         razorpaySignature: signature,
+        provider: isSetuGateway ? "setu" : "razorpay",
+        providerOrderId: orderId,
+        providerPaymentId: paymentId,
+        providerReference: isSetuGateway ? orderId : "",
+        providerPayload: isSetuGateway
+          ? {
+              gateway: "setu",
+            }
+          : null,
         ipAddress: req.ip,
         userAgent: req.get("user-agent"),
       });
@@ -388,6 +426,23 @@ router.get("/admin/analytics", authenticate, verifyAdmin, async (req, res) => {
     res.json({
       success: true,
       ...analytics,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /billpay/health/provider
+ * Provider diagnostics for Setu/Razorpay integration (admin only)
+ */
+router.get("/health/provider", authenticate, verifyAdmin, async (_req, res) => {
+  try {
+    const diagnostics = billpayService.getProviderDiagnostics();
+    res.json({
+      success: true,
+      ...diagnostics,
+      timestamp: new Date(),
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });

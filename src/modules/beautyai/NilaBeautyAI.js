@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { buildApiUrl } from "../../utils/api";
@@ -34,6 +34,13 @@ const NilaBeautyAI = () => {
   const [planBundle, setPlanBundle] = useState(null);
   const [progressLogs, setProgressLogs] = useState([]);
   const [savedPlans, setSavedPlans] = useState([]);
+  const [savedSelfies, setSavedSelfies] = useState([]);
+  const [usageStatus, setUsageStatus] = useState(null);
+  const [consentStatus, setConsentStatus] = useState(null);
+  const [activePlanId, setActivePlanId] = useState("");
+  const [activePlanTitle, setActivePlanTitle] = useState("");
+  const [editingPlanId, setEditingPlanId] = useState("");
+  const [editingPlanNotes, setEditingPlanNotes] = useState("");
   const [isAdminControlsVisible, setIsAdminControlsVisible] = useState(false);
   const [subscriptionRules, setSubscriptionRules] = useState(null);
   const [adminAlerts, setAdminAlerts] = useState([]);
@@ -44,6 +51,7 @@ const NilaBeautyAI = () => {
     language: "en",
   });
   const [busyKey, setBusyKey] = useState("");
+  const replaceSelfieInputRefs = useRef({});
 
   const request = useMemo(
     () =>
@@ -82,10 +90,12 @@ const NilaBeautyAI = () => {
     });
   }, [pushStatus, request, withBusy]);
 
-  const loadProgress = useCallback(async () => {
+  const loadProgress = useCallback(async (planId = "") => {
     await withBusy("progress", async () => {
       try {
-        const response = await request.get(buildApiUrl("/beauty-ai/progress-log/mine"));
+        const response = await request.get(buildApiUrl("/beauty-ai/progress-log/mine"), {
+          params: { planId: String(planId || "").trim() },
+        });
         setProgressLogs(Array.isArray(response.data?.logs) ? response.data.logs : []);
       } catch (_error) {
         setProgressLogs([]);
@@ -100,6 +110,43 @@ const NilaBeautyAI = () => {
         setSavedPlans(Array.isArray(response.data?.data) ? response.data.data : []);
       } catch (_error) {
         setSavedPlans([]);
+      }
+    });
+  }, [request, withBusy]);
+
+  const loadSavedSelfies = useCallback(async () => {
+    await withBusy("saved-selfies", async () => {
+      try {
+        const response = await request.get(buildApiUrl("/beauty-ai/selfies/mine"));
+        setSavedSelfies(Array.isArray(response.data?.data) ? response.data.data : []);
+      } catch (_error) {
+        setSavedSelfies([]);
+      }
+    });
+  }, [request, withBusy]);
+
+  const loadUsageStatus = useCallback(async () => {
+    await withBusy("usage", async () => {
+      try {
+        const response = await request.get(buildApiUrl("/beauty-ai/me/usage"));
+        setUsageStatus(response.data?.usage || null);
+      } catch (_error) {
+        setUsageStatus(null);
+      }
+    });
+  }, [request, withBusy]);
+
+  const loadConsentStatus = useCallback(async () => {
+    await withBusy("consent", async () => {
+      try {
+        const response = await request.get(buildApiUrl("/beauty-ai/consent/status"));
+        setConsentStatus({
+          planGeneration: response.data?.planGeneration || { granted: false, grantedAt: null },
+          selfieAnalysis: response.data?.selfieAnalysis || { granted: false, grantedAt: null },
+          consentVersion: response.data?.consentVersion || "",
+        });
+      } catch (_error) {
+        setConsentStatus(null);
       }
     });
   }, [request, withBusy]);
@@ -123,17 +170,28 @@ const NilaBeautyAI = () => {
 
   useEffect(() => {
     loadTips();
-    loadProgress();
     loadSavedPlans();
+    loadSavedSelfies();
+    loadUsageStatus();
+    loadConsentStatus();
     loadAdminSettings();
-  }, [loadAdminSettings, loadProgress, loadSavedPlans, loadTips]);
+  }, [loadAdminSettings, loadConsentStatus, loadSavedPlans, loadSavedSelfies, loadTips, loadUsageStatus]);
+
+  useEffect(() => {
+    loadProgress(activePlanId);
+  }, [activePlanId, loadProgress]);
 
   const handlePlanReady = useCallback(
     (bundle) => {
       setPlanBundle(bundle);
-      loadProgress();
+      if (!activePlanId) {
+        setActivePlanTitle(String(bundle?.plan?.title || ""));
+      }
+      loadProgress(activePlanId);
+      loadUsageStatus();
+      loadConsentStatus();
     },
-    [loadProgress]
+    [activePlanId, loadConsentStatus, loadProgress, loadUsageStatus]
   );
 
   const saveCurrentPlan = useCallback(
@@ -163,15 +221,22 @@ const NilaBeautyAI = () => {
             eventType: profile.eventType || "daily-glow",
             selfieSignals: source.selfieSignals || {},
           };
-          await request.post(buildApiUrl("/beauty-ai/plans"), payload);
+          const response = await request.post(buildApiUrl("/beauty-ai/plans"), payload);
+          const savedId = String(response?.data?.data?._id || "");
+          if (savedId) {
+            setActivePlanId(savedId);
+            setActivePlanTitle(String(source?.plan?.title || "Saved plan"));
+            loadProgress(savedId);
+          }
           pushStatus("success", "Beauty plan saved.");
           loadSavedPlans();
+          loadUsageStatus();
         } catch (error) {
           pushStatus("error", error?.response?.data?.message || "Failed to save beauty plan.");
         }
       });
     },
-    [loadSavedPlans, planBundle, pushStatus, request, withBusy]
+    [loadProgress, loadSavedPlans, loadUsageStatus, planBundle, pushStatus, request, withBusy]
   );
 
   const archivePlan = useCallback(
@@ -183,6 +248,170 @@ const NilaBeautyAI = () => {
           loadSavedPlans();
         } catch (error) {
           pushStatus("error", error?.response?.data?.message || "Failed to archive beauty plan.");
+        }
+      });
+    },
+    [loadSavedPlans, pushStatus, request, withBusy]
+  );
+
+  const duplicatePlan = useCallback(
+    async (planId) => {
+      await withBusy(`duplicate-${planId}`, async () => {
+        try {
+          const response = await request.post(
+            buildApiUrl(`/beauty-ai/plans/${encodeURIComponent(planId)}/duplicate`)
+          );
+          pushStatus("success", "Beauty plan duplicated.");
+          const duplicated = response.data?.data;
+          if (duplicated?._id) {
+            setActivePlanId(String(duplicated._id));
+            setActivePlanTitle(String(duplicated?.plan?.title || "Duplicated plan"));
+          }
+          loadSavedPlans();
+          loadProgress(String(response.data?.data?._id || ""));
+        } catch (error) {
+          pushStatus("error", error?.response?.data?.message || "Failed to duplicate beauty plan.");
+        }
+      });
+    },
+    [loadProgress, loadSavedPlans, pushStatus, request, withBusy]
+  );
+
+  const deletePlan = useCallback(
+    async (planId) => {
+      await withBusy(`delete-${planId}`, async () => {
+        try {
+          await request.delete(buildApiUrl(`/beauty-ai/plans/${encodeURIComponent(planId)}`));
+          if (activePlanId === String(planId)) {
+            setActivePlanId("");
+            setActivePlanTitle("");
+            setPlanBundle(null);
+            loadProgress("");
+          }
+          pushStatus("success", "Beauty plan deleted.");
+          loadSavedPlans();
+        } catch (error) {
+          pushStatus("error", error?.response?.data?.message || "Failed to delete beauty plan.");
+        }
+      });
+    },
+    [activePlanId, loadProgress, loadSavedPlans, pushStatus, request, withBusy]
+  );
+
+  const resumePlan = useCallback(
+    async (planId) => {
+      await withBusy(`resume-${planId}`, async () => {
+        try {
+          const response = await request.get(
+            buildApiUrl(`/beauty-ai/plans/${encodeURIComponent(planId)}`)
+          );
+          const plan = response.data?.data;
+          if (!plan?._id) {
+            pushStatus("error", "Unable to load selected plan.");
+            return;
+          }
+          const nextBundle = {
+            plan: plan.plan || null,
+            photoUrl: plan.photoUrl || "",
+            photoStorageKey: plan.photoStorageKey || "",
+            photoStorageProvider: plan.photoStorageProvider || "",
+            selfieId: "",
+            profile: {
+              gender: plan.gender || "",
+              age: plan.age || "",
+              skinType: plan.skinType || "",
+              hairType: plan.hairType || "",
+              budget: plan.budget || "",
+              language: plan.language || "en",
+              eventType: plan.eventType || "daily-glow",
+              selectedConcerns: Array.isArray(plan.selectedConcerns) ? plan.selectedConcerns : [],
+              notes: plan.notes || "",
+            },
+          };
+          setPlanBundle(nextBundle);
+          setActivePlanId(String(plan._id));
+          setActivePlanTitle(String(plan?.plan?.title || "Saved plan"));
+          setEditingPlanId("");
+          setEditingPlanNotes("");
+          loadProgress(String(plan._id));
+          pushStatus("success", "Plan resumed. Continue routine tracking for this plan.");
+        } catch (error) {
+          pushStatus("error", error?.response?.data?.message || "Failed to resume plan.");
+        }
+      });
+    },
+    [loadProgress, pushStatus, request, withBusy]
+  );
+
+  const startPlanNotesEdit = useCallback((entry) => {
+    setEditingPlanId(String(entry?._id || ""));
+    setEditingPlanNotes(String(entry?.notes || ""));
+  }, []);
+
+  const cancelPlanNotesEdit = useCallback(() => {
+    setEditingPlanId("");
+    setEditingPlanNotes("");
+  }, []);
+
+  const savePlanNotes = useCallback(
+    async (planId) => {
+      await withBusy(`save-notes-${planId}`, async () => {
+        try {
+          await request.put(buildApiUrl(`/beauty-ai/plans/${encodeURIComponent(planId)}`), {
+            notes: String(editingPlanNotes || "").trim(),
+          });
+          pushStatus("success", "Plan notes updated.");
+          setEditingPlanId("");
+          setEditingPlanNotes("");
+          loadSavedPlans();
+        } catch (error) {
+          pushStatus("error", error?.response?.data?.message || "Failed to update plan notes.");
+        }
+      });
+    },
+    [editingPlanNotes, loadSavedPlans, pushStatus, request, withBusy]
+  );
+
+  const triggerReplaceSelfieInput = useCallback((planId) => {
+    const input = replaceSelfieInputRefs.current[String(planId)];
+    if (input) {
+      input.click();
+    }
+  }, []);
+
+  const replacePlanSelfie = useCallback(
+    async (planId, file) => {
+      if (!file) return;
+      const formData = new FormData();
+      formData.append("selfie", file);
+      await withBusy(`replace-selfie-${planId}`, async () => {
+        try {
+          await request.put(
+            buildApiUrl(`/beauty-ai/plans/${encodeURIComponent(planId)}/photo`),
+            formData
+          );
+          pushStatus("success", "Plan selfie replaced.");
+          loadSavedPlans();
+          loadSavedSelfies();
+        } catch (error) {
+          pushStatus("error", error?.response?.data?.message || "Failed to replace plan selfie.");
+        }
+      });
+    },
+    [loadSavedPlans, loadSavedSelfies, pushStatus, request, withBusy]
+  );
+
+  const removePlanSelfie = useCallback(
+    async (planId) => {
+      await withBusy(`remove-selfie-${planId}`, async () => {
+        try {
+          await request.delete(
+            buildApiUrl(`/beauty-ai/plans/${encodeURIComponent(planId)}/photo`)
+          );
+          pushStatus("success", "Plan selfie removed.");
+          loadSavedPlans();
+        } catch (error) {
+          pushStatus("error", error?.response?.data?.message || "Failed to remove plan selfie.");
         }
       });
     },
@@ -263,17 +492,56 @@ const NilaBeautyAI = () => {
         onOrderProducts={handleOrderProducts}
         onSavePlan={saveCurrentPlan}
         pushStatus={pushStatus}
+        usageStatus={usageStatus}
+        consentStatus={consentStatus}
+        savedSelfies={savedSelfies}
+        onRefreshSavedSelfies={loadSavedSelfies}
+        initialPlanBundle={planBundle}
       />
 
       <BeautyProgressTracker
         request={request}
         logs={progressLogs}
+        planId={activePlanId}
+        planLabel={activePlanTitle}
         latestScore={Number(planBundle?.plan?.score || 0)}
-        selfiePreview={planBundle?.selfiePreview || ""}
+        selfiePreview={planBundle?.selfiePreview || planBundle?.photoUrl || ""}
         snapshotScopeKey={snapshotScopeKey}
         pushStatus={pushStatus}
         onEntriesUpdate={() => {}}
       />
+      {activePlanId ? (
+        <div className="beauty-active-plan-banner">
+          <p>
+            Progress is scoped to: <strong>{activePlanTitle || "Saved plan"}</strong>
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setActivePlanId("");
+              setActivePlanTitle("");
+              setPlanBundle(null);
+            }}
+          >
+            Switch to session plan
+          </button>
+        </div>
+      ) : null}
+
+      <section className="beauty-card">
+        <h2>My Selfies</h2>
+        {busyKey === "saved-selfies" ? <p>Loading selfies...</p> : null}
+        {!savedSelfies.length ? <p>No saved selfies yet.</p> : null}
+        <div className="beauty-selfie-grid">
+          {savedSelfies.map((entry) => (
+            <article key={entry._id} className="beauty-selfie-card">
+              {entry.photoUrl ? <img src={entry.photoUrl} alt="Saved beauty selfie" /> : null}
+              <p>{entry.photoName || "Saved selfie"}</p>
+              <p>{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "Date unavailable"}</p>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="beauty-card">
         <h2>Saved Beauty Plans</h2>
@@ -289,17 +557,89 @@ const NilaBeautyAI = () => {
               </p>
               <p>Status: {entry.status || "Active"}</p>
               <p>Saved: {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : "N/A"}</p>
+              <p>Notes: {entry.notes || "No notes saved."}</p>
               {entry.photoUrl ? <img src={entry.photoUrl} alt="Saved beauty plan selfie" /> : null}
-              {entry.status !== "Archived" ? (
+              <input
+                ref={(node) => {
+                  replaceSelfieInputRefs.current[String(entry._id)] = node;
+                }}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={(event) => replacePlanSelfie(entry._id, event.target.files?.[0])}
+              />
+              {editingPlanId === String(entry._id) ? (
+                <div className="beauty-plan-notes-editor">
+                  <textarea
+                    value={editingPlanNotes}
+                    onChange={(event) => setEditingPlanNotes(event.target.value)}
+                    rows={3}
+                  />
+                  <div className="beauty-saved-plan-actions">
+                    <button
+                      type="button"
+                      className="beauty-primary"
+                      onClick={() => savePlanNotes(entry._id)}
+                      disabled={busyKey === `save-notes-${entry._id}`}
+                    >
+                      {busyKey === `save-notes-${entry._id}` ? "Saving..." : "Save notes"}
+                    </button>
+                    <button type="button" onClick={cancelPlanNotesEdit}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="beauty-saved-plan-actions">
                 <button
                   type="button"
                   className="beauty-primary"
-                  onClick={() => archivePlan(entry._id)}
-                  disabled={busyKey === `archive-${entry._id}`}
+                  onClick={() => resumePlan(entry._id)}
+                  disabled={busyKey === `resume-${entry._id}`}
                 >
-                  {busyKey === `archive-${entry._id}` ? "Archiving..." : "Archive"}
+                  {busyKey === `resume-${entry._id}` ? "Resuming..." : "Resume routine"}
                 </button>
-              ) : null}
+                <button
+                  type="button"
+                  onClick={() => duplicatePlan(entry._id)}
+                  disabled={busyKey === `duplicate-${entry._id}`}
+                >
+                  {busyKey === `duplicate-${entry._id}` ? "Duplicating..." : "Duplicate"}
+                </button>
+                <button type="button" onClick={() => startPlanNotesEdit(entry)}>
+                  Edit notes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => triggerReplaceSelfieInput(entry._id)}
+                  disabled={busyKey === `replace-selfie-${entry._id}`}
+                >
+                  {busyKey === `replace-selfie-${entry._id}` ? "Replacing..." : "Replace selfie"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removePlanSelfie(entry._id)}
+                  disabled={busyKey === `remove-selfie-${entry._id}`}
+                >
+                  {busyKey === `remove-selfie-${entry._id}` ? "Removing..." : "Remove selfie"}
+                </button>
+                {entry.status !== "Archived" ? (
+                  <button
+                    type="button"
+                    onClick={() => archivePlan(entry._id)}
+                    disabled={busyKey === `archive-${entry._id}`}
+                  >
+                    {busyKey === `archive-${entry._id}` ? "Archiving..." : "Archive"}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => deletePlan(entry._id)}
+                  disabled={busyKey === `delete-${entry._id}`}
+                >
+                  {busyKey === `delete-${entry._id}` ? "Deleting..." : "Delete"}
+                </button>
+              </div>
             </article>
           ))}
         </div>

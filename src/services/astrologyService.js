@@ -266,6 +266,7 @@ const normalizeConsultationBooking = (payload = {}) => ({
   consultantName: String(payload.consultantName || "").trim(),
   slot: String(payload.slot || "").trim(),
   preferredDate: formatDateInputValue(payload.preferredDate) || "",
+  notes: String(payload.notes || "").trim(),
   status: String(payload.status || "confirmed").trim(),
   confirmationCode: String(payload.confirmationCode || "").trim(),
   amountInr: Number(payload.amountInr) > 0 ? Number(payload.amountInr) : 0,

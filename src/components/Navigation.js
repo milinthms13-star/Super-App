@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "kidsstoryvideomaker", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder", "photostudio", "karaokeduet", "beautyai", "kitchen"],
+    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "kidsstoryvideomaker", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder", "photostudio", "karaokeduet", "danceduet", "beautyai", "kitchen"],
   },
   utilities: {
     label: "Utilities",
@@ -117,6 +117,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [], moduleBrandin
     { id: "resumebuilder", label: t("modules.resumebuilder", "AI Resume Builder"), icon: "📄" },
     { id: "photostudio", label: t("modules.photostudio", "Photo Studio AI + AR"), icon: "PS", sellerVisible: true },
     { id: "karaokeduet", label: t("modules.karaokeduet", "Remote Karaoke Duet"), icon: "KD", sellerVisible: true },
+    { id: "danceduet", label: t("modules.danceduet", "Auto Dance Duet"), icon: "DD", sellerVisible: true },
     { id: "beautyai", label: t("modules.beautyai", "Nila Beauty AI"), icon: "BA", sellerVisible: true },
     { id: "kitchen", label: t("modules.kitchen", "Smart Kitchen & Recipe Hub"), icon: "KH", sellerVisible: true },
 
@@ -481,6 +482,3 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [], moduleBrandin
 };
 
 export default Navigation;
-
-
-

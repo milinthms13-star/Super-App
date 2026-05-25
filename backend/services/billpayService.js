@@ -8,6 +8,8 @@ const BillpayTransaction = require("../models/BillpayTransaction");
 const Dispute = require("../models/Dispute");
 const Mandate = require("../models/Mandate");
 const crypto = require("crypto");
+const setuBillpayProvider = require("./setuBillpayProvider");
+const logger = require("../utils/logger");
 
 const BBPS_BILLERS = [
   { id: "KSEB", name: "Kerala State Electricity Board", category: "Electricity" },
@@ -25,6 +27,79 @@ const BBPS_BILLERS = [
 const BILLPAY_COMMISSION_RATE = 0.0045; // 0.45%
 
 class BillPayService {
+  getProviderName() {
+    return setuBillpayProvider.shouldUseSetu() ? "setu" : "razorpay";
+  }
+
+  isSetuProvider() {
+    return this.getProviderName() === "setu";
+  }
+
+  getProviderDiagnostics() {
+    return setuBillpayProvider.getDiagnostics();
+  }
+
+  mapBillerCategoryToFallbackId(preferredCategory = "") {
+    const normalized = String(preferredCategory || "").toLowerCase();
+    const matched = BBPS_BILLERS.find((entry) => entry.category.toLowerCase() === normalized);
+    return matched || BBPS_BILLERS[0];
+  }
+
+  mapSetuBillToLocalModel({ userId, identifierType, identifierValue, preferredCategory, fetchResult }) {
+    const fallbackBiller = this.mapBillerCategoryToFallbackId(preferredCategory);
+    const safeCategory = fallbackBiller.category;
+    const fetchedBill = fetchResult?.bill || {};
+    const dueDateRaw = fetchedBill?.dueDate || fetchedBill?.billDate;
+    const parsedDueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+    const dueDate =
+      parsedDueDate && !Number.isNaN(parsedDueDate.getTime())
+        ? parsedDueDate
+        : new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+
+    const amountInPaise = Number(fetchedBill?.amount || 0);
+    const amount = amountInPaise > 0 ? amountInPaise / 100 : 500 + Math.floor(Math.random() * 2200);
+
+    const rawBillerId =
+      fetchResult?.raw?.billerId ||
+      fetchResult?.raw?.biller?.id ||
+      fetchedBill?.billerId ||
+      fallbackBiller.id;
+    const rawBillerName =
+      fetchResult?.raw?.billerName ||
+      fetchedBill?.billerName ||
+      fetchedBill?.customerName ||
+      fallbackBiller.name;
+
+    const nextBill = {
+      userId,
+      nickname: `${safeCategory} Auto-Fetch`,
+      billerId: String(rawBillerId || fallbackBiller.id).slice(0, 100),
+      billerName: String(rawBillerName || fallbackBiller.name).slice(0, 200),
+      category: safeCategory,
+      consumerId:
+        identifierType === "Consumer ID"
+          ? identifierValue
+          : `${fallbackBiller.id}-${Math.floor(100000 + Math.random() * 900000)}`,
+      mobile:
+        identifierType === "Mobile Number"
+          ? identifierValue
+          : `${Math.floor(9000000000 + Math.random() * 99999999)}`,
+      amount,
+      dueDate,
+      status: "Due",
+      autopayEnabled: false,
+      familyMember: "Self",
+      discoveredVia: "BBPS Directory",
+      provider: "setu",
+      providerMeta: {
+        fetchRefId: fetchResult?.refId || "",
+        providerStatus: fetchResult?.status || "",
+      },
+    };
+
+    return nextBill;
+  }
+
   /**
    * Get all bills for a user
    */
@@ -79,6 +154,46 @@ class BillPayService {
         };
       }
 
+      if (this.isSetuProvider()) {
+        const fallbackBiller = this.mapBillerCategoryToFallbackId(preferredCategory);
+
+        let fetchResult = null;
+        try {
+          fetchResult = await setuBillpayProvider.fetchBill({
+            billerId: fallbackBiller.id,
+            mobile:
+              identifierType === "Mobile Number"
+                ? identifierValue
+                : `${Math.floor(9000000000 + Math.random() * 99999999)}`,
+            consumerId:
+              identifierType === "Consumer ID"
+                ? identifierValue
+                : `${fallbackBiller.id}-${Math.floor(100000 + Math.random() * 900000)}`,
+          });
+        } catch (providerError) {
+          logger.warn(`Setu bill discovery failed, using fallback directory flow: ${providerError.message}`);
+        }
+
+        if (fetchResult) {
+          const candidate = this.mapSetuBillToLocalModel({
+            userId,
+            identifierType,
+            identifierValue,
+            preferredCategory,
+            fetchResult,
+          });
+          const newBill = new Bill(candidate);
+          await newBill.save();
+
+          return {
+            status: "created",
+            bill: newBill,
+            provider: "setu",
+            message: "Bill discovered via Setu Bharat Connect and added to Saved Bills.",
+          };
+        }
+      }
+
       // Generate new bill from BBPS directory
       const selectedBiller = preferredCategory
         ? BBPS_BILLERS.find((b) => b.category === preferredCategory) || BBPS_BILLERS[0]
@@ -111,6 +226,7 @@ class BillPayService {
       return {
         status: "created",
         bill: newBill,
+        provider: "mock",
         message: "Bill discovered via BBPS directory and added to Saved Bills.",
       };
     } catch (error) {
@@ -121,7 +237,7 @@ class BillPayService {
   /**
    * Create Razorpay order for payment
    */
-  async createPaymentOrder(userId, billId, amount) {
+  async createPaymentOrder(userId, billId, amount, method = "UPI") {
     try {
       // Verify bill ownership
       const bill = await Bill.findOne({ _id: billId, userId });
@@ -134,9 +250,53 @@ class BillPayService {
         throw new Error("Payment amount exceeds bill by more than 10%");
       }
 
-      // Create Razorpay order (will be handled by route)
-      // This service just prepares the data
+      if (this.isSetuProvider()) {
+        let fetchRefId = String(bill.providerMeta?.fetchRefId || "").trim();
+        if (!fetchRefId) {
+          const fetchResult = await setuBillpayProvider.fetchBill({
+            billerId: bill.billerId,
+            mobile: bill.mobile,
+            consumerId: bill.consumerId,
+          });
+          fetchRefId = fetchResult?.refId || "";
+          bill.providerMeta = {
+            ...(bill.providerMeta || {}),
+            fetchRefId,
+            providerStatus: fetchResult?.status || "",
+          };
+          await bill.save();
+        }
+
+        const paymentRequest = await setuBillpayProvider.createPaymentRequest({
+          refId: fetchRefId,
+          amount,
+          method,
+        });
+
+        const setuRefId = String(paymentRequest?.refId || "").trim();
+        if (!setuRefId) {
+          throw new Error("Setu payment request could not be created");
+        }
+
+        return {
+          gateway: "setu",
+          provider: "setu",
+          orderId: setuRefId,
+          amount: Math.round(amount * 100),
+          currency: "INR",
+          paymentRefId: paymentRequest.paymentRefId,
+          notes: {
+            userId: userId.toString(),
+            billId: billId.toString(),
+            billerName: bill.billerName,
+            category: bill.category,
+          },
+        };
+      }
+
+      // Create Razorpay order (handled by route)
       const orderData = {
+        gateway: "razorpay",
         amount: Math.round(amount * 100), // Convert to paise
         currency: "INR",
         receipt: `billpay-${billId}-${Date.now()}`,
@@ -175,6 +335,18 @@ class BillPayService {
     }
   }
 
+  async verifySetuPaymentStatus(orderId) {
+    try {
+      const verification = await setuBillpayProvider.verifyPayment(orderId);
+      if (verification.status !== "success") {
+        throw new Error(verification.reason || "Setu payment is still processing");
+      }
+      return verification;
+    } catch (error) {
+      throw new Error(`Setu payment verification failed: ${error.message}`);
+    }
+  }
+
   /**
    * Record successful payment and update bill status
    */
@@ -207,6 +379,11 @@ class BillPayService {
         razorpayOrderId: paymentData.razorpayOrderId,
         razorpayPaymentId: paymentData.razorpayPaymentId,
         razorpaySignature: paymentData.razorpaySignature,
+        provider: paymentData.provider || "razorpay",
+        providerOrderId: paymentData.providerOrderId || "",
+        providerPaymentId: paymentData.providerPaymentId || "",
+        providerReference: paymentData.providerReference || "",
+        providerPayload: paymentData.providerPayload || null,
         paidAt: new Date(),
         ipAddress: paymentData.ipAddress,
         userAgent: paymentData.userAgent,

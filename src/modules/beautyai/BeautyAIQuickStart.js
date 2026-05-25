@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   BEAUTY_CONCERNS,
   BEAUTY_EVENTS,
   BEAUTY_LANGUAGES,
   buildBeautyRequest,
+  downloadBeautyPlanText,
   extractSelfieSignals,
   getBeautyPlanFallback,
   getMalayalamHelperPrompts,
@@ -54,6 +55,11 @@ const BeautyAIQuickStart = ({
   onOrderProducts,
   onSavePlan,
   pushStatus,
+  usageStatus = null,
+  consentStatus = null,
+  savedSelfies = [],
+  onRefreshSavedSelfies,
+  initialPlanBundle = null,
 }) => {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [loading, setLoading] = useState(false);
@@ -63,11 +69,50 @@ const BeautyAIQuickStart = ({
   const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState("");
   const [uploadedPhotoStorageKey, setUploadedPhotoStorageKey] = useState("");
   const [uploadedPhotoStorageProvider, setUploadedPhotoStorageProvider] = useState("");
+  const [selectedSavedSelfieId, setSelectedSavedSelfieId] = useState("");
   const [plan, setPlan] = useState(DEFAULT_PLAN);
   const [routineChecks, setRoutineChecks] = useState({});
 
   const warnings = useMemo(() => getSafetyWarnings(form), [form]);
   const malayalamPrompts = useMemo(() => getMalayalamHelperPrompts(), []);
+  const selectedSavedSelfie = useMemo(
+    () => savedSelfies.find((entry) => String(entry._id || "") === String(selectedSavedSelfieId || "")) || null,
+    [savedSelfies, selectedSavedSelfieId]
+  );
+
+  useEffect(() => {
+    if (consentStatus?.planGeneration?.granted) {
+      setForm((current) => ({ ...current, consent: true }));
+    }
+  }, [consentStatus?.planGeneration?.granted]);
+
+  useEffect(() => {
+    if (!initialPlanBundle?.plan) return;
+    setPlan(initialPlanBundle.plan);
+    setRoutineChecks({});
+    const nextProfile = initialPlanBundle.profile || {};
+    setForm((current) => ({
+      ...current,
+      gender: nextProfile.gender || current.gender,
+      age: nextProfile.age || current.age,
+      budget: nextProfile.budget || current.budget,
+      language: nextProfile.language || current.language,
+      skinType: nextProfile.skinType || current.skinType,
+      hairType: nextProfile.hairType || current.hairType,
+      selectedConcerns: Array.isArray(nextProfile.selectedConcerns)
+        ? nextProfile.selectedConcerns
+        : current.selectedConcerns,
+      eventType: nextProfile.eventType || current.eventType,
+      notes: nextProfile.notes || current.notes,
+    }));
+    if (initialPlanBundle.photoUrl) {
+      setSelfiePreview(String(initialPlanBundle.photoUrl));
+      setUploadedPhotoUrl(String(initialPlanBundle.photoUrl));
+      setUploadedPhotoStorageKey(String(initialPlanBundle.photoStorageKey || ""));
+      setUploadedPhotoStorageProvider(String(initialPlanBundle.photoStorageProvider || ""));
+      setSelectedSavedSelfieId(String(initialPlanBundle.selfieId || ""));
+    }
+  }, [initialPlanBundle]);
 
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
   const toggleConcern = (concern) =>
@@ -102,6 +147,7 @@ const BeautyAIQuickStart = ({
     }
 
     setSelfieFile(file);
+    setSelectedSavedSelfieId("");
     setUploadedPhotoUrl("");
     setUploadedPhotoStorageKey("");
     setUploadedPhotoStorageProvider("");
@@ -133,6 +179,26 @@ const BeautyAIQuickStart = ({
       });
   };
 
+  const handleSelectSavedSelfie = (selfieId) => {
+    const nextId = String(selfieId || "");
+    setSelectedSavedSelfieId(nextId);
+    const found = savedSelfies.find((entry) => String(entry._id || "") === nextId);
+    if (!found) {
+      setUploadedPhotoUrl("");
+      setUploadedPhotoStorageKey("");
+      setUploadedPhotoStorageProvider("");
+      setSelfiePreview("");
+      return;
+    }
+
+    setSelfieFile(null);
+    setSelfiePreview(String(found.photoUrl || ""));
+    setUploadedPhotoUrl(String(found.photoUrl || ""));
+    setUploadedPhotoStorageKey(String(found.photoStorageKey || ""));
+    setUploadedPhotoStorageProvider(String(found.photoStorageProvider || ""));
+    pushStatus?.("success", "Using selected saved selfie for this beauty plan.");
+  };
+
   const generatePlan = async () => {
     if (!form.consent) {
       pushStatus?.("error", "Please confirm consent before analysis.");
@@ -160,10 +226,21 @@ const BeautyAIQuickStart = ({
         apiPlan = response?.data?.plan || null;
         apiScore = Number(response?.data?.analysis?.skinScore || apiPlan?.score || 0);
       } catch (error) {
-        pushStatus?.(
-          "error",
-          error?.response?.data?.message || "Live beauty plan endpoint unavailable, showing fallback plan."
-        );
+        const statusCode = Number(error?.response?.status || 0);
+        const quotaPayload = error?.response?.data?.quota;
+        if (statusCode === 429 && quotaPayload?.nextAllowedAt) {
+          pushStatus?.(
+            "error",
+            `Quota reached. Next attempt available after ${quotaPayload.nextAllowedAt} (${quotaPayload.timezone || "local time"}).`
+          );
+        } else if (statusCode === 400 && String(error?.response?.data?.message || "").toLowerCase().includes("consent")) {
+          pushStatus?.("error", "Consent is required. Please review and enable consent.");
+        } else {
+          pushStatus?.(
+            "error",
+            error?.response?.data?.message || "Live beauty plan endpoint unavailable, showing fallback plan."
+          );
+        }
       }
 
       const fallbackPlan = getBeautyPlanFallback(form, Math.max(60, apiScore || 0));
@@ -186,6 +263,7 @@ const BeautyAIQuickStart = ({
       onPlanReady?.({
         plan: finalPlan,
         selfiePreview,
+        selfieId: selectedSavedSelfie?._id || "",
         selfieMeta: buildSelfieMeta(selfieFile),
         selfieSignals,
         uploadedPhotoUrl,
@@ -200,6 +278,7 @@ const BeautyAIQuickStart = ({
           language: form.language,
           eventType: form.eventType,
           selectedConcerns: form.selectedConcerns,
+          notes: form.notes,
           sensitiveSkin: form.sensitiveSkin,
           knownAllergy: form.knownAllergy,
           pregnantOrBreastfeeding: form.pregnantOrBreastfeeding,
@@ -232,10 +311,48 @@ const BeautyAIQuickStart = ({
         <div className="beauty-ai-hero-badge">Consent required</div>
       </div>
 
+      {usageStatus ? (
+        <div className="beauty-ai-usage-strip">
+          <p>
+            Tier: <strong>{usageStatus.tier || "free"}</strong> | Plan uses today:{" "}
+            <strong>{Number(usageStatus?.plan?.used || 0)}/{Number(usageStatus?.plan?.limit || 0)}</strong> | Selfie analyses:{" "}
+            <strong>{Number(usageStatus?.analyzeSelfie?.used || 0)}/{Number(usageStatus?.analyzeSelfie?.limit || 0)}</strong>
+          </p>
+          <p>
+            Remaining today: plan {Number(usageStatus?.plan?.remaining || 0)}, selfie {Number(usageStatus?.analyzeSelfie?.remaining || 0)}.
+            {usageStatus?.nextAllowedAt ? ` Reset at ${usageStatus.nextAllowedAt} (${usageStatus.timezone || "local"}).` : ""}
+          </p>
+        </div>
+      ) : null}
+
+      {consentStatus ? (
+        <div className="beauty-ai-consent-status">
+          <p>
+            Consent status: Plan {consentStatus?.planGeneration?.granted ? "granted" : "pending"}, Selfie{" "}
+            {consentStatus?.selfieAnalysis?.granted ? "granted" : "pending"}.
+          </p>
+          {consentStatus?.consentVersion ? <p>Consent version: {consentStatus.consentVersion}</p> : null}
+        </div>
+      ) : null}
+
       <div className="beauty-ai-form-grid">
         <label>
           Upload selfie (optional)
           <input type="file" accept="image/*" capture="user" onChange={handleSelfie} />
+        </label>
+        <label>
+          Use saved selfie
+          <select
+            value={selectedSavedSelfieId}
+            onChange={(event) => handleSelectSavedSelfie(event.target.value)}
+          >
+            <option value="">Select from My Selfies</option>
+            {savedSelfies.map((entry) => (
+              <option key={entry._id} value={entry._id}>
+                {entry.photoName || "Saved selfie"} ({entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : "date N/A"})
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           Gender
@@ -410,6 +527,16 @@ const BeautyAIQuickStart = ({
       >
         {loading ? "Preparing plan..." : uploadingSelfie ? "Uploading selfie..." : "Get My Beauty Plan"}
       </button>
+      <div className="beauty-ai-inline-actions">
+        <button
+          type="button"
+          className="beauty-ai-secondary-btn"
+          onClick={() => onRefreshSavedSelfies?.()}
+          disabled={uploadingSelfie || loading}
+        >
+          Refresh My Selfies
+        </button>
+      </div>
       {uploadingSelfie ? <p className="beauty-ai-disclaimer">Uploading selfie securely...</p> : null}
 
       {selfiePreview ? (
@@ -506,8 +633,36 @@ const BeautyAIQuickStart = ({
             <button type="button" onClick={() => onOrderProducts?.(plan.products || [])}>
               Order Products
             </button>
-            <button type="button" onClick={() => onSavePlan?.({ form, plan, selfiePreview, selfieFile })}>
+            <button
+              type="button"
+              onClick={() =>
+                onSavePlan?.({
+                  form,
+                  plan,
+                  selfiePreview,
+                  selfieFile,
+                  selfieMeta: buildSelfieMeta(selfieFile),
+                  uploadedPhotoUrl,
+                  uploadedPhotoStorageKey,
+                  uploadedPhotoStorageProvider,
+                  profile: {
+                    ...form,
+                  },
+                })
+              }
+            >
               Save Plan
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                downloadBeautyPlanText(
+                  plan,
+                  `${String(plan.title || "beauty-plan").replace(/\s+/g, "-").toLowerCase()}.txt`
+                )
+              }
+            >
+              Export TXT
             </button>
           </div>
         </div>

@@ -72,7 +72,9 @@ export const useAstrologyConsultations = ({
 }) => {
   const [consultants, setConsultants] = useState([]);
   const [consultationSlots, setConsultationSlots] = useState({});
+  const [consultationNotes, setConsultationNotes] = useState({});
   const [bookingLoadingId, setBookingLoadingId] = useState("");
+  const [bookingDraft, setBookingDraft] = useState(null);
   const [lastBooking, setLastBooking] = useState(null);
   const [paymentOrder, setPaymentOrder] = useState(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -165,8 +167,15 @@ export const useAstrologyConsultations = ({
     }));
   }, []);
 
-  const handleBookConsultation = useCallback(
-    async (consultant) => {
+  const handleConsultationNotesChange = useCallback((consultantKey, notes) => {
+    setConsultationNotes((currentNotes) => ({
+      ...currentNotes,
+      [consultantKey]: notes,
+    }));
+  }, []);
+
+  const handlePrepareConsultationBooking = useCallback(
+    (consultant) => {
       if (!ensureSignedIn()) {
         return;
       }
@@ -182,6 +191,53 @@ export const useAstrologyConsultations = ({
         return;
       }
 
+      const selectedSlot =
+        consultant?.availableSlots?.find((slot) => slot.id === slotId) ||
+        consultant?.availableSlots?.[0] ||
+        null;
+      const notes = String(consultationNotes[consultantKey] || "").trim();
+
+      setBookingDraft({
+        consultant,
+        consultantKey,
+        slotId,
+        slotLabel: selectedSlot?.label || slotId,
+        notes,
+      });
+      setSaveState({ type: "", message: "" });
+    },
+    [consultationNotes, consultationSlots, ensureSignedIn, setSaveState]
+  );
+
+  const handleCancelConsultationDraft = useCallback(() => {
+    setBookingDraft(null);
+  }, []);
+
+  const handleBookConsultation = useCallback(
+    async (consultant, draftOverride = null) => {
+      if (!ensureSignedIn()) {
+        return false;
+      }
+
+      const consultantKey = consultant.id || consultant.name;
+      const slotId =
+        draftOverride?.slotId ||
+        consultationSlots[consultantKey] ||
+        consultant?.availableSlots?.[0]?.id;
+      const notes = String(
+        draftOverride?.notes !== undefined
+          ? draftOverride.notes
+          : consultationNotes[consultantKey] || ""
+      ).trim();
+
+      if (!slotId) {
+        setSaveState({
+          type: "error",
+          message: "Please choose an available slot before booking.",
+        });
+        return false;
+      }
+
       setBookingLoadingId(consultantKey);
       setSaveState({ type: "", message: "" });
 
@@ -189,6 +245,7 @@ export const useAstrologyConsultations = ({
         const booking = await astrologyService.createConsultationBooking({
           consultantId: consultant.id,
           slotId,
+          notes,
         });
 
         setLastBooking(booking);
@@ -197,21 +254,35 @@ export const useAstrologyConsultations = ({
         );
         setRescheduleTargetId("");
         setPaymentOrder(null);
+        setBookingDraft(null);
+        setConsultationNotes((currentNotes) => ({
+          ...currentNotes,
+          [consultantKey]: "",
+        }));
         setSaveState({
           type: "success",
           message: `Consultation booked: ${booking.confirmationCode}`,
         });
+        return true;
       } catch (error) {
         setSaveState({
           type: "error",
           message: error.message || "Unable to book consultation.",
         });
+        return false;
       } finally {
         setBookingLoadingId("");
       }
     },
-    [consultationSlots, ensureSignedIn, setSaveState]
+    [consultationNotes, consultationSlots, ensureSignedIn, setSaveState]
   );
+
+  const handleConfirmConsultationBooking = useCallback(async () => {
+    if (!bookingDraft?.consultant) {
+      return;
+    }
+    await handleBookConsultation(bookingDraft.consultant, bookingDraft);
+  }, [bookingDraft, handleBookConsultation]);
 
   const handleCreateConsultationPaymentOrder = useCallback(async () => {
     if (!lastBooking?.id) {
@@ -451,7 +522,9 @@ export const useAstrologyConsultations = ({
   return {
     consultants,
     consultationSlots,
+    consultationNotes,
     bookingLoadingId,
+    bookingDraft,
     lastBooking,
     paymentOrder,
     paymentLoading,
@@ -461,7 +534,11 @@ export const useAstrologyConsultations = ({
     paymentRefreshLoadingId,
     rescheduleTargetId,
     handleConsultationSlotChange,
+    handleConsultationNotesChange,
+    handlePrepareConsultationBooking,
+    handleCancelConsultationDraft,
     handleBookConsultation,
+    handleConfirmConsultationBooking,
     handleCreateConsultationPaymentOrder,
     handleUpdateConsultationStatus,
     handleRefreshPaymentStatus,

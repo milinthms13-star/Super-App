@@ -9,6 +9,13 @@ const beautyProgressLogSchema = new mongoose.Schema(
       index: true,
       maxlength: 120,
     },
+    planId: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 80,
+      index: true,
+    },
     day: {
       type: Number,
       required: true,
@@ -41,7 +48,7 @@ const beautyProgressLogSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-beautyProgressLogSchema.index({ userId: 1, day: 1 }, { unique: true });
+beautyProgressLogSchema.index({ userId: 1, planId: 1, day: 1 }, { unique: true });
 beautyProgressLogSchema.index({ userId: 1, updatedAt: -1 });
 
 module.exports = mongoose.model('BeautyProgressLog', beautyProgressLogSchema);

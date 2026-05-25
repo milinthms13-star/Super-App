@@ -54,6 +54,25 @@ const localize = (en, ml, language) => {
   return normalizedMl;
 };
 
+const REQUIRED_PROFILE_FIELDS = [
+  { key: "birthDate", label: "birth date" },
+  { key: "birthTime", label: "birth time" },
+  { key: "birthPlace", label: "birth place" },
+  { key: "gender", label: "gender" },
+];
+
+const getMissingProfileFields = (draft = {}) =>
+  REQUIRED_PROFILE_FIELDS.filter(({ key }) => !String(draft?.[key] || "").trim()).map(
+    ({ key }) => key
+  );
+
+const formatMissingFieldsText = (missingFields = []) => {
+  if (!missingFields.length) return "";
+  return missingFields
+    .map((field) => REQUIRED_PROFILE_FIELDS.find((entry) => entry.key === field)?.label || field)
+    .join(", ");
+};
+
 export const useAstrologyHomeController = () => {
   const { currentUser } = useApp();
 
@@ -70,6 +89,7 @@ export const useAstrologyHomeController = () => {
   const [signs, setSigns] = useState([]);
   const [selectedSign, setSelectedSign] = useState("");
   const [reading, setReading] = useState(null);
+  const [restoredSavedReading, setRestoredSavedReading] = useState(null);
   const [loading, setLoading] = useState(true);
   const [signsNotice, setSignsNotice] = useState("");
   const [readingNotice, setReadingNotice] = useState("");
@@ -80,8 +100,12 @@ export const useAstrologyHomeController = () => {
   const [panchangamLoading, setPanchangamLoading] = useState(true);
   const [aiQuestion, setAiQuestion] = useState("");
   const [assistantAnswer, setAssistantAnswer] = useState(null);
+  const [assistantHistory, setAssistantHistory] = useState([]);
+  const [assistantRetryQuestion, setAssistantRetryQuestion] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [downloadingHoroscopePeriod, setDownloadingHoroscopePeriod] = useState("");
+  const [downloadRetryPeriod, setDownloadRetryPeriod] = useState("");
+  const [requiredProfileFields, setRequiredProfileFields] = useState([]);
 
   const mountedRef = useRef(true);
   const requestSeqRef = useRef({
@@ -191,6 +215,13 @@ export const useAstrologyHomeController = () => {
   }, [selectedSign]);
 
   useEffect(() => {
+    setRestoredSavedReading((currentReading) => {
+      if (!currentReading) return currentReading;
+      return currentReading.sign === selectedSign ? currentReading : null;
+    });
+  }, [selectedSign]);
+
+  useEffect(() => {
     const requestId = nextRequestId("panchangam");
     const load = async () => {
       try {
@@ -222,16 +253,18 @@ export const useAstrologyHomeController = () => {
     void load();
   }, []);
 
+  const activeReading = restoredSavedReading || reading;
+
   const selectedSignDetails =
     signs.find((entry) => entry.sign === selectedSign) ||
-    reading ||
+    activeReading ||
     astrologyService.getFallbackSign(selectedSign);
   const handleProfileDraftChange = profileApi.handleDraftChange;
 
   const heroPrediction = String(
-    reading?.horoscope ||
-      selectedSignDetails?.horoscope ||
-      "Gentle progress comes from staying consistent with the work already in front of you."
+    activeReading?.horoscope ||
+    selectedSignDetails?.horoscope ||
+    "Gentle progress comes from staying consistent with the work already in front of you."
   );
 
   const filteredSigns = useMemo(() => {
@@ -285,18 +318,24 @@ export const useAstrologyHomeController = () => {
     ]
   );
 
-  const hasRequiredBirthDetails = Boolean(
-    profileApi.profileDraft.birthDate &&
-      profileApi.profileDraft.birthTime &&
-      profileApi.profileDraft.birthPlace &&
-      profileApi.profileDraft.gender
-  );
+  const missingRequiredProfileFields = getMissingProfileFields(profileApi.profileDraft);
+  const hasRequiredBirthDetails = missingRequiredProfileFields.length === 0;
 
   useEffect(() => {
     if (personalizationBootstrapped || profileApi.profileLoading) return;
     setPersonalizedReady(hasRequiredBirthDetails);
     setPersonalizationBootstrapped(true);
   }, [hasRequiredBirthDetails, personalizationBootstrapped, profileApi.profileLoading]);
+
+  useEffect(() => {
+    if (!requiredProfileFields.length) return;
+    const isSame =
+      missingRequiredProfileFields.length === requiredProfileFields.length &&
+      missingRequiredProfileFields.every((field, index) => field === requiredProfileFields[index]);
+    if (!isSame) {
+      setRequiredProfileFields(missingRequiredProfileFields);
+    }
+  }, [missingRequiredProfileFields, requiredProfileFields]);
 
   const handleBirthDateChange = (value) => {
     handleProfileDraftChange("birthDate", value);
@@ -314,12 +353,20 @@ export const useAstrologyHomeController = () => {
       "consult",
     ]);
     if (!personalizedReady && !allowedBeforePersonalization.has(nextSection)) {
+      const missingFields = getMissingProfileFields(profileApi.profileDraft);
+      const missingFieldsText = formatMissingFieldsText(missingFields);
+      setRequiredProfileFields(missingFields);
       setSaveState({
         type: "error",
-        message: "Enter birth details in the Kundli or Profile tab and generate your prediction first.",
+        message: missingFieldsText
+          ? `Complete these fields in Profile before using this tab: ${missingFieldsText}.`
+          : "Enter birth details in Profile and generate your prediction first.",
       });
-      setActiveSection("today");
+      setActiveSection("profile");
       return;
+    }
+    if (nextSection === "profile") {
+      setRequiredProfileFields([]);
     }
     setActiveSection(nextSection);
   };
@@ -395,20 +442,40 @@ export const useAstrologyHomeController = () => {
     await profileApi.handleProfileSave({ preventDefault: () => {} });
   };
 
+  const handleRestoreSavedReading = (savedReading) => {
+    if (!savedReading?.sign) return;
+    const fallbackReading = astrologyService.getFallbackReading(savedReading.sign);
+    const restoredReading = {
+      ...fallbackReading,
+      ...savedReading,
+      sign: String(savedReading.sign || fallbackReading.sign).toLowerCase(),
+      readingDate: savedReading.readingDate || fallbackReading.readingDate,
+      generatedAt: savedReading.generatedAt || savedReading.readingDate || fallbackReading.generatedAt,
+      horoscope: String(savedReading.horoscope || fallbackReading.horoscope).trim(),
+    };
+
+    setSelectedSign(restoredReading.sign);
+    setRestoredSavedReading(restoredReading);
+    setReadingNotice("");
+    setShowFullPrediction(true);
+    setActiveSection("today");
+    setSaveState({
+      type: "success",
+      message: `Restored saved reading from ${formatSavedReadingDate(restoredReading.readingDate)}.`,
+    });
+  };
+
   const handleGenerateReport = async (quickPayload = null) => {
-    const hasDetails = quickPayload
-      ? Boolean(
-          quickPayload.birthDate &&
-            quickPayload.birthTime &&
-            quickPayload.birthPlace &&
-            quickPayload.gender
-        )
-      : hasRequiredBirthDetails;
+    const nextDraft = quickPayload || profileApi.profileDraft;
+    const missingFields = getMissingProfileFields(nextDraft);
+    const hasDetails = missingFields.length === 0;
     if (!hasDetails) {
+      setRequiredProfileFields(missingFields);
       setSaveState({
         type: "error",
-        message: "Please enter DOB, birth time, birth place and gender first.",
+        message: `Please complete these fields first: ${formatMissingFieldsText(missingFields)}.`,
       });
+      setActiveSection("profile");
       return;
     }
 
@@ -421,6 +488,8 @@ export const useAstrologyHomeController = () => {
       String(quickPayload?.question || "").trim() || String(question || "").trim();
     if (queuedQuestion) setAiQuestion(queuedQuestion);
 
+    setRestoredSavedReading(null);
+    setRequiredProfileFields([]);
     setActiveSection("today");
     setPersonalizedReady(true);
     setShowFullPrediction(true);
@@ -430,23 +499,40 @@ export const useAstrologyHomeController = () => {
     });
   };
 
-  const handleAskAssistant = async () => {
+  const askAssistantQuestion = async (rawQuestion) => {
     if (!ensureSignedIn()) return;
-    if (!aiQuestion.trim()) {
+    const normalizedQuestion = String(rawQuestion || "").trim();
+    if (!normalizedQuestion) {
       setSaveState({ type: "error", message: "Ask a question before sending." });
       return;
     }
 
     const requestId = nextRequestId("ai");
     setAiLoading(true);
-    setAssistantAnswer(null);
+    setAssistantRetryQuestion("");
     try {
-      const answer = await astrologyService.askAstrologyAssistant(aiQuestion, selectedSign);
+      const answer = await astrologyService.askAstrologyAssistant(normalizedQuestion, selectedSign);
       if (!isLatestRequest("ai", requestId)) return;
       setAssistantAnswer(answer);
+      setAssistantHistory((currentHistory) => [
+        {
+          id: `astro-ai-${requestId}-${Date.now()}`,
+          question: normalizedQuestion,
+          answer: String(answer?.answer || "").trim(),
+          tips: Array.isArray(answer?.tips) ? answer.tips : [],
+          qualityNote: String(answer?.quality?.note || "").trim(),
+          createdAt: new Date().toISOString(),
+        },
+        ...currentHistory,
+      ]);
     } catch (error) {
       if (!isLatestRequest("ai", requestId)) return;
-      setSaveState({ type: "error", message: error.message || "Unable to get assistant answer." });
+      setAssistantRetryQuestion(normalizedQuestion);
+      setSaveState({
+        type: "error",
+        message:
+          error.message || "Unable to get assistant answer. Try Retry with your last question.",
+      });
     } finally {
       if (isLatestRequest("ai", requestId)) {
         setAiLoading(false);
@@ -454,11 +540,20 @@ export const useAstrologyHomeController = () => {
     }
   };
 
+  const handleAskAssistant = async () => askAssistantQuestion(aiQuestion);
+
+  const handleRetryAssistantQuestion = async () => {
+    if (!assistantRetryQuestion) return;
+    setAiQuestion(assistantRetryQuestion);
+    await askAssistantQuestion(assistantRetryQuestion);
+  };
+
   const handleDownloadHoroscopeReport = async (period) => {
     if (!ensureSignedIn()) return;
     const normalizedPeriod = String(period || "year").toLowerCase();
     const requestId = nextRequestId("download");
     setDownloadingHoroscopePeriod(normalizedPeriod);
+    setDownloadRetryPeriod("");
 
     try {
       const { blob, fileName } = await astrologyService.downloadHoroscopeReport(
@@ -478,12 +573,21 @@ export const useAstrologyHomeController = () => {
       setSaveState({ type: "success", message: `Starting ${normalizedPeriod} horoscope download.` });
     } catch (error) {
       if (!isLatestRequest("download", requestId)) return;
-      setSaveState({ type: "error", message: error.message || "Unable to download horoscope report." });
+      setDownloadRetryPeriod(normalizedPeriod);
+      setSaveState({
+        type: "error",
+        message: error.message || "Unable to download horoscope report. Use Retry download.",
+      });
     } finally {
       if (isLatestRequest("download", requestId)) {
         setDownloadingHoroscopePeriod("");
       }
     }
+  };
+
+  const handleRetryHoroscopeDownload = async () => {
+    if (!downloadRetryPeriod) return;
+    await handleDownloadHoroscopeReport(downloadRetryPeriod);
   };
 
   return {
@@ -523,11 +627,13 @@ export const useAstrologyHomeController = () => {
     signs,
     selectedSign,
     setSelectedSign,
-    reading,
+    reading: activeReading,
+    restoredSavedReading,
     loading,
     signsNotice,
     readingNotice,
     saveState,
+    requiredProfileFields,
     festivals,
     panchangam,
     panchangamNotice,
@@ -535,8 +641,11 @@ export const useAstrologyHomeController = () => {
     aiQuestion,
     setAiQuestion,
     assistantAnswer,
+    assistantHistory,
+    assistantRetryQuestion,
     aiLoading,
     downloadingHoroscopePeriod,
+    downloadRetryPeriod,
     selectedSignDetails,
     heroPrediction,
     filteredSigns,
@@ -558,8 +667,11 @@ export const useAstrologyHomeController = () => {
     handleBirthTimezoneChange,
     handleNakshatraChange,
     handleQuickSave,
+    handleRestoreSavedReading,
     handleGenerateReport,
     handleAskAssistant,
+    handleRetryAssistantQuestion,
     handleDownloadHoroscopeReport,
+    handleRetryHoroscopeDownload,
   };
 };

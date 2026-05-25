@@ -141,6 +141,41 @@ export const shareBeautyPlanWhatsApp = (plan) => {
   window.open(`https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`, "_blank", "noopener,noreferrer");
 };
 
+export const downloadBeautyPlanText = (plan, fileName = "beauty-plan.txt") => {
+  if (typeof window === "undefined" || !plan) return;
+  const lines = [
+    plan.title || "Beauty Plan",
+    `Care score: ${Number(plan.score || 0)}/100`,
+    "",
+    "Morning:",
+    ...(plan.morning || []).map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "Night:",
+    ...(plan.night || []).map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "Hair:",
+    ...(plan.hair || []).map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "Avoid:",
+    ...(plan.avoid || []).map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "Products:",
+    ...(plan.products || []).map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "Event Plan:",
+    ...(plan.eventPlan || []).map((step, index) => `${index + 1}. ${step}`),
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+};
+
 export const calculateProgressScore = (entries = []) => {
   if (!entries.length) return 0;
   const completed = entries.filter((entry) => entry.completed).length;

@@ -674,11 +674,15 @@ const JoiSchemas = {
     photoUrl: Joi.string().trim().max(2000).allow('').default(''),
   }),
   progress: Joi.object({
+    planId: Joi.string().trim().max(80).allow('').default(''),
     day: Joi.number().integer().min(1).max(30).required(),
     done: Joi.alternatives().try(Joi.boolean(), Joi.string(), Joi.number()).required(),
     note: Joi.string().trim().max(600).allow('').default(''),
     skinScore: Joi.number().min(0).max(100).default(0),
     selfieSnapshotLabel: Joi.string().trim().max(120).allow('').default(''),
+  }),
+  progressQuery: Joi.object({
+    planId: Joi.string().trim().max(80).allow('').default(''),
   }),
   addTip: Joi.object({
     title: Joi.string().trim().max(140).required(),
@@ -1135,6 +1139,42 @@ const getSubscriptionRules = async () => {
   };
 };
 
+const normalizeOptionalPlanId = (rawPlanId = '') => {
+  const trimmed = normalizeText(rawPlanId, 80);
+  if (!trimmed) {
+    return '';
+  }
+  return mongoose.Types.ObjectId.isValid(trimmed) ? trimmed : '';
+};
+
+const getQuotaUsageSnapshot = async ({ userId, tier = 'free', quotaRule = {} }) => {
+  const dateKey = getTodayDateKey();
+  const usage = await BeautyUsageQuota.findOne({ userId, dateKey }).lean();
+  const usedPlanCount = Number(usage?.counts?.plan || 0);
+  const usedAnalyzeCount = Number(usage?.counts?.analyzeSelfie || 0);
+  const planLimit = Number(quotaRule?.dailyAnalysisLimit || 0);
+  const analyzeLimit = Number(quotaRule?.dailyAnalysisLimit || 0);
+  const quotaWindow = buildQuotaWindow(dateKey);
+
+  return {
+    tier,
+    dateKey: quotaWindow.dateKey,
+    timezone: quotaWindow.timezone,
+    nextAllowedAt: quotaWindow.nextAllowedAt,
+    nextDateKey: quotaWindow.nextDateKey,
+    plan: {
+      used: usedPlanCount,
+      limit: planLimit,
+      remaining: Math.max(0, planLimit - usedPlanCount),
+    },
+    analyzeSelfie: {
+      used: usedAnalyzeCount,
+      limit: analyzeLimit,
+      remaining: Math.max(0, analyzeLimit - usedAnalyzeCount),
+    },
+  };
+};
+
 const handleRouteError = (res, error, message, statusCode = 500) => {
   logger.error(`Beauty AI route failed: ${message} :: ${error.message}`);
   return res.status(statusCode).json({
@@ -1226,6 +1266,114 @@ router.get('/tips/today', authenticate, async (req, res) => {
     });
   } catch (error) {
     return handleRouteError(res, error, 'Failed to fetch beauty tips.');
+  }
+});
+
+router.get('/me/usage', authenticate, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const rules = await getSubscriptionRules();
+    const tier = resolveUserTier(req);
+    const quotaRule = resolveQuotaRuleByTier(rules, tier);
+    const featureFlags = buildFeatureFlags({ tier, quotaRule });
+    const usage = await getQuotaUsageSnapshot({ userId, tier, quotaRule });
+
+    return res.json({
+      success: true,
+      usage,
+      featureFlags,
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
+      requestId: res.locals?.requestId || '',
+    });
+  } catch (error) {
+    return handleRouteError(res, error, 'Failed to load Beauty AI usage status.');
+  }
+});
+
+router.get('/consent/status', authenticate, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const [latestPlanConsent, latestSelfieConsent] = await Promise.all([
+      BeautyConsentAudit.findOne({ userId, action: 'plan_generation', consentGiven: true })
+        .sort({ createdAt: -1 })
+        .lean(),
+      BeautyConsentAudit.findOne({ userId, action: 'selfie_analysis', consentGiven: true })
+        .sort({ createdAt: -1 })
+        .lean(),
+    ]);
+
+    return res.json({
+      success: true,
+      consentVersion: BEAUTY_API_VERSION,
+      planGeneration: {
+        granted: Boolean(latestPlanConsent),
+        grantedAt: latestPlanConsent?.createdAt || null,
+      },
+      selfieAnalysis: {
+        granted: Boolean(latestSelfieConsent),
+        grantedAt: latestSelfieConsent?.createdAt || null,
+      },
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
+      requestId: res.locals?.requestId || '',
+    });
+  } catch (error) {
+    return handleRouteError(res, error, 'Failed to load consent status.');
+  }
+});
+
+router.get('/selfies/mine', authenticate, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const selfies = await BeautySelfie.find({ userId, status: 'active' })
+      .sort({ createdAt: -1 })
+      .limit(24)
+      .lean();
+
+    return res.json({
+      success: true,
+      data: selfies,
+      requestId: res.locals?.requestId || '',
+    });
+  } catch (error) {
+    return handleRouteError(res, error, 'Failed to load saved selfies.');
   }
 });
 
@@ -2540,9 +2688,11 @@ router.post('/progress-log', authenticate, progressLimiter, async (req, res) => 
     }
 
     const payload = validation.value;
+    const normalizedPlanId = normalizeOptionalPlanId(payload.planId);
     const entry = await BeautyProgressLog.findOneAndUpdate(
-      { userId, day: payload.day },
+      { userId, day: payload.day, planId: normalizedPlanId },
       {
+        planId: normalizedPlanId,
         done: parseBoolean(payload.done, false),
         note: normalizeText(payload.note, 600),
         skinScore: toNumber(payload.skinScore, 0, 0, 100),
@@ -2557,6 +2707,7 @@ router.post('/progress-log', authenticate, progressLimiter, async (req, res) => 
 
     return res.status(201).json({
       success: true,
+      planId: normalizedPlanId,
       entry,
     });
   } catch (error) {
@@ -2575,11 +2726,21 @@ router.get('/progress-log/mine', authenticate, async (req, res) => {
       return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    const logs = await BeautyProgressLog.find({ userId }).sort({ day: 1 }).lean();
+    const queryValidation = validate(JoiSchemas.progressQuery, req.query || {});
+    if (!queryValidation.ok) {
+      return res.status(400).json({
+        success: false,
+        errors: queryValidation.errors,
+      });
+    }
+    const planId = normalizeOptionalPlanId(queryValidation.value.planId);
+
+    const logs = await BeautyProgressLog.find({ userId, planId }).sort({ day: 1 }).lean();
     const completedCount = logs.filter((item) => item.done).length;
 
     return res.json({
       success: true,
+      planId,
       logs,
       summary: {
         completedCount,
@@ -2602,9 +2763,19 @@ router.delete('/progress-log/mine', authenticate, progressLimiter, async (req, r
       return res.status(401).json({ success: false, message: 'Authentication required' });
     }
 
-    await BeautyProgressLog.deleteMany({ userId });
+    const queryValidation = validate(JoiSchemas.progressQuery, req.query || {});
+    if (!queryValidation.ok) {
+      return res.status(400).json({
+        success: false,
+        errors: queryValidation.errors,
+      });
+    }
+    const planId = normalizeOptionalPlanId(queryValidation.value.planId);
+
+    await BeautyProgressLog.deleteMany({ userId, planId });
     return res.json({
       success: true,
+      planId,
       message: 'Progress history removed successfully.',
     });
   } catch (error) {

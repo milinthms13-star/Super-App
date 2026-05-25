@@ -21,15 +21,42 @@ const ConsultView = ({ consultApi }) => (
               {consultant.availableSlots.map((slot) => <option key={slot.id} value={slot.id}>{slot.label}</option>)}
             </select>
           </label>
-          <button type="button" className="astrology-save-button" disabled={consultApi.bookingLoadingId === key} onClick={() => consultApi.handleBookConsultation(consultant)}>{consultApi.bookingLoadingId === key ? "Booking..." : "Book consultation"}</button>
+          <label className="astrology-field">
+            <span>Notes for consultant (optional)</span>
+            <textarea
+              rows={3}
+              value={consultApi.consultationNotes[key] || ""}
+              onChange={(event) => consultApi.handleConsultationNotesChange(key, event.target.value)}
+              placeholder="Share topic, concern, or context for the session..."
+            />
+          </label>
+          <button type="button" className="astrology-save-button" disabled={consultApi.bookingLoadingId === key} onClick={() => consultApi.handlePrepareConsultationBooking(consultant)}>{consultApi.bookingLoadingId === key ? "Booking..." : "Review booking"}</button>
         </article>
       );
     })}
+    {consultApi.bookingDraft ? (
+      <article className="astrology-panel astro-result-card astro-span-2">
+        <h4>Review consultation booking</h4>
+        <p><strong>Consultant:</strong> {consultApi.bookingDraft.consultant?.name || "Consultant"}</p>
+        <p><strong>Slot:</strong> {consultApi.bookingDraft.slotLabel}</p>
+        <p><strong>Rate:</strong> {consultApi.bookingDraft.consultant?.rate || "INR"}</p>
+        <p><strong>Notes:</strong> {consultApi.bookingDraft.notes || "No notes added."}</p>
+        <div className="astrology-inline-actions">
+          <button type="button" className="astrology-save-button" disabled={consultApi.bookingLoadingId === consultApi.bookingDraft.consultantKey} onClick={consultApi.handleConfirmConsultationBooking}>
+            {consultApi.bookingLoadingId === consultApi.bookingDraft.consultantKey ? "Booking..." : "Confirm booking"}
+          </button>
+          <button type="button" className="astrology-secondary-button" disabled={consultApi.bookingLoadingId === consultApi.bookingDraft.consultantKey} onClick={consultApi.handleCancelConsultationDraft}>
+            Edit details
+          </button>
+        </div>
+      </article>
+    ) : null}
     {consultApi.lastBooking ? (
       <article className="astrology-panel astro-result-card astro-span-2">
         <h4>Latest booking</h4>
         <p>Code: {consultApi.lastBooking.confirmationCode}</p>
         <p>Consultant: {consultApi.lastBooking.consultantName}</p>
+        {consultApi.lastBooking.notes ? <p>Notes: {consultApi.lastBooking.notes}</p> : null}
         <p>
           Booking status:{" "}
           <span className={consultApi.getStatusClassName(consultApi.lastBooking.status)}>
@@ -78,6 +105,7 @@ const ConsultView = ({ consultApi }) => (
             <div key={booking.id} className="astrology-mini-history-item">
               <strong>{booking.consultantName || "Consultant"}</strong>
               <span>{booking.slot || booking.preferredDate || "Slot pending"}</span>
+              {booking.notes ? <span>{booking.notes}</span> : null}
               <span className={consultApi.getStatusClassName(booking.status)}>
                 {consultApi.formatStatusLabel(booking.status)}
               </span>
@@ -92,4 +120,3 @@ const ConsultView = ({ consultApi }) => (
 );
 
 export default ConsultView;
-

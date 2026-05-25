@@ -29,6 +29,8 @@ const TodayView = ({
   readingNotice,
   signsNotice,
   todayEnergyScore,
+  downloadRetryPeriod,
+  handleRetryHoroscopeDownload,
 }) => (
   <div className="astro-card-grid">
     {personalizedReady ? (
@@ -105,6 +107,16 @@ const TodayView = ({
               ? "Downloading yearly..."
               : "Download yearly horoscope"}
           </button>
+          {downloadRetryPeriod === "year" ? (
+            <button
+              type="button"
+              className="astrology-secondary-button"
+              disabled={downloadingHoroscopePeriod !== ""}
+              onClick={handleRetryHoroscopeDownload}
+            >
+              Retry yearly download
+            </button>
+          ) : null}
           <button
             type="button"
             className="astrology-secondary-button"
@@ -115,6 +127,16 @@ const TodayView = ({
               ? "Downloading total..."
               : "Download total horoscope"}
           </button>
+          {downloadRetryPeriod === "total" ? (
+            <button
+              type="button"
+              className="astrology-secondary-button"
+              disabled={downloadingHoroscopePeriod !== ""}
+              onClick={handleRetryHoroscopeDownload}
+            >
+              Retry total download
+            </button>
+          ) : null}
         </article>
         {showFullPrediction ? (
           <HoroscopeCard
@@ -138,4 +160,3 @@ const TodayView = ({
 );
 
 export default TodayView;
-
