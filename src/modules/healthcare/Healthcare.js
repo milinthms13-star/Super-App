@@ -10,11 +10,13 @@ import Healthcare10Home from "./Healthcare10Home";
 import HealthcareHero from "./components/HealthcareHero";
 import HealthcareNav from "./components/HealthcareNav";
 import LabBooking from "./components/LabBooking";
+import LabReportProcessing from "./components/LabReportProcessing";
 import NotificationsCenter from "./components/NotificationsCenter";
 import PartnerDashboard from "./components/PartnerDashboard";
 import PharmacyDelivery from "./components/PharmacyDelivery";
 import RefillReminders from "./components/RefillReminders";
 import RecordsVault from "./components/RecordsVault";
+import WearablesIntegration from "./components/WearablesIntegration";
 import {
   ELDERLY_CARE_PLANS,
   GOVERNMENT_SCHEMES,
@@ -923,6 +925,21 @@ const Healthcare = () => {
         <HealthcareAIAssistant
           loading={loading}
           onAskAssistant={handleAskHealthcareAssistant}
+        />
+      ) : null}
+
+      {activeSection === "lab-report-ocr" ? (
+        <LabReportProcessing
+          onSaveReport={handleCreateRecord}
+          familyMembers={familyMemberOptions}
+          loading={loading}
+        />
+      ) : null}
+
+      {activeSection === "wearables" ? (
+        <WearablesIntegration
+          userId={localStorage.getItem('userId') || 'user-123'}
+          loading={loading}
         />
       ) : null}
     </div>

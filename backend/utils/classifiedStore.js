@@ -242,6 +242,9 @@ const serializeClassifiedAd = (record, index = 0) => {
     spamScore: Number(plainRecord.spamScore || 0),
     flags: Array.isArray(plainRecord.flags) ? plainRecord.flags : [],
     analytics: plainRecord.analytics || {},
+    blockedUsers: Array.isArray(plainRecord.blockedUsers)
+      ? [...new Set(plainRecord.blockedUsers.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean))]
+      : [],
     popularityScore: calculatePopularityScore(plainRecord),
     createdAt: plainRecord.createdAt ? new Date(plainRecord.createdAt).toISOString() : null,
     updatedAt: plainRecord.updatedAt ? new Date(plainRecord.updatedAt).toISOString() : null,
@@ -638,6 +641,22 @@ const addClassifiedReview = async (listingId, payload) => {
   return serializeClassifiedAd(ad);
 };
 
+const updateClassifiedFavoriteCount = async (listingId, delta = 0) => {
+  if (!useMongoClassifieds()) {
+    return null;
+  }
+
+  const ad = await ClassifiedAd.findById(listingId);
+  if (!ad) {
+    return null;
+  }
+
+  const safeDelta = Number.isFinite(Number(delta)) ? Number(delta) : 0;
+  ad.favorites = Math.max(0, Number(ad.favorites || 0) + safeDelta);
+  await ad.save();
+  return serializeClassifiedAd(ad);
+};
+
 const moderateClassifiedAd = async (listingId, updates) => {
   if (!useMongoClassifieds()) {
     return null;
@@ -946,4 +965,5 @@ module.exports = {
   searchClassifieds,
   blockUser,
   unblockUser,
+  updateClassifiedFavoriteCount,
 };

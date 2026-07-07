@@ -1,0 +1,403 @@
+.doctor-availability-manager {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: Arial, sans-serif;
+}
+
+.manager-header {
+  margin-bottom: 30px;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 20px;
+}
+
+.manager-header h2 {
+  color: #2c5aa0;
+  margin: 0 0 10px 0;
+  font-size: 28px;
+}
+
+.manager-header p {
+  color: #666;
+  margin: 0;
+  font-size: 14px;
+}
+
+.manager-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.manager-tabs button {
+  padding: 12px 24px;
+  border: 2px solid #e0e0e0;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  transition: all 0.2s;
+}
+
+.manager-tabs button:hover {
+  border-color: #2c5aa0;
+  color: #2c5aa0;
+}
+
+.manager-tabs button.tab-active {
+  background: #2c5aa0;
+  color: white;
+  border-color: #2c5aa0;
+}
+
+.availability-content,
+.block-date-content {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.recurring-pattern-section,
+.date-specific-section,
+.quick-view-section,
+.block-form {
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.recurring-pattern-section h3,
+.date-specific-section h3,
+.quick-view-section h3,
+.block-date-content h3,
+.blocked-dates-list h4 {
+  color: #2c5aa0;
+  margin: 0 0 10px 0;
+  font-size: 20px;
+}
+
+.section-description {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.pattern-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: #333;
+  font-size: 14px;
+}
+
+.form-group input,
+.form-group select {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: Arial, sans-serif;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #2c5aa0;
+}
+
+.days-selector {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.day-btn {
+  padding: 10px 16px;
+  border: 2px solid #e0e0e0;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  transition: all 0.2s;
+}
+
+.day-btn:hover {
+  border-color: #2c5aa0;
+}
+
+.day-btn.selected {
+  background: #2c5aa0;
+  color: white;
+  border-color: #2c5aa0;
+}
+
+.time-range-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.save-pattern-btn,
+.save-availability-btn,
+.block-date-btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  background: #4caf50;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.save-pattern-btn:hover,
+.save-availability-btn:hover,
+.block-date-btn:hover {
+  background: #45a049;
+}
+
+.date-selector,
+.quick-add-slot {
+  margin-bottom: 20px;
+}
+
+.date-selector input,
+.quick-add-slot select {
+  width: 100%;
+  max-width: 300px;
+}
+
+.time-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.time-slot {
+  padding: 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.time-slot.available {
+  background: #e8f5e9;
+  border-color: #4caf50;
+}
+
+.time-slot.unavailable {
+  background: #ffebee;
+  border-color: #f44336;
+  opacity: 0.6;
+}
+
+.time-slot.booked {
+  background: #e3f2fd;
+  border-color: #2196f3;
+}
+
+.slot-time {
+  font-weight: 600;
+  font-size: 16px;
+  color: #333;
+}
+
+.booked-badge {
+  font-size: 11px;
+  color: #2196f3;
+  font-weight: 500;
+}
+
+.toggle-slot-btn,
+.remove-slot-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-slot-btn {
+  background: #2c5aa0;
+  color: white;
+}
+
+.toggle-slot-btn:hover {
+  background: #1e3a70;
+}
+
+.remove-slot-btn {
+  background: #f44336;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.remove-slot-btn:hover {
+  background: #d32f2f;
+}
+
+.empty-slots {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px;
+  color: #999;
+  font-size: 14px;
+}
+
+.days-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 15px;
+}
+
+.day-overview {
+  padding: 15px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.day-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.day-header strong {
+  font-size: 14px;
+  color: #333;
+}
+
+.day-header span {
+  font-size: 12px;
+  color: #666;
+}
+
+.slots-count {
+  font-size: 18px;
+  font-weight: bold;
+  color: #2c5aa0;
+}
+
+.blocked-dates-list {
+  margin-top: 30px;
+}
+
+.blocked-date-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: #fff3cd;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  border-left: 4px solid #ffc107;
+}
+
+.block-reason {
+  color: #856404;
+  font-size: 13px;
+  flex: 1;
+  margin: 0 15px;
+}
+
+.blocked-date-item button {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 4px;
+  background: #2c5aa0;
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.blocked-date-item button:hover {
+  background: #1e3a70;
+}
+
+.loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .doctor-availability-manager {
+    padding: 15px;
+  }
+
+  .manager-tabs {
+    flex-direction: column;
+  }
+
+  .manager-tabs button {
+    width: 100%;
+  }
+
+  .time-range-group {
+    grid-template-columns: 1fr;
+  }
+
+  .time-slots-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+
+  .days-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .blocked-date-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .blocked-date-item button {
+    width: 100%;
+  }
+}

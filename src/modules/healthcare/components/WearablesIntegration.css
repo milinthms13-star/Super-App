@@ -1,0 +1,587 @@
+.wearables-integration {
+  padding: 30px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.wearables-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.wearables-header h2 {
+  margin: 0 0 5px 0;
+  font-size: 28px;
+  color: #1a1a1a;
+}
+
+.wearables-header p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.header-actions select {
+  padding: 10px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+}
+
+.connect-device-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.connect-device-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Anomalies Alert */
+.anomalies-alert {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 30px;
+}
+
+.anomalies-alert h3 {
+  margin: 0 0 15px 0;
+  color: #856404;
+  font-size: 18px;
+}
+
+.anomalies-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.anomaly-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: white;
+  border-radius: 8px;
+  border-left: 4px solid #ffc107;
+}
+
+.anomaly-item.high {
+  border-left-color: #dc3545;
+  background: #fff5f5;
+}
+
+.anomaly-item.critical {
+  border-left-color: #721c24;
+  background: #f8d7da;
+}
+
+.anomaly-metric {
+  font-weight: 600;
+  color: #333;
+  min-width: 120px;
+}
+
+.anomaly-message {
+  flex: 1;
+  color: #666;
+  font-size: 14px;
+}
+
+.anomaly-value {
+  font-weight: 600;
+  color: #dc3545;
+  margin-right: 15px;
+}
+
+.anomaly-time {
+  color: #999;
+  font-size: 12px;
+}
+
+/* Connected Devices */
+.connected-devices-section {
+  margin-bottom: 40px;
+}
+
+.connected-devices-section h3 {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  color: #1a1a1a;
+}
+
+.devices-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.device-card {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.2s;
+}
+
+.device-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.device-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.device-icon {
+  font-size: 40px;
+}
+
+.device-info h4 {
+  margin: 0 0 5px 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.last-sync {
+  font-size: 12px;
+  color: #999;
+}
+
+.device-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.sync-btn,
+.disconnect-btn {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sync-btn {
+  background: #2c5aa0;
+  color: white;
+}
+
+.sync-btn:hover {
+  background: #1e3a70;
+}
+
+.sync-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.disconnect-btn {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.disconnect-btn:hover {
+  background: #e0e0e0;
+}
+
+.device-stats {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f0f0f0;
+  font-size: 13px;
+  color: #666;
+}
+
+/* Health Metrics */
+.health-metrics-section {
+  margin-bottom: 40px;
+}
+
+.health-metrics-section h3 {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  color: #1a1a1a;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.metric-card {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.metric-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.metric-card.low {
+  border-left: 4px solid #ffc107;
+}
+
+.metric-card.high {
+  border-left: 4px solid #dc3545;
+}
+
+.metric-icon {
+  font-size: 40px;
+}
+
+.metric-content {
+  flex: 1;
+}
+
+.metric-content h4 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #666;
+  text-transform: capitalize;
+  font-weight: 500;
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.status-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-badge.low {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-badge.high {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* Trends Section */
+.trends-section {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 30px;
+  margin-bottom: 40px;
+}
+
+.trends-section h3 {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  color: #1a1a1a;
+}
+
+.chart-placeholder {
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 2px dashed #ddd;
+}
+
+.chart-placeholder p {
+  margin: 10px 0;
+  color: #666;
+  font-size: 16px;
+}
+
+.chart-note {
+  font-size: 14px !important;
+  color: #999 !important;
+}
+
+/* Connect Modal */
+.connect-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.connect-modal {
+  background: white;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #1a1a1a;
+}
+
+.close-modal {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: #f5f5f5;
+  color: #666;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.close-modal:hover {
+  background: #e0e0e0;
+}
+
+.modal-body {
+  padding: 30px;
+  overflow-y: auto;
+}
+
+.available-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.available-device {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.available-device:hover {
+  border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+}
+
+.device-icon-large {
+  font-size: 48px;
+}
+
+.device-details {
+  flex: 1;
+}
+
+.device-details h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  color: #1a1a1a;
+}
+
+.device-details p {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.device-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.device-metrics > span:first-child {
+  font-size: 12px;
+  color: #999;
+  margin-right: 5px;
+}
+
+.metric-tag {
+  padding: 4px 10px;
+  background: #f0f0f0;
+  border-radius: 12px;
+  font-size: 11px;
+  color: #666;
+  text-transform: capitalize;
+}
+
+.connect-btn {
+  padding: 12px 30px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.connect-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.connect-btn.connected {
+  background: #28a745;
+  cursor: default;
+}
+
+.connect-btn.connected:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.connect-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+}
+
+.empty-state p {
+  margin: 0 0 20px 0;
+  color: #666;
+  font-size: 16px;
+}
+
+.empty-state button {
+  padding: 12px 30px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.empty-state button:hover {
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Loading State */
+.loading-state {
+  text-align: center;
+  padding: 60px 20px;
+  font-size: 16px;
+  color: #666;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .wearables-integration {
+    padding: 20px;
+  }
+
+  .wearables-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .header-actions select,
+  .connect-device-btn {
+    width: 100%;
+  }
+
+  .devices-grid,
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .anomaly-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .available-device {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .device-details {
+    text-align: center;
+  }
+
+  .device-metrics {
+    justify-content: center;
+  }
+}

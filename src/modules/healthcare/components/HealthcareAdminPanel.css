@@ -1,0 +1,524 @@
+.healthcare-admin-panel {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+  font-family: Arial, sans-serif;
+}
+
+.admin-header {
+  margin-bottom: 30px;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 20px;
+}
+
+.admin-header h1 {
+  color: #2c5aa0;
+  margin: 0 0 10px 0;
+  font-size: 28px;
+}
+
+.admin-header p {
+  color: #666;
+  margin: 0;
+  font-size: 14px;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+}
+
+.admin-tabs button {
+  padding: 12px 24px;
+  border: 2px solid #e0e0e0;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  transition: all 0.2s;
+}
+
+.admin-tabs button:hover {
+  border-color: #2c5aa0;
+  color: #2c5aa0;
+}
+
+.admin-tabs button.tab-active {
+  background: #2c5aa0;
+  color: white;
+  border-color: #2c5aa0;
+}
+
+.admin-content {
+  background: white;
+  border-radius: 8px;
+  padding: 30px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Overview Tab */
+.overview-tab h2 {
+  margin-top: 0;
+  color: #2c5aa0;
+  margin-bottom: 20px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.metric-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+  border-radius: 12px;
+  color: white;
+}
+
+.metric-card.critical {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.metric-card h3 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+.metric-card .metric-value {
+  font-size: 32px;
+  font-weight: bold;
+  margin: 10px 0;
+}
+
+.metric-card .metric-label {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.admin-refresh-btn {
+  padding: 12px 30px;
+  background: #2c5aa0;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.admin-refresh-btn:hover {
+  background: #1e3a70;
+}
+
+/* Doctor Approvals Tab */
+.doctor-approvals-tab h2,
+.prescription-reviews-tab h2,
+.emergencies-tab h2,
+.analytics-tab h2,
+.settings-tab h2 {
+  margin-top: 0;
+  color: #2c5aa0;
+  margin-bottom: 20px;
+}
+
+.approvals-list,
+.reviews-list,
+.emergencies-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.approval-card,
+.review-card,
+.emergency-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  background: #f9f9f9;
+}
+
+.approval-header,
+.review-header,
+.emergency-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+
+.approval-header h3,
+.review-header h3,
+.emergency-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.specialty-badge,
+.status-badge,
+.escalation-badge,
+.time-badge {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.specialty-badge {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.status-badge.high,
+.escalation-badge.critical {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.status-badge.medium {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.status-badge.low {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.escalation-badge.high {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.escalation-badge.medium {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.time-badge {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.approval-details,
+.review-details,
+.emergency-details {
+  margin-bottom: 15px;
+}
+
+.approval-details p,
+.review-details p,
+.emergency-details p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #555;
+}
+
+.alert-box {
+  padding: 15px;
+  border-radius: 8px;
+  margin: 15px 0;
+}
+
+.alert-box.warning {
+  background: #fff3cd;
+  border-left: 4px solid #ffc107;
+}
+
+.alert-box strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #856404;
+}
+
+.alert-box ul {
+  margin: 8px 0;
+  padding-left: 20px;
+  color: #856404;
+}
+
+.alert-box li {
+  margin: 4px 0;
+}
+
+.approval-actions,
+.review-actions {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.approval-actions textarea,
+.review-actions textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: Arial, sans-serif;
+  margin-bottom: 10px;
+  resize: vertical;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.approve-btn,
+.reject-btn,
+.review-btn,
+.escalate-btn,
+.resolve-btn,
+.contact-btn,
+.cancel-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.approve-btn {
+  background: #4caf50;
+  color: white;
+}
+
+.approve-btn:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.reject-btn {
+  background: #f44336;
+  color: white;
+}
+
+.reject-btn:hover:not(:disabled) {
+  background: #da190b;
+}
+
+.review-btn,
+.escalate-btn {
+  background: #2c5aa0;
+  color: white;
+}
+
+.review-btn:hover,
+.escalate-btn:hover:not(:disabled) {
+  background: #1e3a70;
+}
+
+.resolve-btn {
+  background: #4caf50;
+  color: white;
+}
+
+.resolve-btn:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.contact-btn {
+  background: #ff9800;
+  color: white;
+}
+
+.contact-btn:hover {
+  background: #e68900;
+}
+
+.cancel-btn {
+  background: #9e9e9e;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background: #757575;
+}
+
+.approve-btn:disabled,
+.reject-btn:disabled,
+.escalate-btn:disabled,
+.resolve-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+  font-size: 16px;
+}
+
+/* Emergency Specific */
+.emergency-card.critical {
+  border-left: 4px solid #f44336;
+}
+
+.ack-time {
+  color: #f44336 !important;
+  font-weight: 500;
+}
+
+.emergency-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+
+.refresh-emergencies-btn {
+  margin-top: 20px;
+  padding: 12px 30px;
+  background: #2c5aa0;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.refresh-emergencies-btn:hover {
+  background: #1e3a70;
+}
+
+/* Analytics Tab */
+.analytics-section {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.analytics-section h3 {
+  margin-top: 0;
+  color: #333;
+}
+
+.chart-placeholder {
+  padding: 40px;
+  background: white;
+  border-radius: 8px;
+  text-align: center;
+  color: #666;
+}
+
+.services-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.service-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  background: white;
+  border-radius: 6px;
+}
+
+/* Settings Tab */
+.settings-section {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.settings-section h3 {
+  margin-top: 0;
+  color: #333;
+  margin-bottom: 15px;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.setting-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.setting-item span {
+  font-size: 14px;
+  color: #555;
+}
+
+.save-settings-btn {
+  padding: 12px 30px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.save-settings-btn:hover {
+  background: #45a049;
+}
+
+/* Loading States */
+.admin-loading,
+.loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+  font-size: 16px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .healthcare-admin-panel {
+    padding: 15px;
+  }
+
+  .admin-tabs {
+    flex-direction: column;
+  }
+
+  .admin-tabs button {
+    width: 100%;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+
+  .action-buttons button {
+    width: 100%;
+  }
+
+  .emergency-actions {
+    flex-direction: column;
+  }
+
+  .emergency-actions button {
+    width: 100%;
+  }
+}
