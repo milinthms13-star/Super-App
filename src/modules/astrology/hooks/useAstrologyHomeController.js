@@ -44,6 +44,7 @@ import {
 import { useAstrologyConsultations } from "./useAstrologyConsultations";
 import { useAstrologyKundliCompatibility } from "./useAstrologyKundliCompatibility";
 import { useAstrologyProfile } from "./useAstrologyProfile";
+import { useAstrologyFamilyProfiles } from "./useAstrologyFamilyProfiles";
 
 const hasLikelyMojibake = (value = "") => /Ãƒ|Ã‚|Ã¢â‚¬|Ã¢â€š|ï¿½/i.test(String(value || ""));
 
@@ -169,6 +170,11 @@ export const useAstrologyHomeController = () => {
     setSelectedSign,
     setSaveState,
     ensureSignedIn,
+  });
+
+  const familyProfilesApi = useAstrologyFamilyProfiles({
+    currentUser,
+    profileApi,
   });
 
   useEffect(() => {
@@ -661,6 +667,7 @@ export const useAstrologyHomeController = () => {
     profileApi,
     consultApi,
     kundliApi,
+    familyProfilesApi,
     handleSectionChange,
     handleQuickStartDraftChange,
     handleBirthPlaceChange,

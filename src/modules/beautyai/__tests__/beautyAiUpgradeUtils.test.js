@@ -1,4 +1,4 @@
-﻿import { buildBeautyRequest, getMalayalamHelperPrompts, getBeautyPlanFallback } from './beautyAiUpgradeUtils';
+﻿import { buildBeautyRequest, getMalayalamHelperPrompts, getBeautyPlanFallback } from '../beautyAiUpgradeUtils';
 
 describe('beautyAiUpgradeUtils', () => {
   test('buildBeautyRequest enforces boolean consent and shapes payload', () => {

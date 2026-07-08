@@ -109,6 +109,7 @@ const startBackgroundServices = () => {
   const whatsappGroupReminderScheduler = require('./services/whatsappGroupReminderScheduler');
   const draftExpirationScheduler = require('./services/draftExpirationScheduler');
   const { startHealthcareRetentionScheduler } = require('./jobs/healthcareRetentionScheduler');
+  const { getInstance: getAstrologyScheduler } = require('./services/astrologyNotificationScheduler');
 
   voiceCallScheduler.start();
   scheduleAbandonedCartReminders();
@@ -134,6 +135,11 @@ const startBackgroundServices = () => {
   whatsappGroupReminderScheduler.startWhatsAppGroupReminderScheduler();
   draftExpirationScheduler.startDraftExpirationScheduler();
   startHealthcareRetentionScheduler();
+  
+  // Initialize astrology notification scheduler
+  getAstrologyScheduler().initialize().catch((err) => {
+    logger.warn(`Astrology notification scheduler init failed: ${err.message}`);
+  });
 
   backgroundServicesStarted = true;
 };
@@ -157,6 +163,7 @@ const stopBackgroundServices = async () => {
     const pushNotificationScheduler = require('./services/pushNotificationScheduler');
     const whatsappGroupReminderScheduler = require('./services/whatsappGroupReminderScheduler');
     const { stopHealthcareRetentionScheduler } = require('./jobs/healthcareRetentionScheduler');
+    const { getInstance: getAstrologyScheduler } = require('./services/astrologyNotificationScheduler');
 
     voiceCallScheduler.stop();
     stopAbandonedCartReminders();
@@ -169,6 +176,13 @@ const stopBackgroundServices = async () => {
     pushNotificationScheduler.stopPushNotificationScheduler();
     whatsappGroupReminderScheduler.stopWhatsAppGroupReminderScheduler();
     stopHealthcareRetentionScheduler();
+    
+    // Stop astrology notification scheduler
+    try {
+      getAstrologyScheduler().stopAll();
+    } catch (error) {
+      logger.warn(`Failed to stop astrology scheduler: ${error.message}`);
+    }
 
     try {
       await closeOrderQueue();

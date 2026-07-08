@@ -10,8 +10,8 @@ import {
   getMalayalamHelperPrompts,
   getSafetyWarnings,
   shareBeautyPlanWhatsApp,
-} from "./beautyAiUpgradeUtils";
-import { buildApiUrl } from "../../utils/api";
+} from "../beautyAiUpgradeUtils";
+import { buildApiUrl } from "../../../utils/api";
 
 const DEFAULT_FORM = {
   language: "ml",

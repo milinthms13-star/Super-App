@@ -10,14 +10,16 @@ const rateLimit = require('express-rate-limit');
 
 const auth = require('../middleware/auth');
 const logger = require('../utils/logger');
-const BeautyPlan = require('../models/BeautyPlan');
-const BeautyTip = require('../models/BeautyTip');
-const BeautyProgressLog = require('../models/BeautyProgressLog');
-const BeautySubscriptionRule = require('../models/BeautySubscriptionRule');
-const BeautyUsageQuota = require('../models/BeautyUsageQuota');
-const BeautyConsentAudit = require('../models/BeautyConsentAudit');
-const BeautyOpsEvent = require('../models/BeautyOpsEvent');
-const BeautySelfie = require('../models/BeautySelfie');
+const {
+  BeautyPlan,
+  BeautyTip,
+  BeautyProgressLog,
+  BeautySubscriptionRule,
+  BeautyUsageQuota,
+  BeautyConsentAudit,
+  BeautyOpsEvent,
+  BeautySelfie,
+} = require('../models/beautyai');
 const s3Storage = require('../utils/s3Storage');
 const {
   normalizeStorageKey,

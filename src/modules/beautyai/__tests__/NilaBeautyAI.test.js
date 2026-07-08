@@ -1,10 +1,10 @@
 ﻿import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import axios from 'axios';
-import NilaBeautyAI from './NilaBeautyAI';
+import NilaBeautyAI from '../NilaBeautyAI';
 
 jest.mock('axios');
-jest.mock('../../utils/auth', () => ({
+jest.mock('../../../utils/auth', () => ({
   getStoredAuthToken: () => 'test-token',
 }));
 jest.mock('react-router-dom', () => {

@@ -1,34 +1,80 @@
-const DEFAULT_API_BASE_URL = "http://localhost:5000/api";
+/**
+ * API Utility Functions
+ * Centralized utilities for API interactions
+ */
 
-const stripTrailingSlashes = (value = "") => String(value || "").trim().replace(/\/+$/, "");
-
-export const normalizeApiBaseUrl = (value = "") => {
-  const normalizedValue = stripTrailingSlashes(value);
-
-  if (!normalizedValue) {
-    return DEFAULT_API_BASE_URL;
+// Get API base URL from environment or default
+const getApiBaseUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
   }
-
-  return /\/api$/i.test(normalizedValue) ? normalizedValue : `${normalizedValue}/api`;
+  
+  // Default to same domain in production, localhost in development
+  if (process.env.NODE_ENV === 'production') {
+    return `${window.location.origin}/api`;
+  }
+  
+  return 'http://localhost:5000/api';
 };
 
-export const normalizeBackendBaseUrl = (value = "") => {
-  const normalizedValue = stripTrailingSlashes(value);
-
-  if (!normalizedValue) {
-    return DEFAULT_API_BASE_URL.replace(/\/api$/i, "");
-  }
-
-  return normalizedValue.replace(/\/api$/i, "");
+/**
+ * Build full API URL from path
+ * @param {string} path - API endpoint path (e.g., '/beauty-ai/tips')
+ * @returns {string} Full API URL
+ */
+export const buildApiUrl = (path) => {
+  const baseUrl = getApiBaseUrl();
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${baseUrl}${cleanPath}`;
 };
 
-export const API_BASE_URL = normalizeApiBaseUrl(process.env.REACT_APP_API_URL || "");
-export const BACKEND_BASE_URL = normalizeBackendBaseUrl(
-  process.env.REACT_APP_BACKEND_URL || API_BASE_URL
-);
-export const API_ORIGIN = BACKEND_BASE_URL;
+/**
+ * Handle API error responses
+ * @param {Error} error - Error object from API call
+ * @returns {object} Formatted error response
+ */
+export const handleApiError = (error) => {
+  if (error.response) {
+    // Server responded with error status
+    return {
+      success: false,
+      error: error.response.data?.message || error.response.data?.error || 'Server error',
+      status: error.response.status,
+      data: error.response.data,
+    };
+  } else if (error.request) {
+    // Request made but no response received
+    return {
+      success: false,
+      error: 'Network error. Please check your connection.',
+      status: 0,
+    };
+  } else {
+    // Error in request configuration
+    return {
+      success: false,
+      error: error.message || 'An unexpected error occurred',
+      status: -1,
+    };
+  }
+};
 
-export const buildApiUrl = (path = "") => {
-  const normalizedPath = String(path || "").startsWith("/") ? path : `/${path}`;
-  return `${API_BASE_URL}${normalizedPath}`;
+/**
+ * Create query string from parameters object
+ * @param {object} params - Parameters object
+ * @returns {string} Query string
+ */
+export const buildQueryString = (params) => {
+  const cleanParams = Object.entries(params)
+    .filter(([_, value]) => value !== undefined && value !== null && value !== '')
+    .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+  
+  return new URLSearchParams(cleanParams).toString();
+};
+
+export default {
+  buildApiUrl,
+  handleApiError,
+  buildQueryString,
+  getApiBaseUrl,
 };

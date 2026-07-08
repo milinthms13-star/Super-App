@@ -944,5 +944,182 @@ export const astrologyService = {
       throw buildServiceError(error, null, "Unable to download astrology analytics report.");
     }
   },
+
+  async getBookingsByConsultant() {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/analytics/bookings-by-consultant`);
+
+      if (!response.data?.success || !Array.isArray(response.data?.data)) {
+        throw new Error("Unable to load consultant booking statistics.");
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, [], "Unable to load consultant booking statistics.");
+    }
+  },
+
+  async getRevenueTrends(period = "month") {
+    const normalizedPeriod = String(period || "month").trim().toLowerCase();
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/analytics/revenue-trends`, {
+        params: { period: normalizedPeriod },
+      });
+
+      if (!response.data?.success || !Array.isArray(response.data?.data)) {
+        throw new Error("Unable to load revenue trends.");
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, [], "Unable to load revenue trends.");
+    }
+  },
+
+  async getUserStats() {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/analytics/user-stats`);
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to load user statistics.");
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, {
+        totalProfiles: 0,
+        profilesWithBirthDetails: 0,
+        profilesWithFamilyMembers: 0,
+        profilesWithSavedReadings: 0,
+        usersWithBookings: 0,
+        completionRate: 0,
+      }, "Unable to load user statistics.");
+    }
+  },
 };
 
+
+  // Payment-related methods
+  async createConsultationPaymentOrder(bookingId) {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/astrology/consultations/${bookingId}/payment/create-order`
+      );
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to create payment order.");
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to create payment order.");
+    }
+  },
+
+  async verifyConsultationPayment(bookingId, paymentDetails) {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/astrology/consultations/${bookingId}/payment/verify`,
+        paymentDetails
+      );
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Payment verification failed.");
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, null, "Payment verification failed.");
+    }
+  },
+
+  async getConsultationPaymentStatus(bookingId) {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/astrology/consultations/${bookingId}/payment`
+      );
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to fetch payment status.");
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to fetch payment status.");
+    }
+  },
+
+  async requestPaymentRefund(bookingId, reason = "") {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/astrology/consultations/${bookingId}/payment/refund`,
+        { reason }
+      );
+
+      if (!response.data?.success) {
+        throw new Error("Unable to request refund.");
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to request refund.");
+    }
+  },
+
+  async downloadPaymentReceipt(bookingId) {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/astrology/consultations/${bookingId}/payment/receipt`,
+        { responseType: "blob" }
+      );
+
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `receipt-${bookingId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to download receipt.");
+    }
+  },
+
+  // AI Assistant method
+  async askAstrologyAssistant(payload) {
+    const fallback = {
+      answer: "Focus on practical steps and clear communication today. Your birth chart suggests this is a good time for planning.",
+      tips: [
+        "Start the day with a calm routine",
+        "Make important decisions in the morning",
+        "Trust your intuition on family matters",
+      ],
+      quality: {
+        source: "fallback",
+        guidanceOnly: true,
+        isSynthetic: true,
+        note: "AI assistant response is guidance-oriented.",
+      },
+    };
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/astrology/assistant`, payload);
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to get assistant response.");
+      }
+
+      return {
+        ...response.data.data,
+        _meta: normalizeContentMeta(response.data?.meta || response.data?.data?.quality || {}),
+      };
+    } catch (error) {
+      throw buildServiceError(error, fallback, "Unable to get assistant response.");
+    }
+  },
+};
+
+export { astrologyService };

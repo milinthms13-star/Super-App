@@ -5,6 +5,7 @@ export const ASTROLOGY_PRIMARY_TABS = [
   { key: "career", label: "Career", labelMl: "\u0d24\u0d4a\u0d34\u0d3f\u0d7d", icon: "4" },
   { key: "match", label: "Marriage", labelMl: "\u0d35\u0d3f\u0d35\u0d3e\u0d39\u0d02", icon: "5" },
   { key: "remedies", label: "Remedies", labelMl: "\u0d2a\u0d30\u0d3f\u0d39\u0d3e\u0d30\u0d02", icon: "6" },
+  { key: "family", label: "Family", labelMl: "\u0d15\u0d41\u0d1f\u0d41\u0d02\u0d2c\u0d02", icon: "10" },
   { key: "consult", label: "Consult", labelMl: "\u0d15\u0d7a\u0d7e\u0d38\u0d7c\u0d1f\u0d4d", icon: "7" },
   { key: "ai", label: "Ask AI", labelMl: "AI \u0d1a\u0d4b\u0d26\u0d3f\u0d15\u0d4d\u0d15\u0d42", icon: "8" },
   { key: "saved", label: "Saved", labelMl: "\u0d38\u0d47\u0d35\u0d4d \u0d1a\u0d46\u0d2f\u0d4d\u0d24\u0d24\u0d4d", icon: "9" },

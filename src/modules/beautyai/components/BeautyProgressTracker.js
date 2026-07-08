@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { buildApiUrl } from "../../utils/api";
-import { calculateProgressScore, DEFAULT_WEEK } from "./beautyAiUpgradeUtils";
+import { buildApiUrl } from "../../../utils/api";
+import { calculateProgressScore, DEFAULT_WEEK } from "../beautyAiUpgradeUtils";
 
 const SNAPSHOT_STORAGE_KEY = "beauty_ai_weekly_snapshots_v1";
 const SNAPSHOT_TTL_MS = 30 * 24 * 60 * 60 * 1000;

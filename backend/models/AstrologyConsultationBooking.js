@@ -43,6 +43,12 @@ const astrologyConsultationBookingSchema = new mongoose.Schema(
     paymentId: { type: String, trim: true, default: '' },
     paymentSignature: { type: String, trim: true, default: '' },
     paymentDate: { type: Date },
+    reminderSent: { type: Boolean, default: false },
+    refundId: { type: String, trim: true, default: '' },
+    refundStatus: { type: String, trim: true, default: '' },
+    refundAmount: { type: Number, min: 0 },
+    refundReason: { type: String, trim: true, default: '' },
+    refundDate: { type: Date },
   },
   { timestamps: true }
 );
