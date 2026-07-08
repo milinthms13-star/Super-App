@@ -1,0 +1,76 @@
+{
+  "common": {
+    "welcome": "മലബാർ ബസാർ ഫിനാൻസിലേക്ക് സ്വാഗതം",
+    "submit": "സമർപ്പിക്കുക",
+    "cancel": "റദ്ദാക്കുക",
+    "save": "സേവ് ചെയ്യുക",
+    "edit": "എഡിറ്റ് ചെയ്യുക",
+    "delete": "ഡിലീറ്റ് ചെയ്യുക",
+    "search": "തിരയുക",
+    "filter": "ഫിൽട്ടർ",
+    "export": "എക്സ്പോർട്ട്",
+    "download": "ഡൗൺലോഡ്",
+    "upload": "അപ്‌ലോഡ്",
+    "back": "തിരികെ",
+    "next": "അടുത്തത്",
+    "previous": "മുമ്പത്തെത്",
+    "loading": "ലോഡ് ചെയ്യുന്നു...",
+    "success": "വിജയം",
+    "error": "പിശക്",
+    "warning": "മുന്നറിയിപ്പ്",
+    "info": "വിവരം"
+  },
+  "finance": {
+    "title": "ഫിനാൻസ് ഹബ്",
+    "apply_now": "വായ്പയ്ക്ക് അപേക്ഷിക്കുക",
+    "check_eligibility": "യോഗ്യത പരിശോധിക്കുക",
+    "calculate_emi": "EMI കണക്കാക്കുക",
+    "track_application": "നിങ്ങളുടെ അപേക്ഷ ട്രാക്ക് ചെയ്യുക",
+    "loan_categories": {
+      "business": "ബിസിനസ് വായ്പ",
+      "personal": "വ്യക്തിഗത വായ്പ",
+      "gold": "സ്വർണ്ണ വായ്പ",
+      "home": "ഭവന വായ്പ",
+      "vehicle": "വാഹന വായ്പ",
+      "education": "വിദ്യാഭ്യാസ വായ്പ"
+    },
+    "status": {
+      "submitted": "സമർപ്പിച്ചു",
+      "under_review": "പരിശോധനയിൽ",
+      "documents_requested": "രേഖകൾ ആവശ്യമാണ്",
+      "institution_review": "സ്ഥാപന പരിശോധന",
+      "approved": "അംഗീകരിച്ചു",
+      "rejected": "നിരസിച്ചു",
+      "withdrawn": "പിൻവലിച്ചു"
+    },
+    "form": {
+      "full_name": "പൂർണ്ണ നാമം",
+      "phone": "ഫോൺ നമ്പർ",
+      "email": "ഇമെയിൽ വിലാസം",
+      "loan_amount": "വായ്പ തുക",
+      "loan_category": "വായ്പ വിഭാഗം",
+      "preferred_tenure": "ആവശ്യമുള്ള കാലാവധി (മാസങ്ങൾ)",
+      "monthly_income": "പ്രതിമാസ വരുമാനം",
+      "existing_emi": "നിലവിലുള്ള EMI",
+      "cibil_score": "CIBIL സ്കോർ",
+      "employment_type": "തൊഴിൽ തരം",
+      "state": "സംസ്ഥാനം",
+      "district": "ജില്ല",
+      "pincode": "പിൻകോഡ്"
+    },
+    "documents": {
+      "aadhaar": "ആധാർ കാർഡ്",
+      "pan": "PAN കാർഡ്",
+      "salary_slips": "ശമ്പള സ്ലിപ്പുകൾ",
+      "bank_statements": "ബാങ്ക് സ്റ്റേറ്റ്മെന്റുകൾ",
+      "business_proof": "ബിസിനസ് തെളിവ്",
+      "gst_certificate": "GST സർട്ടിഫിക്കറ്റ്"
+    },
+    "messages": {
+      "application_submitted": "നിങ്ങളുടെ വായ്പ അപേക്ഷ വിജയകരമായി സമർപ്പിച്ചു!",
+      "documents_uploaded": "രേഖകൾ വിജയകരമായി അപ്‌ലോഡ് ചെയ്തു",
+      "consultant_assigned": "നിങ്ങളുടെ അപേക്ഷയ്ക്ക് ഒരു കൺസൾട്ടന്റ് നിയോഗിച്ചിരിക്കുന്നു",
+      "status_updated": "അപേക്ഷാ നില അപ്ഡേറ്റ് ചെയ്തു"
+    }
+  }
+}

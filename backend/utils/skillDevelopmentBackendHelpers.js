@@ -1,51 +1,39 @@
-const MAX_CERTIFICATE_SIZE_BYTES = 5 * 1024 * 1024;
-const ALLOWED_CERTIFICATE_MIME_TYPES = new Set([
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/jpg",
-]);
+// Build shareable wallet text
+const buildSkillWalletShareText = (courses = [], certificates = []) => {
+  if (courses.length === 0 && certificates.length === 0) {
+    return 'No courses or certificates yet. Start learning today!';
+  }
 
-function validateCertificateUploadPayload(body = {}, file) {
+  const courseText = courses.length > 0
+    ? `Enrolled in ${courses.length} course${courses.length > 1 ? 's' : ''}: ${courses.map(c => c.title || c.courseTitle).join(', ')}`
+    : '';
+
+  const certText = certificates.length > 0
+    ? `Earned ${certificates.length} certificate${certificates.length > 1 ? 's' : ''}`
+    : '';
+
+  return [courseText, certText].filter(Boolean).join(' | ');
+};
+
+// Validate certificate upload payload
+const validateCertificateUploadPayload = (payload) => {
   const errors = [];
 
-  if (!body.title || body.title.trim().length < 3) {
-    errors.push("Certificate title must have at least 3 characters.");
+  if (!payload.title || payload.title.trim().length < 3) {
+    errors.push('Certificate title must be at least 3 characters');
   }
 
-  if (!body.completedOn || Number.isNaN(new Date(body.completedOn).getTime())) {
-    errors.push("Valid completed date is required.");
+  if (!payload.completedOn) {
+    errors.push('Completion date is required');
   }
 
-  if (body.credentialId && body.credentialId.length > 80) {
-    errors.push("Credential ID is too long.");
-  }
-
-  if (file) {
-    if (!ALLOWED_CERTIFICATE_MIME_TYPES.has(file.mimetype)) {
-      errors.push("Only PDF, JPG and PNG certificates are allowed.");
-    }
-
-    if (file.size > MAX_CERTIFICATE_SIZE_BYTES) {
-      errors.push("Certificate file must be below 5 MB.");
-    }
-  }
-
-  return errors;
-}
-
-function buildSkillWalletShareText(certificates = []) {
-  if (!certificates.length) return "My NilaHub Skill Wallet is ready.";
-
-  const topCertificates = certificates
-    .slice(0, 5)
-    .map((item, index) => `${index + 1}. ${item.title} - ${item.issuer || "Verified learning"}`)
-    .join("\n");
-
-  return `My NilaHub Skill Wallet certificates:\n${topCertificates}`;
-}
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
 
 module.exports = {
-  validateCertificateUploadPayload,
   buildSkillWalletShareText,
+  validateCertificateUploadPayload,
 };

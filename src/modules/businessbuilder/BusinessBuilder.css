@@ -1050,3 +1050,72 @@
     position: static;
   }
 }
+
+/* Chart Sections */
+.dashboard-charts-section {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.dashboard-charts-section h3 {
+  margin: 0 0 1.5rem 0;
+  color: #111827;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.dashboard-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 768px) {
+  .dashboard-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Image Upload Integration */
+.business-logo-upload,
+.miniapp-banner-upload {
+  margin-bottom: 1.5rem;
+}
+
+.business-logo-upload .image-upload-dropzone {
+  min-height: 200px;
+}
+
+.miniapp-banner-upload .image-upload-dropzone {
+  min-height: 250px;
+}
+
+/* Product Image Upload */
+.product-image-upload-wrapper {
+  grid-column: 1 / -1;
+  margin-bottom: 1rem;
+}
+
+/* Chart Container Overrides for BusinessBuilder */
+.section-card .chart-container {
+  margin: 1rem 0;
+}
+
+.insight-panels .chart-container {
+  margin-top: 1rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .dashboard-charts-section {
+    padding: 1rem;
+  }
+
+  .dashboard-charts-grid {
+    gap: 1.5rem;
+  }
+}

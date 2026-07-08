@@ -1,225 +1,247 @@
-const fs = require('fs').promises;
-const path = require('path');
+/**
+ * AWS S3 Service
+ * Handles file upload, CDN integration, and image optimization
+ */
+
+const AWS = require('aws-sdk');
+const sharp = require('sharp');
+const crypto = require('crypto');
 const logger = require('../utils/logger');
 
-let s3Client;
-
-const BUCKET_NAME = process.env.AWS_S3_BUCKET || 'nilahub-photos';
-const LOCAL_UPLOAD_ROOT = path.join(process.cwd(), 'uploads');
-
-const getS3Client = () => {
-  if (s3Client) {
-    return s3Client;
-  }
-
-  try {
-    const AWS = require('aws-sdk');
-    s3Client = new AWS.S3({
-      region: process.env.AWS_REGION || 'us-east-1',
+class S3Service {
+  constructor() {
+    this.s3 = new AWS.S3({
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      region: process.env.AWS_REGION || 'ap-south-1'
     });
-    return s3Client;
-  } catch (error) {
-    logger.warn(`AWS S3 SDK unavailable: ${error.message}`);
-    return null;
+    
+    this.bucket = process.env.AWS_S3_BUCKET;
+    this.cdnDomain = process.env.AWS_CDN_DOMAIN || `https://${this.bucket}.s3.amazonaws.com`;
   }
-};
 
-const toLocalPath = (key) => path.join(LOCAL_UPLOAD_ROOT, key);
-const toLocalUrl = (key) => `/uploads/${String(key).replace(/\\/g, '/')}`;
-
-/**
- * Upload photo to S3
- * @param {Buffer} fileBuffer - File buffer
- * @param {string} filename - Original filename
- * @param {string} folder - Folder path (default: photos)
- * @returns {Promise<string>} - Public S3 URL or local URL
- */
-exports.uploadPhotoToS3 = async (fileBuffer, filename, folder = 'sos-photos') => {
-  try {
-    if (!fileBuffer) {
-      throw new Error('File buffer is required');
-    }
-
-    if (!filename) {
-      throw new Error('Filename is required');
-    }
-
-    const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).slice(2, 11);
-    const uniqueFilename = `${folder}/${timestamp}-${randomStr}-${filename}`;
-    const s3 = getS3Client();
-
-    if (!s3) {
-      const localPath = toLocalPath(uniqueFilename);
-      await fs.mkdir(path.dirname(localPath), { recursive: true });
-      await fs.writeFile(localPath, fileBuffer);
-
-      const localUrl = toLocalUrl(uniqueFilename);
-      logger.info(`Photo stored locally: ${localUrl}`);
-      return localUrl;
-    }
-
-    const params = {
-      Bucket: BUCKET_NAME,
-      Key: uniqueFilename,
-      Body: fileBuffer,
-      ContentType: 'image/jpeg',
-      ACL: 'public-read',
-      Metadata: {
-        'original-filename': filename,
-        'upload-timestamp': new Date().toISOString(),
-      },
-    };
-
-    const result = await s3.upload(params).promise();
-
-    logger.info(`Photo uploaded to S3: ${result.Location}`);
-    return result.Location;
-  } catch (error) {
-    logger.error(`uploadPhotoToS3 error: ${error.message}`);
-    throw error;
-  }
-};
-
-/**
- * Upload multiple photos to S3
- * @param {Array<{buffer: Buffer, filename: string}>} files - Array of file objects
- * @param {string} folder - Folder path
- * @returns {Promise<Array<string>>} - Array of public URLs
- */
-exports.uploadMultiplePhotos = async (files, folder = 'sos-photos') => {
-  try {
-    const uploads = files.map((file) =>
-      exports.uploadPhotoToS3(file.buffer, file.filename, folder)
-    );
-
-    return Promise.all(uploads);
-  } catch (error) {
-    logger.error(`uploadMultiplePhotos error: ${error.message}`);
-    throw error;
-  }
-};
-
-/**
- * Get presigned URL for photo (temporary access)
- * @param {string} key - S3 object key
- * @param {number} expiresIn - Expiration time in seconds
- * @returns {Promise<string>} - URL
- */
-exports.getPresignedURL = async (key, expiresIn = 3600) => {
-  try {
-    const s3 = getS3Client();
-    if (!s3) {
-      return toLocalUrl(key);
-    }
-
-    const params = {
-      Bucket: BUCKET_NAME,
-      Key: key,
-      Expires: expiresIn,
-    };
-
-    return s3.getSignedUrl('getObject', params);
-  } catch (error) {
-    logger.error(`getPresignedURL error: ${error.message}`);
-    throw error;
-  }
-};
-
-/**
- * Delete photo from S3 or local fallback storage
- * @param {string} key - Object key
- */
-exports.deletePhotoFromS3 = async (key) => {
-  try {
-    const s3 = getS3Client();
-    if (!s3) {
-      const localPath = toLocalPath(key);
-      await fs.unlink(localPath);
-      logger.info(`Photo deleted from local storage: ${key}`);
-      return true;
-    }
-
-    const params = {
-      Bucket: BUCKET_NAME,
-      Key: key,
-    };
-
-    await s3.deleteObject(params).promise();
-    logger.info(`Photo deleted from S3: ${key}`);
-    return true;
-  } catch (error) {
-    logger.error(`deletePhotoFromS3 error: ${error.message}`);
-    throw error;
-  }
-};
-
-/**
- * List all photos for an incident
- * @param {string} incidentId - Incident ID
- * @returns {Promise<Array>} - List of photo objects
- */
-exports.listIncidentPhotos = async (incidentId) => {
-  try {
-    const prefix = `sos-photos/${incidentId}/`;
-    const s3 = getS3Client();
-
-    if (!s3) {
-      const folderPath = toLocalPath(prefix);
-      try {
-        const entries = await fs.readdir(folderPath, { withFileTypes: true });
-        return entries
-          .filter((entry) => entry.isFile())
-          .map((entry) => {
-            const key = `${prefix}${entry.name}`;
-            return {
-              key,
-              url: toLocalUrl(key),
-            };
-          });
-      } catch (_error) {
-        return [];
+  /**
+   * Upload file to S3
+   */
+  async uploadFile(buffer, filename, mimeType, folder = 'matrimonial') {
+    try {
+      if (!this.isConfigured()) {
+        throw new Error('S3 not configured');
       }
+
+      const key = `${folder}/${Date.now()}-${this.sanitizeFilename(filename)}`;
+
+      const params = {
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: mimeType,
+        ACL: 'public-read',
+        CacheControl: 'max-age=31536000' // 1 year
+      };
+
+      const result = await this.s3.upload(params).promise();
+
+      logger.info(`File uploaded to S3: ${key}`);
+
+      return {
+        url: result.Location,
+        cdnUrl: `${this.cdnDomain}/${key}`,
+        key: result.Key,
+        bucket: result.Bucket
+      };
+    } catch (error) {
+      logger.error('Error uploading to S3:', error);
+      throw new Error(`S3 upload failed: ${error.message}`);
     }
+  }
 
-    const params = {
-      Bucket: BUCKET_NAME,
-      Prefix: prefix,
-    };
+  /**
+   * Upload image with optimization
+   */
+  async uploadImage(buffer, filename, options = {}) {
+    try {
+      // Optimize image
+      const optimizedBuffer = await this.optimizeImage(buffer, options);
 
-    const result = await s3.listObjectsV2(params).promise();
+      // Generate thumbnails if needed
+      const uploads = [];
+      
+      // Upload original optimized image
+      const mainUpload = await this.uploadFile(
+        optimizedBuffer,
+        filename,
+        'image/jpeg',
+        options.folder || 'matrimonial/photos'
+      );
+      uploads.push({ size: 'original', ...mainUpload });
 
-    if (!result.Contents || result.Contents.length === 0) {
-      return [];
+      // Upload thumbnail
+      if (options.createThumbnail !== false) {
+        const thumbnailBuffer = await this.createThumbnail(buffer, 300, 300);
+        const thumbUpload = await this.uploadFile(
+          thumbnailBuffer,
+          `thumb_${filename}`,
+          'image/jpeg',
+          options.folder || 'matrimonial/photos'
+        );
+        uploads.push({ size: 'thumbnail', ...thumbUpload });
+      }
+
+      // Upload medium size
+      if (options.createMedium !== false) {
+        const mediumBuffer = await this.createThumbnail(buffer, 800, 800);
+        const mediumUpload = await this.uploadFile(
+          mediumBuffer,
+          `medium_${filename}`,
+          'image/jpeg',
+          options.folder || 'matrimonial/photos'
+        );
+        uploads.push({ size: 'medium', ...mediumUpload });
+      }
+
+      return uploads;
+    } catch (error) {
+      logger.error('Error uploading image:', error);
+      throw error;
     }
-
-    return result.Contents.map((obj) => ({
-      key: obj.Key,
-      size: obj.Size,
-      lastModified: obj.LastModified,
-      url: `https://${BUCKET_NAME}.s3.amazonaws.com/${obj.Key}`,
-    }));
-  } catch (error) {
-    logger.error(`listIncidentPhotos error: ${error.message}`);
-    throw error;
   }
-};
 
-/**
- * Upload photo from base64 string
- * @param {string} base64String - Base64 encoded image
- * @param {string} filename - Filename
- * @param {string} folder - Folder path
- * @returns {Promise<string>} - Public URL
- */
-exports.uploadPhotoFromBase64 = async (base64String, filename, folder = 'sos-photos') => {
-  try {
-    const buffer = Buffer.from(base64String, 'base64');
-    return exports.uploadPhotoToS3(buffer, filename, folder);
-  } catch (error) {
-    logger.error(`uploadPhotoFromBase64 error: ${error.message}`);
-    throw error;
+  /**
+   * Optimize image
+   */
+  async optimizeImage(buffer, options = {}) {
+    try {
+      const quality = options.quality || 85;
+      const maxWidth = options.maxWidth || 1920;
+      const maxHeight = options.maxHeight || 1920;
+
+      return await sharp(buffer)
+        .resize(maxWidth, maxHeight, {
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .jpeg({ quality, progressive: true })
+        .toBuffer();
+    } catch (error) {
+      logger.error('Error optimizing image:', error);
+      throw error;
+    }
   }
-};
+
+  /**
+   * Create thumbnail
+   */
+  async createThumbnail(buffer, width, height) {
+    try {
+      return await sharp(buffer)
+        .resize(width, height, {
+          fit: 'cover',
+          position: 'center'
+        })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+    } catch (error) {
+      logger.error('Error creating thumbnail:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete file from S3
+   */
+  async deleteFile(key) {
+    try {
+      if (!this.isConfigured()) {
+        throw new Error('S3 not configured');
+      }
+
+      const params = {
+        Bucket: this.bucket,
+        Key: key
+      };
+
+      await this.s3.deleteObject(params).promise();
+
+      logger.info(`File deleted from S3: ${key}`);
+
+      return { success: true };
+    } catch (error) {
+      logger.error('Error deleting from S3:', error);
+      throw new Error(`S3 delete failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get signed URL for private files
+   */
+  getSignedUrl(key, expiresIn = 3600) {
+    try {
+      if (!this.isConfigured()) {
+        throw new Error('S3 not configured');
+      }
+
+      const params = {
+        Bucket: this.bucket,
+        Key: key,
+        Expires: expiresIn
+      };
+
+      const url = this.s3.getSignedUrl('getObject', params);
+
+      return url;
+    } catch (error) {
+      logger.error('Error generating signed URL:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if file exists
+   */
+  async fileExists(key) {
+    try {
+      if (!this.isConfigured()) {
+        return false;
+      }
+
+      const params = {
+        Bucket: this.bucket,
+        Key: key
+      };
+
+      await this.s3.headObject(params).promise();
+      return true;
+    } catch (error) {
+      if (error.code === 'NotFound') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Sanitize filename
+   */
+  sanitizeFilename(filename) {
+    const ext = filename.split('.').pop();
+    const hash = crypto.randomBytes(8).toString('hex');
+    return `${hash}.${ext}`;
+  }
+
+  /**
+   * Check if S3 is configured
+   */
+  isConfigured() {
+    return !!(
+      process.env.AWS_ACCESS_KEY_ID &&
+      process.env.AWS_SECRET_ACCESS_KEY &&
+      this.bucket
+    );
+  }
+}
+
+// Singleton instance
+const s3Service = new S3Service();
+
+module.exports = s3Service;

@@ -1,0 +1,76 @@
+{
+  "common": {
+    "welcome": "मलबार बाज़ार फाइनेंस में आपका स्वागत है",
+    "submit": "जमा करें",
+    "cancel": "रद्द करें",
+    "save": "सहेजें",
+    "edit": "संपादित करें",
+    "delete": "हटाएं",
+    "search": "खोजें",
+    "filter": "फ़िल्टर",
+    "export": "निर्यात",
+    "download": "डाउनलोड",
+    "upload": "अपलोड",
+    "back": "पीछे",
+    "next": "अगला",
+    "previous": "पिछला",
+    "loading": "लोड हो रहा है...",
+    "success": "सफलता",
+    "error": "त्रुटि",
+    "warning": "चेतावनी",
+    "info": "जानकारी"
+  },
+  "finance": {
+    "title": "फाइनेंस हब",
+    "apply_now": "ऋण के लिए आवेदन करें",
+    "check_eligibility": "पात्रता जांचें",
+    "calculate_emi": "EMI की गणना करें",
+    "track_application": "अपने आवेदन को ट्रैक करें",
+    "loan_categories": {
+      "business": "व्यवसाय ऋण",
+      "personal": "व्यक्तिगत ऋण",
+      "gold": "गोल्ड लोन",
+      "home": "होम लोन",
+      "vehicle": "वाहन ऋण",
+      "education": "शिक्षा ऋण"
+    },
+    "status": {
+      "submitted": "जमा किया गया",
+      "under_review": "समीक्षाधीन",
+      "documents_requested": "दस्तावेज़ आवश्यक",
+      "institution_review": "संस्था समीक्षा",
+      "approved": "स्वीकृत",
+      "rejected": "अस्वीकृत",
+      "withdrawn": "वापस लिया गया"
+    },
+    "form": {
+      "full_name": "पूरा नाम",
+      "phone": "फ़ोन नंबर",
+      "email": "ईमेल पता",
+      "loan_amount": "ऋण राशि",
+      "loan_category": "ऋण श्रेणी",
+      "preferred_tenure": "पसंदीदा अवधि (महीने)",
+      "monthly_income": "मासिक आय",
+      "existing_emi": "मौजूदा EMI",
+      "cibil_score": "CIBIL स्कोर",
+      "employment_type": "रोजगार प्रकार",
+      "state": "राज्य",
+      "district": "जिला",
+      "pincode": "पिनकोड"
+    },
+    "documents": {
+      "aadhaar": "आधार कार्ड",
+      "pan": "पैन कार्ड",
+      "salary_slips": "वेतन पर्ची",
+      "bank_statements": "बैंक स्टेटमेंट",
+      "business_proof": "व्यवसाय प्रमाण",
+      "gst_certificate": "जीएसटी प्रमाणपत्र"
+    },
+    "messages": {
+      "application_submitted": "आपका ऋण आवेदन सफलतापूर्वक जमा किया गया!",
+      "documents_uploaded": "दस्तावेज़ सफलतापूर्वक अपलोड किए गए",
+      "consultant_assigned": "आपके आवेदन के लिए एक सलाहकार नियुक्त किया गया है",
+      "status_updated": "आवेदन स्थिति अपडेट की गई"
+    }
+  }
+}

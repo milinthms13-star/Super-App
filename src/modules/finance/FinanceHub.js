@@ -10,6 +10,18 @@ import TrackingDashTab from "./components/TrackingDashTab";
 import SchemesTab from "./components/SchemesTab";
 import FinanceOverviewTab from "./components/FinanceOverviewTab";
 
+// New Advanced Components
+import CRMPanel from "./components/CRMPanel";
+import CreditBureauViewer from "./components/CreditBureauViewer";
+import DocumentVerificationPanel from "./components/DocumentVerificationPanel";
+import FraudDetectionWidget from "./components/FraudDetectionWidget";
+import ReportsPanel from "./components/ReportsPanel";
+import TaskManagerWidget from "./components/TaskManagerWidget";
+import LanguageSwitcher from "./components/LanguageSwitcher";
+import InstitutionPortal from "./components/InstitutionPortal";
+import WorkflowAutomation from "./components/WorkflowAutomation";
+import AnalyticsCharts from "./components/AnalyticsCharts";
+
 import { calculateEmi, buildEmiSchedule, exportEmiScheduleCsv } from "./services/financeMath";
 import { getLeadFormErrors, getEligibilityFormErrors } from "./services/financeValidation";
 import { normalizeRoleTokens, hasAnyRole } from "./services/roleAccess";
@@ -66,6 +78,7 @@ const TABS = [
   { id: "apply", label: "Apply" },
   { id: "track", label: "Track Status" },
   { id: "schemes", label: "Govt Schemes" },
+  { id: "advanced", label: "Advanced Tools" },
 ];
 
 const DOCUMENT_FIELDS = [
@@ -249,6 +262,11 @@ const FinanceHub = () => {
   });
   const [quickAssist, setQuickAssist] = useState(QUICK_ASSIST_INITIAL);
   const [financePulse, setFinancePulse] = useState(FINANCE_PULSE_INITIAL);
+
+  // Advanced Features State
+  const [currentLanguage, setCurrentLanguage] = useState('en');
+  const [selectedLeadForAdvanced, setSelectedLeadForAdvanced] = useState(null);
+  const [advancedTab, setAdvancedTab] = useState('crm');
 
   const summaryCards = useMemo(
     () => [
@@ -954,12 +972,30 @@ const FinanceHub = () => {
   const canUseInstitutionWorkflow = roleCapabilities.isAdmin || roleCapabilities.isConsultant || roleCapabilities.isInstitutionUser;
   const canUseCommissionWorkflow = roleCapabilities.canViewCommission;
 
+  const handleLanguageChange = (langCode) => {
+    setCurrentLanguage(langCode);
+    // In real implementation, update i18n library here
+    console.log('Language changed to:', langCode);
+  };
+
+  const handleSelectLeadForAdvanced = (lead) => {
+    setSelectedLeadForAdvanced(lead);
+    setActiveTab('advanced');
+  };
+
   return (
     <div className="finance-hub-page">
       <section className="finance-sticky-top">
         <div className="finance-hero">
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <p className="finance-kicker">Nila Finance Hub</p>
+            <LanguageSwitcher 
+              currentLanguage={currentLanguage} 
+              onLanguageChange={handleLanguageChange}
+              compact={true}
+            />
+          </div>
+          <div>
             <h1>Get loans faster across South India</h1>
             <p className="finance-subtitle">
               Personal, business, gold, loan takeover, gold-sale closure, home and MSME financing with trusted partners across Kerala,
@@ -1259,6 +1295,194 @@ const FinanceHub = () => {
           error={schemesError}
           onApplyWithScheme={openApplyWithScheme}
         />
+      ) : null}
+
+      {activeTab === "advanced" ? (
+        <div className="finance-advanced-tools">
+          <h2 style={{ marginBottom: '1.5rem' }}>Advanced Finance Tools</h2>
+          
+          {/* Show Task Manager Widget at the top */}
+          {(canUseConsultantWorkflow || canUseAdminWorkflow) && (
+            <div style={{ marginBottom: '2rem' }}>
+              <TaskManagerWidget 
+                userId={consultantId}
+                compact={false}
+              />
+            </div>
+          )}
+
+          {/* Advanced Tools Tabs */}
+          <div style={{ borderBottom: '2px solid #e0e0e0', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setAdvancedTab('crm')}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  border: 'none',
+                  background: advancedTab === 'crm' ? '#1976d2' : 'transparent',
+                  color: advancedTab === 'crm' ? 'white' : '#333',
+                  cursor: 'pointer',
+                  borderBottom: advancedTab === 'crm' ? '3px solid #1976d2' : 'none',
+                }}
+              >
+                CRM Activities
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdvancedTab('credit')}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  border: 'none',
+                  background: advancedTab === 'credit' ? '#1976d2' : 'transparent',
+                  color: advancedTab === 'credit' ? 'white' : '#333',
+                  cursor: 'pointer',
+                  borderBottom: advancedTab === 'credit' ? '3px solid #1976d2' : 'none',
+                }}
+              >
+                Credit Bureau
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdvancedTab('documents')}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  border: 'none',
+                  background: advancedTab === 'documents' ? '#1976d2' : 'transparent',
+                  color: advancedTab === 'documents' ? 'white' : '#333',
+                  cursor: 'pointer',
+                  borderBottom: advancedTab === 'documents' ? '3px solid #1976d2' : 'none',
+                }}
+              >
+                Document Verification
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdvancedTab('fraud')}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  border: 'none',
+                  background: advancedTab === 'fraud' ? '#1976d2' : 'transparent',
+                  color: advancedTab === 'fraud' ? 'white' : '#333',
+                  cursor: 'pointer',
+                  borderBottom: advancedTab === 'fraud' ? '3px solid #1976d2' : 'none',
+                }}
+              >
+                Fraud Detection
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdvancedTab('reports')}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  border: 'none',
+                  background: advancedTab === 'reports' ? '#1976d2' : 'transparent',
+                  color: advancedTab === 'reports' ? 'white' : '#333',
+                  cursor: 'pointer',
+                  borderBottom: advancedTab === 'reports' ? '3px solid #1976d2' : 'none',
+                }}
+              >
+                Reports
+              </button>
+              {canUseAdminWorkflow && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedTab('workflow')}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      border: 'none',
+                      background: advancedTab === 'workflow' ? '#1976d2' : 'transparent',
+                      color: advancedTab === 'workflow' ? 'white' : '#333',
+                      cursor: 'pointer',
+                      borderBottom: advancedTab === 'workflow' ? '3px solid #1976d2' : 'none',
+                    }}
+                  >
+                    Workflow Automation
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedTab('analytics')}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      border: 'none',
+                      background: advancedTab === 'analytics' ? '#1976d2' : 'transparent',
+                      color: advancedTab === 'analytics' ? 'white' : '#333',
+                      cursor: 'pointer',
+                      borderBottom: advancedTab === 'analytics' ? '3px solid #1976d2' : 'none',
+                    }}
+                  >
+                    Analytics
+                  </button>
+                </>
+              )}
+              {canUseInstitutionWorkflow && (
+                <button
+                  type="button"
+                  onClick={() => setAdvancedTab('institutions')}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    border: 'none',
+                    background: advancedTab === 'institutions' ? '#1976d2' : 'transparent',
+                    color: advancedTab === 'institutions' ? 'white' : '#333',
+                    cursor: 'pointer',
+                    borderBottom: advancedTab === 'institutions' ? '3px solid #1976d2' : 'none',
+                  }}
+                >
+                  Institution Portal
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Advanced Tool Content */}
+          <div>
+            {advancedTab === 'crm' && (
+              <CRMPanel leadId={selectedLeadForAdvanced?._id || leadState.leadId} />
+            )}
+            
+            {advancedTab === 'credit' && (
+              <CreditBureauViewer leadId={selectedLeadForAdvanced?._id || leadState.leadId} />
+            )}
+            
+            {advancedTab === 'documents' && (
+              <DocumentVerificationPanel leadId={selectedLeadForAdvanced?._id || leadState.leadId} />
+            )}
+            
+            {advancedTab === 'fraud' && (
+              <FraudDetectionWidget leadId={selectedLeadForAdvanced?._id || leadState.leadId} />
+            )}
+            
+            {advancedTab === 'reports' && (
+              <ReportsPanel leadId={selectedLeadForAdvanced?._id} />
+            )}
+            
+            {advancedTab === 'workflow' && canUseAdminWorkflow && (
+              <WorkflowAutomation />
+            )}
+            
+            {advancedTab === 'analytics' && canUseAdminWorkflow && (
+              <AnalyticsCharts />
+            )}
+            
+            {advancedTab === 'institutions' && canUseInstitutionWorkflow && (
+              <InstitutionPortal />
+            )}
+          </div>
+
+          {/* Helper Text */}
+          <div style={{ 
+            marginTop: '2rem', 
+            padding: '1rem', 
+            background: '#f5f5f5', 
+            borderRadius: '8px' 
+          }}>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>
+              💡 <strong>Tip:</strong> Select a lead from the tracking dashboard and click "View Advanced Tools" 
+              to see detailed CRM activities, credit reports, and fraud analysis for that specific lead.
+            </p>
+          </div>
+        </div>
       ) : null}
 
       <button type="button" className="finance-floating-apply" onClick={() => setActiveTab("apply")}>Apply Now</button>

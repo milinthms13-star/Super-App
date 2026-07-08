@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import "./BusinessBuilder.css";
+import ImageUpload from "../../components/ImageUpload/ImageUpload";
+import RevenueChart from "../../components/Charts/RevenueChart";
+import FunnelChart from "../../components/Charts/FunnelChart";
+import DonutChart from "../../components/Charts/DonutChart";
 
 const BUSINESS_TYPES = [
   "Retail",
@@ -706,6 +710,12 @@ const BusinessBuilder = () => {
   const [generatingDocument, setGeneratingDocument] = useState(false);
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState("");
   const [downloadingBuilderPdf, setDownloadingBuilderPdf] = useState(false);
+
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [uploadingProductImage, setUploadingProductImage] = useState(false);
+  const [businessLogoUrl, setBusinessLogoUrl] = useState("");
+  const [miniAppBannerUrl, setMiniAppBannerUrl] = useState("");
 
   const [businessErrors, setBusinessErrors] = useState({});
   const [invoiceErrors, setInvoiceErrors] = useState({});
@@ -1535,6 +1545,97 @@ const BusinessBuilder = () => {
     }
   };
 
+  const handleBusinessLogoUpload = async (file) => {
+    if (!activeBusinessId) {
+      showStatus("Save business profile before uploading logo.");
+      throw new Error("No active business");
+    }
+
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append("logo", file);
+      formData.append("businessId", activeBusinessId);
+
+      const response = await axios.post("/api/business-builder/upload/business-logo", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (response.data?.success) {
+        const logoUrl = response.data.data?.url || response.data.data?.path;
+        setBusinessLogoUrl(logoUrl);
+        showStatus("Business logo uploaded successfully.");
+      }
+    } catch (error) {
+      const message = buildErrorMessage(error, "Unable to upload logo.");
+      showStatus(message);
+      throw error;
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleMiniAppBannerUpload = async (file) => {
+    if (!selectedMiniAppId) {
+      showStatus("Select a mini app before uploading banner.");
+      throw new Error("No mini app selected");
+    }
+
+    setUploadingBanner(true);
+    try {
+      const formData = new FormData();
+      formData.append("banner", file);
+      formData.append("miniAppId", selectedMiniAppId);
+
+      const response = await axios.post("/api/business-builder/upload/miniapp-banner", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (response.data?.success) {
+        const bannerUrl = response.data.data?.url || response.data.data?.path;
+        setMiniAppBannerUrl(bannerUrl);
+        await fetchMiniApps();
+        showStatus("Mini app banner uploaded successfully.");
+      }
+    } catch (error) {
+      const message = buildErrorMessage(error, "Unable to upload banner.");
+      showStatus(message);
+      throw error;
+    } finally {
+      setUploadingBanner(false);
+    }
+  };
+
+  const handleProductImageUpload = async (file) => {
+    if (!selectedMiniAppId) {
+      showStatus("Select a mini app before uploading product image.");
+      throw new Error("No mini app selected");
+    }
+
+    setUploadingProductImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      formData.append("miniAppId", selectedMiniAppId);
+
+      const response = await axios.post("/api/business-builder/upload/product-image", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (response.data?.success) {
+        const imageUrl = response.data.data?.url || response.data.data?.path;
+        setProductForm((current) => ({ ...current, imageUrl }));
+        showStatus("Product image uploaded successfully.");
+      }
+    } catch (error) {
+      const message = buildErrorMessage(error, "Unable to upload product image.");
+      showStatus(message);
+      throw error;
+    } finally {
+      setUploadingProductImage(false);
+    }
+  };
+
   const saveBuilder10Plan = () => {
     const record = {
       id: `bb10-${Date.now()}`,
@@ -1778,6 +1879,72 @@ const BusinessBuilder = () => {
 
   const activeBuilder10Plan = builder10AiPlan || builder10Plan;
 
+  const dashboardRevenueChartData = useMemo(() => {
+    if (!businessAnalytics?.revenueByMonth) {
+      return null;
+    }
+
+    const months = businessAnalytics.revenueByMonth.map((item) => item.month || item._id);
+    const revenue = businessAnalytics.revenueByMonth.map((item) => item.revenue || 0);
+    
+    // Estimate costs as 65% of revenue for demonstration
+    const costs = revenue.map((rev) => rev * 0.65);
+
+    return {
+      labels: months,
+      revenue,
+      costs,
+    };
+  }, [businessAnalytics]);
+
+  const miniAppFunnelChartData = useMemo(() => {
+    if (!miniAppFunnel?.metrics) {
+      return null;
+    }
+
+    const metrics = miniAppFunnel.metrics;
+    const views = metrics.views || 0;
+    const leads = metrics.leads || 0;
+    const orders = metrics.orders || 0;
+    const paidOrders = metrics.paidOrders || 0;
+
+    return {
+      stages: [
+        {
+          label: "Views",
+          count: views,
+          conversionRate: 100,
+        },
+        {
+          label: "Leads",
+          count: leads,
+          conversionRate: views > 0 ? Math.round((leads / views) * 100) : 0,
+        },
+        {
+          label: "Orders",
+          count: orders,
+          conversionRate: leads > 0 ? Math.round((orders / leads) * 100) : 0,
+        },
+        {
+          label: "Paid Orders",
+          count: paidOrders,
+          conversionRate: orders > 0 ? Math.round((paidOrders / orders) * 100) : 0,
+        },
+      ],
+    };
+  }, [miniAppFunnel]);
+
+  const businessTypeDistributionData = useMemo(() => {
+    if (!businessAnalytics?.businessTypeDistribution || businessAnalytics.businessTypeDistribution.length === 0) {
+      return null;
+    }
+
+    return {
+      labels: businessAnalytics.businessTypeDistribution.map((item) => item._id || item.type),
+      values: businessAnalytics.businessTypeDistribution.map((item) => item.count || 0),
+    };
+  }, [businessAnalytics]);
+
   const dashboardMetrics = useMemo(() => {
     const profileReady = businessForm.businessName && businessForm.phone && businessForm.email;
     const costReady = costSummary.monthlyExpenses > 0 || costSummary.oneTimeInvestment > 0;
@@ -1919,6 +2086,34 @@ const BusinessBuilder = () => {
               <strong>{dashboardMetrics.nextAction}</strong>
             </div>
           </div>
+
+          {dashboardRevenueChartData && (
+            <div className="dashboard-charts-section">
+              <h3>Revenue & Cost Analysis</h3>
+              <div className="dashboard-charts-grid">
+                <RevenueChart 
+                  data={dashboardRevenueChartData} 
+                  type="line" 
+                  title="Monthly Revenue vs Costs"
+                />
+                <RevenueChart 
+                  data={dashboardRevenueChartData} 
+                  type="bar" 
+                  title="Revenue Comparison"
+                />
+              </div>
+            </div>
+          )}
+
+          {businessTypeDistributionData && (
+            <div className="dashboard-charts-section">
+              <h3>Business Type Distribution</h3>
+              <DonutChart 
+                data={businessTypeDistributionData} 
+                title="Distribution by Business Type"
+              />
+            </div>
+          )}
 
           <div className="insight-panels">
             <div className="insight-card">
@@ -2557,6 +2752,20 @@ const BusinessBuilder = () => {
                 <p className="section-note full-width">Workspace forms are loaded per selected business.</p>
               </>
             ) : null}
+
+            <div className="full-width">
+              <ImageUpload
+                label="Business Logo"
+                onUpload={handleBusinessLogoUpload}
+                acceptedFileTypes="image/jpeg,image/png,image/webp"
+                maxSizeMB={2}
+                previewUrl={businessLogoUrl || selectedBusiness?.logoUrl}
+                disabled={!activeBusinessId || uploadingLogo}
+                aspectRatio="1:1"
+                className="business-logo-upload"
+              />
+            </div>
+
             <label>
               Business name
               <input
@@ -2850,6 +3059,19 @@ const BusinessBuilder = () => {
           </p>
 
           <form className="form-grid" onSubmit={handleCreateMiniApp}>
+            <div className="full-width">
+              <ImageUpload
+                label="Mini App Banner (Optional)"
+                onUpload={handleMiniAppBannerUpload}
+                acceptedFileTypes="image/jpeg,image/png,image/webp"
+                maxSizeMB={3}
+                previewUrl={miniAppBannerUrl || selectedMiniApp?.bannerUrl}
+                disabled={!selectedMiniAppId || uploadingBanner}
+                aspectRatio="16:9"
+                className="miniapp-banner-upload"
+              />
+            </div>
+
             <label>
               App display name
               <input
@@ -3132,10 +3354,33 @@ const BusinessBuilder = () => {
                   </div>
                 </div>
 
+                {miniAppFunnelChartData && (
+                  <div className="dashboard-charts-section">
+                    <h3>Mini App Conversion Funnel</h3>
+                    <FunnelChart 
+                      data={miniAppFunnelChartData} 
+                      title={`${selectedMiniApp?.appName || 'Mini App'} Funnel (Last 30 Days)`}
+                    />
+                  </div>
+                )}
+
                 <div className="insight-panels">
                   <div className="insight-card">
                     <h3>Add product for {selectedMiniApp?.appName || "mini app"}</h3>
                     <form className="form-grid compact-grid" onSubmit={handleCreateProduct}>
+                      <div className="full-width">
+                        <ImageUpload
+                          label="Product Image (Optional)"
+                          onUpload={handleProductImageUpload}
+                          acceptedFileTypes="image/jpeg,image/png,image/webp"
+                          maxSizeMB={2}
+                          previewUrl={productForm.imageUrl}
+                          disabled={!selectedMiniAppId || uploadingProductImage}
+                          aspectRatio="4:3"
+                          showPreview={true}
+                        />
+                      </div>
+
                       <label>
                         Product name
                         <input value={productForm.name} onChange={(event) => handleProductChange("name", event.target.value)} required />

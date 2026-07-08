@@ -1,0 +1,76 @@
+{
+  "common": {
+    "welcome": "మలబార్ బజార్ ఫైనాన్స్‌కు స్వాగతం",
+    "submit": "సమర్పించు",
+    "cancel": "రద్దు చేయి",
+    "save": "సేవ్ చేయి",
+    "edit": "సవరించు",
+    "delete": "తొలగించు",
+    "search": "శోధించు",
+    "filter": "ఫిల్టర్",
+    "export": "ఎగుమతి",
+    "download": "డౌన్‌లోడ్",
+    "upload": "అప్‌లోడ్",
+    "back": "వెనుకకు",
+    "next": "తరువాత",
+    "previous": "మునుపటి",
+    "loading": "లోడ్ అవుతోంది...",
+    "success": "విజయం",
+    "error": "లోపం",
+    "warning": "హెచ్చరిక",
+    "info": "సమాచారం"
+  },
+  "finance": {
+    "title": "ఫైనాన్స్ హబ్",
+    "apply_now": "రుణం కోసం దరఖాస్తు చేయండి",
+    "check_eligibility": "అర్హత తనిఖీ చేయండి",
+    "calculate_emi": "EMI లెక్కించండి",
+    "track_application": "మీ దరఖాస్తును ట్రాక్ చేయండి",
+    "loan_categories": {
+      "business": "వ్యాపార రుణం",
+      "personal": "వ్యక్తిగత రుణం",
+      "gold": "బంగారు రుణం",
+      "home": "గృహ రుణం",
+      "vehicle": "వాహన రుణం",
+      "education": "విద్యా రుణం"
+    },
+    "status": {
+      "submitted": "సమర్పించబడింది",
+      "under_review": "సమీక్షలో",
+      "documents_requested": "పత్రాలు అవసరం",
+      "institution_review": "సంస్థ సమీక్ష",
+      "approved": "ఆమోదించబడింది",
+      "rejected": "తిరస్కరించబడింది",
+      "withdrawn": "ఉపసంహరించబడింది"
+    },
+    "form": {
+      "full_name": "పూర్తి పేరు",
+      "phone": "ఫోన్ నంబర్",
+      "email": "ఇమెయిల్ చిరునామా",
+      "loan_amount": "రుణ మొత్తం",
+      "loan_category": "రుణ వర్గం",
+      "preferred_tenure": "ప్రాధాన్య వ్యవధి (నెలలు)",
+      "monthly_income": "నెలవారీ ఆదాయం",
+      "existing_emi": "ఉన్న EMI",
+      "cibil_score": "CIBIL స్కోర్",
+      "employment_type": "ఉద్యోగ రకం",
+      "state": "రాష్ట్రం",
+      "district": "జిల్లా",
+      "pincode": "పిన్‌కోడ్"
+    },
+    "documents": {
+      "aadhaar": "ఆధార్ కార్డ్",
+      "pan": "PAN కార్డ్",
+      "salary_slips": "జీతం స్లిప్పులు",
+      "bank_statements": "బ్యాంక్ స్టేట్‌మెంట్లు",
+      "business_proof": "వ్యాపార రుజువు",
+      "gst_certificate": "GST సర్టిఫికేట్"
+    },
+    "messages": {
+      "application_submitted": "మీ రుణ దరఖాస్తు విజయవంతంగా సమర్పించబడింది!",
+      "documents_uploaded": "పత్రాలు విజయవంతంగా అప్‌లోడ్ చేయబడ్డాయి",
+      "consultant_assigned": "మీ దరఖాస్తుకు సలహాదారు నియమించబడ్డారు",
+      "status_updated": "దరఖాస్తు స్థితి నవీకరించబడింది"
+    }
+  }
+}

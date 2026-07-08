@@ -1,407 +1,440 @@
-const FraudRisk = require('../models/FraudRisk');
-const FoodDeliveryPayment = require('../models/FoodDeliveryPayment');
-const FoodDeliveryRefund = require('../models/FoodDeliveryRefund');
+const logger = require('../utils/logger');
+const FinanceLead = require('../models/FinanceLead');
 
 class FraudDetectionService {
   /**
-   * Detect fraud for payment
+   * Check for duplicate leads
    */
-  static async detectPaymentFraud(payment) {
+  async checkDuplicateLead(phone, pan = '', aadhaar = '', timeWindowHours = 24) {
     try {
-      const factors = [];
-      let riskScore = 0;
-
-      // Check 1: Unusual amount
-      const userAvgAmount = await this._getUserAverageAmount(payment.userId);
-      const amountDeviation = Math.abs(payment.amount - userAvgAmount) / (userAvgAmount || 1);
+      const timeThreshold = new Date(Date.now() - timeWindowHours * 60 * 60 * 1000);
       
-      if (amountDeviation > 2) {
-        factors.push({
-          factor: 'unusual_amount',
-          weight: 20,
-          description: `Amount ${amountDeviation.toFixed(1)}x user average`,
-          evidenceValue: { userAverage: userAvgAmount, current: payment.amount },
-        });
-        riskScore += 20;
+      const query = {
+        createdAt: { $gte: timeThreshold },
+        $or: [{ phone }],
+      };
+
+      if (pan) {
+        query.$or.push({ 'eligibilitySnapshot.pan': pan });
       }
 
-      // Check 2: Rapid successive transactions
-      const recentPayments = await FoodDeliveryPayment.countDocuments({
-        userId: payment.userId,
-        initiatedAt: {
-          $gte: new Date(Date.now() - 3600000), // Last hour
-        },
+      if (aadhaar) {
+        query.$or.push({ 'eligibilitySnapshot.aadhaarNumber': aadhaar });
+      }
+
+      const duplicates = await FinanceLead.find(query)
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+
+      return {
+        isDuplicate: duplicates.length > 0,
+        count: duplicates.length,
+        leads: duplicates.map((lead) => ({
+          leadId: lead.leadId,
+          phone: lead.phone,
+          amount: lead.amount,
+          createdAt: lead.createdAt,
+          status: lead.status,
+        })),
+        riskLevel: this.calculateDuplicateRiskLevel(duplicates.length),
+      };
+    } catch (error) {
+      logger.error(`Duplicate check error: ${error.message}`);
+      return {
+        isDuplicate: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Velocity check - too many applications in short time
+   */
+  async checkVelocity(phone, timeWindowHours = 168) {
+    // 7 days = 168 hours
+    try {
+      const timeThreshold = new Date(Date.now() - timeWindowHours * 60 * 60 * 1000);
+
+      const count = await FinanceLead.countDocuments({
+        phone,
+        createdAt: { $gte: timeThreshold },
       });
 
-      if (recentPayments > 5) {
-        factors.push({
-          factor: 'rapid_transactions',
-          weight: 25,
-          description: `${recentPayments} payments in last hour`,
-          evidenceValue: { count: recentPayments },
-        });
-        riskScore += 25;
-      }
+      const riskThresholds = {
+        low: 1,
+        medium: 2,
+        high: 4,
+        critical: 6,
+      };
 
-      // Check 3: Multiple payment method changes
-      const uniqueMethods = await FoodDeliveryPayment.distinct('paymentMethod', {
-        userId: payment.userId,
-        initiatedAt: {
-          $gte: new Date(Date.now() - 86400000), // Last 24 hours
-        },
-      });
-
-      if (uniqueMethods.length > 3) {
-        factors.push({
-          factor: 'multiple_payment_methods',
-          weight: 15,
-          description: `${uniqueMethods.length} different payment methods in 24h`,
-          evidenceValue: { methods: uniqueMethods },
-        });
-        riskScore += 15;
-      }
-
-      // Check 4: New device
-      const isNewDevice = await this._isNewDevice(payment.userId, payment);
-      if (isNewDevice) {
-        factors.push({
-          factor: 'new_device',
-          weight: 10,
-          description: 'First transaction from this device',
-          evidenceValue: { deviceId: payment.deviceId },
-        });
-        riskScore += 10;
-      }
-
-      // Check 5: Geographic anomaly
-      const isUnusualLocation = await this._checkGeographicAnomaly(payment);
-      if (isUnusualLocation) {
-        factors.push({
-          factor: 'geographic_anomaly',
-          weight: 20,
-          description: 'Transaction from unusual location',
-          evidenceValue: { location: payment.location },
-        });
-        riskScore += 20;
-      }
-
-      // Check 6: Failed attempts before success
-      const recentFailures = await FoodDeliveryPayment.countDocuments({
-        userId: payment.userId,
-        status: 'failed',
-        initiatedAt: {
-          $gte: new Date(Date.now() - 3600000),
-        },
-      });
-
-      if (recentFailures > 3) {
-        factors.push({
-          factor: 'multiple_failures',
-          weight: 15,
-          description: `${recentFailures} failed attempts in last hour`,
-          evidenceValue: { failureCount: recentFailures },
-        });
-        riskScore += 15;
-      }
-
-      // Check 7: VPN/Proxy detection
-      if (payment.isVpnDetected || payment.isProxyDetected) {
-        factors.push({
-          factor: 'vpn_proxy_usage',
-          weight: 25,
-          description: 'Transaction via VPN or proxy',
-          evidenceValue: { vpn: payment.isVpnDetected, proxy: payment.isProxyDetected },
-        });
-        riskScore += 25;
-      }
-
-      // Cap risk score at 100
-      riskScore = Math.min(riskScore, 100);
-
-      // Determine risk level
       let riskLevel = 'low';
-      if (riskScore >= 70) {
-        riskLevel = 'critical';
-      } else if (riskScore >= 50) {
-        riskLevel = 'high';
-      } else if (riskScore >= 30) {
-        riskLevel = 'medium';
-      }
+      if (count >= riskThresholds.critical) riskLevel = 'critical';
+      else if (count >= riskThresholds.high) riskLevel = 'high';
+      else if (count >= riskThresholds.medium) riskLevel = 'medium';
 
-      const riskRecord = new FraudRisk({
-        riskId: `FRAUD-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        entityType: 'payment',
-        entityId: payment._id,
-        userId: payment.userId,
-        overallRiskScore: riskScore,
+      return {
+        count,
+        timeWindowHours,
         riskLevel,
-        riskFactors: factors,
-        status: 'pending_review',
+        blocked: count >= riskThresholds.critical,
+        message:
+          count >= riskThresholds.critical
+            ? 'Too many applications submitted recently. Please contact support.'
+            : riskLevel === 'high'
+            ? 'Multiple recent applications detected. This may affect approval.'
+            : '',
+      };
+    } catch (error) {
+      logger.error(`Velocity check error: ${error.message}`);
+      return {
+        count: 0,
+        riskLevel: 'low',
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Check if phone/user is blacklisted
+   */
+  async checkBlacklist(phone, pan = '', aadhaar = '') {
+    try {
+      // Check in-memory or database blacklist
+      const blacklistedPhones = this.getBlacklistedPhones();
+      const blacklistedPANs = this.getBlacklistedPANs();
+
+      const isPhoneBlacklisted = blacklistedPhones.includes(phone);
+      const isPANBlacklisted = pan && blacklistedPANs.includes(pan.toUpperCase());
+
+      const reasons = [];
+      if (isPhoneBlacklisted) reasons.push('Phone number is blacklisted');
+      if (isPANBlacklisted) reasons.push('PAN is blacklisted');
+
+      return {
+        blacklisted: isPhoneBlacklisted || isPANBlacklisted,
+        reasons,
+        riskLevel: isPhoneBlacklisted || isPANBlacklisted ? 'critical' : 'low',
+      };
+    } catch (error) {
+      logger.error(`Blacklist check error: ${error.message}`);
+      return {
+        blacklisted: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Check IP reputation
+   */
+  async checkIPReputation(ipAddress) {
+    // Simplified IP check - in production, integrate with IP intelligence services
+    try {
+      // Check for localhost/private IPs
+      const privateIPPatterns = [
+        /^127\./,
+        /^10\./,
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+        /^192\.168\./,
+      ];
+
+      const isPrivate = privateIPPatterns.some((pattern) =>
+        pattern.test(ipAddress)
+      );
+
+      // Check recent application rate from this IP
+      const recentFromIP = await FinanceLead.countDocuments({
+        'sourceMeta.ipAddress': ipAddress,
+        createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       });
 
-      await riskRecord.save();
+      let riskLevel = 'low';
+      if (recentFromIP >= 10) riskLevel = 'critical';
+      else if (recentFromIP >= 5) riskLevel = 'high';
+      else if (recentFromIP >= 3) riskLevel = 'medium';
+
+      return {
+        ipAddress,
+        isPrivate,
+        recentApplications: recentFromIP,
+        riskLevel,
+        suspicious: recentFromIP >= 5,
+      };
+    } catch (error) {
+      logger.error(`IP reputation check error: ${error.message}`);
+      return {
+        ipAddress,
+        riskLevel: 'low',
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Device fingerprint analysis
+   */
+  analyzeDeviceFingerprint(userAgent, platform, buildNumber) {
+    // Simplified device analysis
+    const suspiciousPatterns = [
+      /bot/i,
+      /crawler/i,
+      /spider/i,
+      /scraper/i,
+      /curl/i,
+      /wget/i,
+    ];
+
+    const isSuspicious = suspiciousPatterns.some((pattern) =>
+      pattern.test(userAgent)
+    );
+
+    return {
+      userAgent,
+      platform,
+      buildNumber,
+      suspicious: isSuspicious,
+      riskLevel: isSuspicious ? 'high' : 'low',
+    };
+  }
+
+  /**
+   * Comprehensive fraud check
+   */
+  async performFraudCheck(leadData, ipAddress, userAgent) {
+    try {
+      const checks = await Promise.all([
+        this.checkDuplicateLead(
+          leadData.phone,
+          leadData.pan,
+          leadData.aadhaarNumber
+        ),
+        this.checkVelocity(leadData.phone),
+        this.checkBlacklist(leadData.phone, leadData.pan, leadData.aadhaarNumber),
+        this.checkIPReputation(ipAddress),
+      ]);
+
+      const [duplicateCheck, velocityCheck, blacklistCheck, ipCheck] = checks;
+
+      const deviceCheck = this.analyzeDeviceFingerprint(
+        userAgent,
+        leadData.platform,
+        leadData.buildNumber
+      );
+
+      // Calculate overall risk score
+      const riskScore = this.calculateOverallRiskScore({
+        duplicateCheck,
+        velocityCheck,
+        blacklistCheck,
+        ipCheck,
+        deviceCheck,
+      });
+
+      const overallRisk = this.getRiskLevelFromScore(riskScore);
 
       return {
         riskScore,
-        riskLevel,
-        factors,
-        requiresApproval: riskScore >= 70,
-      };
-    } catch (error) {
-      throw new Error(`Fraud detection failed: ${error.message}`);
-    }
-  }
-
-  /**
-   * Detect fraud for refund
-   */
-  static async detectRefundFraud(refund) {
-    try {
-      const factors = [];
-      let riskScore = 0;
-
-      // Check 1: Rapid refund request
-      const recentRefunds = await FoodDeliveryRefund.countDocuments({
-        userId: refund.userId,
-        initiatedAt: {
-          $gte: new Date(Date.now() - 604800000), // Last 7 days
+        overallRisk,
+        blocked: blacklistCheck.blacklisted || velocityCheck.blocked,
+        checks: {
+          duplicate: duplicateCheck,
+          velocity: velocityCheck,
+          blacklist: blacklistCheck,
+          ip: ipCheck,
+          device: deviceCheck,
         },
-      });
-
-      if (recentRefunds > 5) {
-        factors.push({
-          factor: 'frequent_refunds',
-          weight: 30,
-          description: `${recentRefunds} refunds in last 7 days`,
-          evidenceValue: { count: recentRefunds },
-        });
-        riskScore += 30;
-      }
-
-      // Check 2: High refund percentage
-      const userRefundRate = await this._getUserRefundRate(refund.userId);
-      if (userRefundRate > 0.2) {
-        factors.push({
-          factor: 'high_refund_rate',
-          weight: 25,
-          description: `${(userRefundRate * 100).toFixed(1)}% of orders refunded`,
-          evidenceValue: { rate: userRefundRate },
-        });
-        riskScore += 25;
-      }
-
-      // Check 3: High refund amount
-      if (refund.refundAmount > 5000) {
-        factors.push({
-          factor: 'high_amount',
-          weight: 15,
-          description: `High refund amount: ${refund.refundAmount}`,
-          evidenceValue: { amount: refund.refundAmount },
-        });
-        riskScore += 15;
-      }
-
-      // Check 4: Refund shortly after order
-      if (refund.metadata?.daysSinceOrder < 1) {
-        factors.push({
-          factor: 'immediate_refund',
-          weight: 20,
-          description: 'Refund requested within 1 day of order',
-          evidenceValue: { daysSinceOrder: refund.metadata.daysSinceOrder },
-        });
-        riskScore += 20;
-      }
-
-      // Check 5: Suspicious reason
-      const highRiskReasons = ['customer_request', 'other'];
-      if (highRiskReasons.includes(refund.reason)) {
-        factors.push({
-          factor: 'suspicious_reason',
-          weight: 15,
-          description: `Reason: ${refund.reason}`,
-          evidenceValue: { reason: refund.reason },
-        });
-        riskScore += 15;
-      }
-
-      riskScore = Math.min(riskScore, 100);
-
-      let riskLevel = 'low';
-      if (riskScore >= 70) {
-        riskLevel = 'critical';
-      } else if (riskScore >= 50) {
-        riskLevel = 'high';
-      } else if (riskScore >= 30) {
-        riskLevel = 'medium';
-      }
-
-      const riskRecord = new FraudRisk({
-        riskId: `FRAUD-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        entityType: 'refund',
-        entityId: refund._id,
-        userId: refund.userId,
-        overallRiskScore: riskScore,
-        riskLevel,
-        riskFactors: factors,
-        status: 'pending_review',
-      });
-
-      await riskRecord.save();
-
+        recommendations: this.generateFraudRecommendations({
+          duplicateCheck,
+          velocityCheck,
+          blacklistCheck,
+          ipCheck,
+          deviceCheck,
+          overallRisk,
+        }),
+      };
+    } catch (error) {
+      logger.error(`Fraud check error: ${error.message}`);
       return {
-        riskScore,
-        riskLevel,
-        factors,
-        requiresApproval: riskScore >= 70,
+        riskScore: 50,
+        overallRisk: 'medium',
+        blocked: false,
+        error: error.message,
       };
-    } catch (error) {
-      throw new Error(`Refund fraud detection failed: ${error.message}`);
     }
   }
 
   /**
-   * Review fraud detection
+   * Calculate overall risk score
    */
-  static async reviewFraudCase(riskId, reviewedBy, resolution) {
-    try {
-      const riskCase = await FraudRisk.findById(riskId);
-      if (!riskCase) {
-        throw new Error('Fraud case not found');
-      }
+  calculateOverallRiskScore(checks) {
+    let score = 0;
 
-      riskCase.status = resolution;
-      riskCase.reviewedBy = reviewedBy;
-      riskCase.reviewedAt = new Date();
-
-      if (resolution === 'appealed') {
-        riskCase.appeal = {
-          appealedAt: new Date(),
-          appealedBy: reviewedBy,
-          appealStatus: 'pending',
-        };
-      }
-
-      await riskCase.save();
-
-      return riskCase;
-    } catch (error) {
-      throw new Error(`Fraud review failed: ${error.message}`);
+    // Blacklist is most critical
+    if (checks.blacklistCheck.blacklisted) {
+      score += 50;
     }
+
+    // Velocity
+    const velocityRiskScores = { low: 0, medium: 15, high: 25, critical: 40 };
+    score += velocityRiskScores[checks.velocityCheck.riskLevel] || 0;
+
+    // Duplicates
+    const duplicateRiskScores = { low: 0, medium: 10, high: 20, critical: 30 };
+    score +=
+      duplicateRiskScores[checks.duplicateCheck.riskLevel] || 0;
+
+    // IP reputation
+    const ipRiskScores = { low: 0, medium: 5, high: 15, critical: 25 };
+    score += ipRiskScores[checks.ipCheck.riskLevel] || 0;
+
+    // Device
+    if (checks.deviceCheck.suspicious) {
+      score += 10;
+    }
+
+    return Math.min(100, score);
   }
 
   /**
-   * Get fraud risk summary
+   * Get risk level from score
    */
-  static async getRiskSummary(timeframe = '24h') {
-    try {
-      const dateFilter = this._getDateFilter(timeframe);
+  getRiskLevelFromScore(score) {
+    if (score >= 70) return 'critical';
+    if (score >= 50) return 'high';
+    if (score >= 30) return 'medium';
+    return 'low';
+  }
 
-      const summary = {
-        totalRisksDetected: 0,
-        byLevel: { low: 0, medium: 0, high: 0, critical: 0 },
-        byEntity: { payment: 0, refund: 0, wallet: 0, user: 0 },
-        reviewedCases: 0,
-        pendingReview: 0,
-      };
+  /**
+   * Calculate duplicate risk level
+   */
+  calculateDuplicateRiskLevel(count) {
+    if (count >= 3) return 'critical';
+    if (count >= 2) return 'high';
+    if (count >= 1) return 'medium';
+    return 'low';
+  }
 
-      const risks = await FraudRisk.find({
-        detectedAt: { $gte: dateFilter },
+  /**
+   * Generate fraud recommendations
+   */
+  generateFraudRecommendations(fraudData) {
+    const recommendations = [];
+
+    if (fraudData.blacklistCheck.blacklisted) {
+      recommendations.push({
+        severity: 'critical',
+        action: 'reject',
+        reason: 'Blacklisted entity detected',
+        message: 'Do not process this application.',
       });
+    }
 
-      summary.totalRisksDetected = risks.length;
-
-      risks.forEach((risk) => {
-        summary.byLevel[risk.riskLevel] += 1;
-        summary.byEntity[risk.entityType] += 1;
-
-        if (risk.status === 'pending_review') {
-          summary.pendingReview += 1;
-        } else if (['approved', 'rejected', 'appealed'].includes(risk.status)) {
-          summary.reviewedCases += 1;
-        }
+    if (fraudData.velocityCheck.riskLevel === 'critical') {
+      recommendations.push({
+        severity: 'critical',
+        action: 'block',
+        reason: 'Excessive application velocity',
+        message: 'Block further applications for 48 hours.',
       });
+    }
 
-      return summary;
+    if (fraudData.velocityCheck.riskLevel === 'high') {
+      recommendations.push({
+        severity: 'high',
+        action: 'review',
+        reason: 'Multiple recent applications',
+        message: 'Manual review required before proceeding.',
+      });
+    }
+
+    if (fraudData.duplicateCheck.isDuplicate && fraudData.duplicateCheck.count >= 2) {
+      recommendations.push({
+        severity: 'medium',
+        action: 'review',
+        reason: 'Duplicate application detected',
+        message: `${fraudData.duplicateCheck.count} similar applications found in last 24 hours.`,
+      });
+    }
+
+    if (fraudData.ipCheck.suspicious) {
+      recommendations.push({
+        severity: 'high',
+        action: 'investigate',
+        reason: 'Suspicious IP activity',
+        message: `${fraudData.ipCheck.recentApplications} applications from this IP in 24 hours.`,
+      });
+    }
+
+    if (fraudData.deviceCheck.suspicious) {
+      recommendations.push({
+        severity: 'medium',
+        action: 'verify',
+        reason: 'Suspicious user agent detected',
+        message: 'Verify this is a legitimate user application.',
+      });
+    }
+
+    if (fraudData.overallRisk === 'critical' || fraudData.overallRisk === 'high') {
+      recommendations.push({
+        severity: fraudData.overallRisk,
+        action: 'escalate',
+        reason: 'High overall fraud risk',
+        message: 'Escalate to fraud prevention team.',
+      });
+    }
+
+    return recommendations;
+  }
+
+  /**
+   * Get blacklisted phones (from config/database)
+   */
+  getBlacklistedPhones() {
+    // In production, fetch from database
+    return [
+      // Example blacklisted numbers
+    ];
+  }
+
+  /**
+   * Get blacklisted PANs (from config/database)
+   */
+  getBlacklistedPANs() {
+    // In production, fetch from database
+    return [
+      // Example blacklisted PANs
+    ];
+  }
+
+  /**
+   * Add to blacklist
+   */
+  async addToBlacklist(type, value, reason) {
+    try {
+      logger.info(`Adding to blacklist: ${type} - ${value} - Reason: ${reason}`);
+      // In production, save to database
+      return { success: true };
     } catch (error) {
-      throw new Error(`Failed to get risk summary: ${error.message}`);
+      logger.error(`Blacklist add error: ${error.message}`);
+      return { success: false, error: error.message };
     }
   }
 
   /**
-   * Private: Get user average amount
+   * Remove from blacklist
    */
-  static async _getUserAverageAmount(userId) {
-    const result = await FoodDeliveryPayment.aggregate([
-      { $match: { userId, status: 'success' } },
-      { $group: { _id: null, avgAmount: { $avg: '$amount' } } },
-    ]);
-
-    return result[0]?.avgAmount || 0;
-  }
-
-  /**
-   * Private: Check if new device
-   */
-  static async _isNewDevice(userId, payment) {
-    const existing = await FoodDeliveryPayment.findOne({
-      userId,
-      'deviceId': payment.deviceId,
-    });
-
-    return !existing;
-  }
-
-  /**
-   * Private: Check geographic anomaly
-   */
-  static async _checkGeographicAnomaly(payment) {
-    const recentLocations = await FoodDeliveryPayment.find({
-      userId: payment.userId,
-      initiatedAt: {
-        $gte: new Date(Date.now() - 86400000),
-      },
-    }).select('location').limit(5);
-
-    const locations = recentLocations.map((p) => p.location).filter((l) => l);
-    return locations.length > 0 && !locations.includes(payment.location);
-  }
-
-  /**
-   * Private: Get user refund rate
-   */
-  static async _getUserRefundRate(userId) {
-    const totalOrders = await FoodDeliveryPayment.countDocuments({
-      userId,
-      status: 'success',
-    });
-
-    const totalRefunds = await FoodDeliveryRefund.countDocuments({
-      userId,
-      status: 'completed',
-    });
-
-    return totalOrders > 0 ? totalRefunds / totalOrders : 0;
-  }
-
-  /**
-   * Private: Get date filter
-   */
-  static _getDateFilter(timeframe) {
-    const now = new Date();
-
-    switch (timeframe) {
-      case '1h':
-        return new Date(now - 3600000);
-      case '24h':
-        return new Date(now - 86400000);
-      case '7d':
-        return new Date(now - 604800000);
-      case '30d':
-        return new Date(now - 2592000000);
-      default:
-        return new Date(now - 86400000);
+  async removeFromBlacklist(type, value) {
+    try {
+      logger.info(`Removing from blacklist: ${type} - ${value}`);
+      // In production, remove from database
+      return { success: true };
+    } catch (error) {
+      logger.error(`Blacklist remove error: ${error.message}`);
+      return { success: false, error: error.message };
     }
   }
 }
 
-module.exports = FraudDetectionService;
+module.exports = new FraudDetectionService();

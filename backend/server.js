@@ -110,6 +110,21 @@ const startBackgroundServices = () => {
   const draftExpirationScheduler = require('./services/draftExpirationScheduler');
   const { startHealthcareRetentionScheduler } = require('./jobs/healthcareRetentionScheduler');
   const { getInstance: getAstrologyScheduler } = require('./services/astrologyNotificationScheduler');
+  const matrimonialWebSocket = require('./services/websocketService');
+  const cacheService = require('./services/cacheService');
+  const errorTrackingService = require('./services/errorTrackingService');
+
+  // Initialize error tracking
+  errorTrackingService.initialize();
+
+  // Initialize Redis cache
+  cacheService.connect().catch((err) => {
+    logger.warn(`Redis connection failed: ${err.message}. Continuing without cache.`);
+  });
+
+  // Initialize matrimonial WebSocket
+  matrimonialWebSocket.initialize(server);
+  matrimonialWebSocket.startHeartbeat();
 
   voiceCallScheduler.start();
   scheduleAbandonedCartReminders();

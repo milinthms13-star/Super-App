@@ -5,7 +5,25 @@ import {
   createSubscription,
   getCurrentSubscription,
   requestSubscriptionRefund,
+  createRazorpayOrder,
+  verifyRazorpayPayment,
 } from "./api.js";
+
+// Load Razorpay script
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 const SUBSCRIPTION_TIERS = [
   {
@@ -110,17 +128,78 @@ const SubscriptionManagement = ({ onSubscriptionChange }) => {
     try {
       const profileId =
         currentUser?.matrimonialProfileId || currentUser?.matrimonialProfile?._id || "";
-      const response = await createSubscription(tier, billingCycle, profileId);
-      const nextSubscription = response?.data || null;
-      setCurrentSubscription(nextSubscription || currentSubscription);
-      setMessage("Subscription initiated. Complete payment to activate your plan.");
+      
+      const tierData = SUBSCRIPTION_TIERS.find(t => t.tier === tier);
+      const amount = tierData?.price || 0;
 
-      if (onSubscriptionChange) {
-        onSubscriptionChange(nextSubscription || { tier, isActive: false });
+      // Load Razorpay script
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        throw new Error('Failed to load payment gateway');
       }
+
+      // Create Razorpay order
+      const orderResponse = await createRazorpayOrder(tier, amount, profileId);
+      
+      const { razorpayOrderId, razorpayKeyId, subscriptionId, currency } = orderResponse.data;
+
+      // Razorpay payment options
+      const options = {
+        key: razorpayKeyId,
+        amount: amount * 100, // Amount in paise
+        currency: currency || 'INR',
+        name: 'SoulMatch Matrimonial',
+        description: `${tierData.name} Subscription`,
+        order_id: razorpayOrderId,
+        handler: async function (response) {
+          try {
+            // Verify payment
+            const verifyResponse = await verifyRazorpayPayment(
+              response.razorpay_payment_id,
+              response.razorpay_order_id,
+              response.razorpay_signature,
+              tier
+            );
+
+            if (verifyResponse.success) {
+              const nextSubscription = verifyResponse.data;
+              setCurrentSubscription(nextSubscription);
+              setMessage('Payment successful! Your subscription is now active.');
+              
+              if (onSubscriptionChange) {
+                onSubscriptionChange(nextSubscription);
+              }
+            } else {
+              setMessage('Payment verification failed. Please contact support.');
+            }
+          } catch (error) {
+            console.error('Payment verification error:', error);
+            setMessage(`Payment verification failed: ${error.response?.data?.message || error.message}`);
+          } finally {
+            setLoading(false);
+          }
+        },
+        prefill: {
+          name: currentUser?.name || '',
+          email: currentUser?.email || '',
+          contact: currentUser?.phone || ''
+        },
+        theme: {
+          color: '#d4af37'
+        },
+        modal: {
+          ondismiss: function() {
+            setLoading(false);
+            setMessage('Payment cancelled');
+          }
+        }
+      };
+
+      const razorpay = new window.Razorpay(options);
+      razorpay.open();
+
     } catch (error) {
       setMessage(`Subscription failed: ${error.response?.data?.message || error.message}`);
-    } finally {
       setLoading(false);
     }
   };

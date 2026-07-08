@@ -1,7 +1,8 @@
 import React from "react";
 import { formatInr } from "../tourismData";
+import PaymentButton from "./PaymentButton";
 
-const BookingHistory = ({ bookings, loading, onRefresh }) => (
+const BookingHistory = ({ bookings, loading, onRefresh, onPaymentSuccess, onPaymentFailure }) => (
   <section className="tourism-section">
     <div className="tourism-section-heading">
       <h2>Booking History</h2>
@@ -18,31 +19,60 @@ const BookingHistory = ({ bookings, loading, onRefresh }) => (
         <table>
           <thead>
             <tr>
-              <th>Booking ID</th>
+              <th>Confirmation #</th>
               <th>Package</th>
               <th>Travel Date</th>
               <th>Status</th>
-              <th>Payment</th>
-              <th>Payable</th>
-              <th>Coupon</th>
+              <th>Total</th>
+              <th>Paid</th>
+              <th>Balance</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            {bookings.map((booking) => (
-              <tr key={booking.id}>
-                <td>{booking.id}</td>
-                <td>{booking.packageTitle}</td>
-                <td>{booking.travelDate || "-"}</td>
-                <td>{booking.bookingStatus}</td>
-                <td>{booking.amountSummary?.paymentType || "-"}</td>
-                <td>{formatInr(booking.amountSummary?.payableAmount || 0)}</td>
-                <td>{booking.amountSummary?.couponCode || "-"}</td>
-              </tr>
-            ))}
+            {bookings.map((booking) => {
+              const totalAmount = booking.amountSummary?.totalAmount || 0;
+              const paidAmount = booking.amountSummary?.paidAmount || 0;
+              const balanceAmount = totalAmount - paidAmount;
+              
+              return (
+                <tr key={booking._id || booking.id}>
+                  <td><strong>{booking.confirmationNumber || booking.id}</strong></td>
+                  <td>{booking.packageTitle}</td>
+                  <td>{booking.travelDate || "-"}</td>
+                  <td>
+                    <span className={`tourism-status-badge tourism-status-${booking.bookingStatus}`}>
+                      {booking.bookingStatus}
+                    </span>
+                  </td>
+                  <td>{formatInr(totalAmount)}</td>
+                  <td className="tourism-success-text">{formatInr(paidAmount)}</td>
+                  <td className={balanceAmount > 0 ? "tourism-warning-text" : ""}>
+                    {formatInr(balanceAmount)}
+                  </td>
+                  <td>
+                    {booking.bookingStatus !== 'cancelled' && booking.bookingStatus !== 'refunded' && (
+                      <PaymentButton
+                        booking={booking}
+                        onPaymentSuccess={onPaymentSuccess}
+                        onPaymentFailure={onPaymentFailure}
+                      />
+                    )}
+                    {(booking.bookingStatus === 'cancelled' || booking.bookingStatus === 'refunded') && (
+                      <span style={{ fontSize: '12px', color: '#6b7280' }}>-</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
-      {!bookings.length ? <div className="tourism-empty-state">No bookings yet. Your confirmed bookings will appear here.</div> : null}
+      {!bookings.length ? (
+        <div className="tourism-empty-state">
+          No bookings yet. Your confirmed bookings will appear here.
+        </div>
+      ) : null}
     </div>
   </section>
 );

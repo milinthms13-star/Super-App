@@ -9,6 +9,8 @@ import VendorPanel from "./components/VendorPanel";
 import AdminPanel from "./components/AdminPanel";
 import BookingHistory from "./components/BookingHistory";
 import TourismPlannerDesk from "./components/TourismPlannerDesk";
+import AnalyticsDashboard from "./components/AnalyticsDashboard";
+import AuditLogViewer from "./components/AuditLogViewer";
 import {
   FALLBACK_ADMIN_REVIEW_ITEMS,
   FALLBACK_COUPONS,
@@ -126,6 +128,130 @@ const TourismMarketplace = () => {
 
   const canManageVendor = ["business", "entrepreneur", "vendor", "admin"].includes(currentUserRole);
   const canManageAdmin = ["admin"].includes(currentUserRole);
+
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let ws = null;
+    let reconnectTimeout = null;
+
+    const connectWebSocket = () => {
+      try {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsHost = process.env.REACT_APP_WS_URL || `${wsProtocol}//${window.location.host}`;
+        ws = new WebSocket(`${wsHost}/tourism`);
+
+        ws.onopen = () => {
+          console.log('[Tourism WebSocket] Connected');
+          
+          // Authenticate
+          ws.send(JSON.stringify({
+            type: 'authenticate',
+            data: {
+              userId: currentUser._id,
+              email: currentUser.email,
+              role: currentUserRole,
+            },
+          }));
+
+          // Join vendor room if applicable
+          if (canManageVendor && vendorId) {
+            ws.send(JSON.stringify({
+              type: 'join:vendor',
+              data: vendorId,
+            }));
+          }
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            
+            // Handle different event types
+            switch (message.type) {
+              case 'booking_created':
+                pushToast(`New booking: ${message.booking.confirmationNumber}`, 'success');
+                loadBookings();
+                if (canManageVendor) loadVendorData();
+                break;
+
+              case 'payment_confirmed':
+                pushToast(`Payment confirmed for ${message.booking.confirmationNumber}`, 'success');
+                loadBookings();
+                break;
+
+              case 'booking_status_changed':
+                pushToast(
+                  `Booking ${message.booking.confirmationNumber}: ${message.booking.oldStatus} → ${message.booking.newStatus}`,
+                  'info'
+                );
+                loadBookings();
+                break;
+
+              case 'lead_assigned':
+                if (canManageVendor) {
+                  pushToast(`New lead assigned: ${message.lead.travelerName}`, 'success');
+                  loadVendorData();
+                }
+                break;
+
+              case 'lead_status_changed':
+                if (canManageVendor) {
+                  pushToast(`Lead status updated: ${message.lead.oldStatus} → ${message.lead.newStatus}`, 'info');
+                  loadVendorData();
+                }
+                break;
+
+              case 'package_approved':
+                if (canManageVendor) {
+                  pushToast(`Package approved: ${message.package.title}`, 'success');
+                  loadVendorData();
+                }
+                loadBootstrap();
+                break;
+
+              case 'refund_processed':
+                pushToast(`Refund processed for ${message.booking.confirmationNumber}`, 'success');
+                loadBookings();
+                break;
+
+              case 'authenticated':
+                console.log('[Tourism WebSocket] Authenticated', message);
+                break;
+
+              default:
+                console.log('[Tourism WebSocket] Unhandled message:', message);
+            }
+          } catch (error) {
+            console.error('[Tourism WebSocket] Message parse error:', error);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error('[Tourism WebSocket] Error:', error);
+        };
+
+        ws.onclose = () => {
+          console.log('[Tourism WebSocket] Disconnected, attempting reconnect in 5s...');
+          reconnectTimeout = setTimeout(connectWebSocket, 5000);
+        };
+      } catch (error) {
+        console.error('[Tourism WebSocket] Connection error:', error);
+        reconnectTimeout = setTimeout(connectWebSocket, 5000);
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.close();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, currentUserRole, canManageVendor, vendorId]);
 
   const pushToast = (message, type = "success") => {
     const nextToast = { id: `${Date.now()}-${Math.random()}`, message, type };
@@ -374,31 +500,47 @@ const TourismMarketplace = () => {
         packageId: selectedPackage.id,
         ...bookingForm,
       });
+      
       setDataState((current) => ({
         ...current,
         bookings: [booking, ...current.bookings],
       }));
 
+      pushToast(`Booking created: ${booking.confirmationNumber}`);
+
+      // Create payment intent and initiate Razorpay
       try {
-        const paymentIntent = await tourismService.createPaymentIntent({
-          bookingId: booking.id,
+        const paymentOrder = await tourismService.createPaymentIntent({
+          bookingId: booking._id,
           amount: booking.amountSummary.payableAmount,
           paymentType: booking.amountSummary.paymentType,
         });
-        pushToast(
-          `Booking submitted. Payment order created: ${paymentIntent.orderId}.`,
-          "success"
+
+        // Initiate Razorpay payment
+        await tourismService.initiateRazorpayPayment(
+          booking,
+          paymentOrder,
+          (response) => {
+            pushToast("Payment successful! Your booking is confirmed.", "success");
+            resetBookingSheet();
+            setActiveTab("history");
+            loadBookings();
+          },
+          (error) => {
+            pushToast(
+              error?.message || "Payment failed. Please try again or contact support.",
+              "error"
+            );
+          }
         );
       } catch (paymentError) {
         pushToast(
-          "Booking created, but payment order could not be generated right now.",
+          "Booking created, but payment could not be initiated. Please complete payment from booking history.",
           "warning"
         );
+        resetBookingSheet();
+        setActiveTab("history");
       }
-
-      pushToast(`Booking submitted for ${selectedPackage.title}. Status: ${booking.bookingStatus}`);
-      resetBookingSheet();
-      setActiveTab("history");
     } catch (error) {
       pushToast(error?.response?.data?.message || "Booking submission failed. Try again.", "error");
     } finally {
@@ -608,6 +750,12 @@ const TourismMarketplace = () => {
         <button type="button" className={`tourism-nav-item ${activeTab === "vendor" ? "active" : ""}`} onClick={() => setActiveTab("vendor")}>
           Vendor Workspace
         </button>
+        <button type="button" className={`tourism-nav-item ${activeTab === "analytics" ? "active" : ""}`} onClick={() => setActiveTab("analytics")}>
+          📊 Analytics
+        </button>
+        <button type="button" className={`tourism-nav-item ${activeTab === "audit" ? "active" : ""}`} onClick={() => setActiveTab("audit")}>
+          🔍 Audit Logs
+        </button>
         <button type="button" className={`tourism-nav-item ${activeTab === "admin" ? "active" : ""}`} onClick={() => setActiveTab("admin")}>
           Admin Controls
         </button>
@@ -779,6 +927,13 @@ const TourismMarketplace = () => {
           bookings={bookingHistory}
           loading={loadingState.bookingRefresh}
           onRefresh={loadBookings}
+          onPaymentSuccess={(response, booking) => {
+            pushToast(`Payment successful for ${booking.confirmationNumber}!`, "success");
+            loadBookings();
+          }}
+          onPaymentFailure={(error) => {
+            pushToast(error?.message || "Payment failed. Please try again.", "error");
+          }}
         />
       )}
 
@@ -948,6 +1103,22 @@ const TourismMarketplace = () => {
           onLeadStatusUpdate={handleVendorLeadStatusUpdate}
           vendorBusy={loadingState.vendorMutate}
         />
+      )}
+
+      {activeTab === "analytics" && (
+        <section className="tourism-section">
+          <AnalyticsDashboard userRole={currentUserRole} vendorId={vendorId} />
+        </section>
+      )}
+
+      {activeTab === "audit" && (
+        <section className="tourism-section">
+          <AuditLogViewer
+            userRole={currentUserRole}
+            bookings={dataState.bookings}
+            vendorId={vendorId}
+          />
+        </section>
       )}
 
       {activeTab === "admin" && (

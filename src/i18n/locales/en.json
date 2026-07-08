@@ -1,0 +1,104 @@
+{
+  "education": {
+    "hero": {
+      "title": "Education ecosystem for tuition, skills, scholarships, and student support in one place",
+      "description": "Connect students, parents, tutors, and institutes in one learning platform with guided assistance and community features",
+      "browseCoursesButton": "Browse Courses",
+      "homeButton": "Home"
+    },
+    "nav": {
+      "home": "Overview",
+      "dashboard360": "360 Dashboard",
+      "courses": "Courses",
+      "myLearning": "My Learning",
+      "community": "Community",
+      "career": "Career",
+      "assessments": "Assessments",
+      "certificates": "Certificates",
+      "tuitionTracker": "Tuition Tracker",
+      "government": "Government",
+      "canvaStudio": "Canva Studio",
+      "studyPath": "Study Path"
+    },
+    "courses": {
+      "title": "Skill Courses Hub",
+      "description": "Learn job-ready skills with certificates and placement support",
+      "searchPlaceholder": "Search by course name, level, or topic",
+      "noCourses": "No courses found",
+      "tryDifferent": "Try a different keyword or clear the filters",
+      "enrollButton": "Enroll Now",
+      "continueButton": "Continue",
+      "viewDetailsButton": "View Details",
+      "alreadyEnrolled": "You are already enrolled in this course"
+    },
+    "tuition": {
+      "title": "Book Subject Tuition",
+      "selectSubject": "Select subject",
+      "classLevel": "Class / level",
+      "contactPhone": "Contact phone (optional)",
+      "contactPlaceholder": "Enter parent/student phone",
+      "requestButton": "Request Tuition",
+      "requestSubmitted": "Tuition request submitted for {{subject}}. A tutor will contact you soon."
+    },
+    "scholarships": {
+      "title": "Government Support",
+      "description": "Find scholarships, education loans, and government scheme assistance",
+      "searchPlaceholder": "Search scholarships or schemes",
+      "applyButton": "Apply Now",
+      "appliedButton": "Applied",
+      "alreadyApplied": "You have already applied for this scholarship",
+      "disclaimer": "Scholarship deadlines and eligibility may change. Verify details on official government or institution portals before submitting documents."
+    },
+    "community": {
+      "title": "Student Community",
+      "description": "Safe moderated forums for doubt clearing, notes sharing, and study groups",
+      "joinButton": "Join Discussion",
+      "joinGroupButton": "Join Group",
+      "joinedButton": "Joined",
+      "alreadyJoined": "You are already a member of this group"
+    },
+    "certificates": {
+      "title": "Certificates Wallet",
+      "description": "Upload your certificates and keep a verified record for career opportunities",
+      "uploadButton": "Upload Certificate",
+      "certificateTitle": "Certificate title",
+      "issuer": "Issuer",
+      "completedOn": "Completed on",
+      "credentialId": "Credential ID",
+      "certificateFile": "Certificate file (optional)",
+      "markVerified": "Mark Verified",
+      "markRejected": "Mark Rejected"
+    },
+    "profile": {
+      "title": "Role Profile",
+      "primaryRole": "Primary role",
+      "studentName": "Student name",
+      "classLevel": "Class level",
+      "targetExam": "Target exam",
+      "preferredLanguage": "Preferred language",
+      "careerGoal": "Career goal",
+      "saveButton": "Save Role Profile",
+      "roles": {
+        "student": "Student",
+        "parent": "Parent",
+        "tutor": "Tutor",
+        "institute_admin": "Institute Admin"
+      }
+    },
+    "errors": {
+      "fetchFailed": "Failed to fetch data",
+      "saveFailed": "Failed to save changes",
+      "enrollFailed": "Failed to enroll in course",
+      "uploadFailed": "Failed to upload certificate",
+      "networkError": "Network connection failed. Please check your internet connection.",
+      "sessionExpired": "Your session has expired. Please log in again."
+    },
+    "success": {
+      "enrolled": "Successfully enrolled in {{courseTitle}}",
+      "scholarshipApplied": "Application draft created for {{scholarshipName}}",
+      "groupJoined": "You have joined {{groupTitle}}",
+      "certificateUploaded": "Certificate uploaded successfully",
+      "profileUpdated": "Role profile updated successfully"
+    }
+  }
+}

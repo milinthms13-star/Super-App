@@ -1,0 +1,76 @@
+{
+  "common": {
+    "welcome": "Welcome to Malabar Bazaar Finance",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "edit": "Edit",
+    "delete": "Delete",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
+    "download": "Download",
+    "upload": "Upload",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "loading": "Loading...",
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Information"
+  },
+  "finance": {
+    "title": "Finance Hub",
+    "apply_now": "Apply for Loan",
+    "check_eligibility": "Check Eligibility",
+    "calculate_emi": "Calculate EMI",
+    "track_application": "Track Your Application",
+    "loan_categories": {
+      "business": "Business Loan",
+      "personal": "Personal Loan",
+      "gold": "Gold Loan",
+      "home": "Home Loan",
+      "vehicle": "Vehicle Loan",
+      "education": "Education Loan"
+    },
+    "status": {
+      "submitted": "Submitted",
+      "under_review": "Under Review",
+      "documents_requested": "Documents Requested",
+      "institution_review": "Institution Review",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "withdrawn": "Withdrawn"
+    },
+    "form": {
+      "full_name": "Full Name",
+      "phone": "Phone Number",
+      "email": "Email Address",
+      "loan_amount": "Loan Amount",
+      "loan_category": "Loan Category",
+      "preferred_tenure": "Preferred Tenure (Months)",
+      "monthly_income": "Monthly Income",
+      "existing_emi": "Existing EMI",
+      "cibil_score": "CIBIL Score",
+      "employment_type": "Employment Type",
+      "state": "State",
+      "district": "District",
+      "pincode": "Pincode"
+    },
+    "documents": {
+      "aadhaar": "Aadhaar Card",
+      "pan": "PAN Card",
+      "salary_slips": "Salary Slips",
+      "bank_statements": "Bank Statements",
+      "business_proof": "Business Proof",
+      "gst_certificate": "GST Certificate"
+    },
+    "messages": {
+      "application_submitted": "Your loan application has been successfully submitted!",
+      "documents_uploaded": "Documents uploaded successfully",
+      "consultant_assigned": "A consultant has been assigned to your application",
+      "status_updated": "Application status has been updated"
+    }
+  }
+}

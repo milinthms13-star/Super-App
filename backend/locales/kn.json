@@ -1,0 +1,76 @@
+{
+  "common": {
+    "welcome": "ಮಲಬಾರ್ ಬಜಾರ್ ಫೈನಾನ್ಸ್‌ಗೆ ಸ್ವಾಗತ",
+    "submit": "ಸಲ್ಲಿಸಿ",
+    "cancel": "ರದ್ದುಗೊಳಿಸಿ",
+    "save": "ಉಳಿಸಿ",
+    "edit": "ಸಂಪಾದಿಸಿ",
+    "delete": "ಅಳಿಸಿ",
+    "search": "ಹುಡುಕಿ",
+    "filter": "ಫಿಲ್ಟರ್",
+    "export": "ರಫ್ತು",
+    "download": "ಡೌನ್‌ಲೋಡ್",
+    "upload": "ಅಪ್‌ಲೋಡ್",
+    "back": "ಹಿಂದೆ",
+    "next": "ಮುಂದೆ",
+    "previous": "ಹಿಂದಿನ",
+    "loading": "ಲೋಡ್ ಆಗುತ್ತಿದೆ...",
+    "success": "ಯಶಸ್ಸು",
+    "error": "ದೋಷ",
+    "warning": "ಎಚ್ಚರಿಕೆ",
+    "info": "ಮಾಹಿತಿ"
+  },
+  "finance": {
+    "title": "ಫೈನಾನ್ಸ್ ಹಬ್",
+    "apply_now": "ಸಾಲಕ್ಕಾಗಿ ಅರ್ಜಿ ಸಲ್ಲಿಸಿ",
+    "check_eligibility": "ಅರ್ಹತೆ ಪರಿಶೀಲಿಸಿ",
+    "calculate_emi": "EMI ಲೆಕ್ಕಾಚಾರ ಮಾಡಿ",
+    "track_application": "ನಿಮ್ಮ ಅರ್ಜಿಯನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡಿ",
+    "loan_categories": {
+      "business": "ವ್ಯಾಪಾರ ಸಾಲ",
+      "personal": "ವೈಯಕ್ತಿಕ ಸಾಲ",
+      "gold": "ಚಿನ್ನದ ಸಾಲ",
+      "home": "ಮನೆ ಸಾಲ",
+      "vehicle": "ವಾಹನ ಸಾಲ",
+      "education": "ಶಿಕ್ಷಣ ಸಾಲ"
+    },
+    "status": {
+      "submitted": "ಸಲ್ಲಿಸಲಾಗಿದೆ",
+      "under_review": "ಪರಿಶೀಲನೆಯಲ್ಲಿದೆ",
+      "documents_requested": "ದಾಖಲೆಗಳು ಅಗತ್ಯವಿದೆ",
+      "institution_review": "ಸಂಸ್ಥೆ ಪರಿಶೀಲನೆ",
+      "approved": "ಅನುಮೋದಿಸಲಾಗಿದೆ",
+      "rejected": "ನಿರಾಕರಿಸಲಾಗಿದೆ",
+      "withdrawn": "ವಾಪಸ್ ಪಡೆಯಲಾಗಿದೆ"
+    },
+    "form": {
+      "full_name": "ಪೂರ್ಣ ಹೆಸರು",
+      "phone": "ದೂರವಾಣಿ ಸಂಖ್ಯೆ",
+      "email": "ಇಮೇಲ್ ವಿಳಾಸ",
+      "loan_amount": "ಸಾಲದ ಮೊತ್ತ",
+      "loan_category": "ಸಾಲದ ವರ್ಗ",
+      "preferred_tenure": "ಆದ್ಯತಾ ಅವಧಿ (ತಿಂಗಳುಗಳು)",
+      "monthly_income": "ಮಾಸಿಕ ಆದಾಯ",
+      "existing_emi": "ಅಸ್ತಿತ್ವದಲ್ಲಿರುವ EMI",
+      "cibil_score": "CIBIL ಸ್ಕೋರ್",
+      "employment_type": "ಉದ್ಯೋಗ ಪ್ರಕಾರ",
+      "state": "ರಾಜ್ಯ",
+      "district": "ಜಿಲ್ಲೆ",
+      "pincode": "ಪಿನ್‌ಕೋಡ್"
+    },
+    "documents": {
+      "aadhaar": "ಆಧಾರ್ ಕಾರ್ಡ್",
+      "pan": "PAN ಕಾರ್ಡ್",
+      "salary_slips": "ಸಂಬಳ ಪರ್ಚಿಗಳು",
+      "bank_statements": "ಬ್ಯಾಂಕ್ ಹೇಳಿಕೆಗಳು",
+      "business_proof": "ವ್ಯಾಪಾರ ಪುರಾವೆ",
+      "gst_certificate": "GST ಪ್ರಮಾಣಪತ್ರ"
+    },
+    "messages": {
+      "application_submitted": "ನಿಮ್ಮ ಸಾಲದ ಅರ್ಜಿಯನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಸಲ್ಲಿಸಲಾಗಿದೆ!",
+      "documents_uploaded": "ದಾಖಲೆಗಳನ್ನು ಯಶಸ್ವಿಯಾಗಿ ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗಿದೆ",
+      "consultant_assigned": "ನಿಮ್ಮ ಅರ್ಜಿಗೆ ಸಲಹೆಗಾರರನ್ನು ನಿಯೋಜಿಸಲಾಗಿದೆ",
+      "status_updated": "ಅರ್ಜಿ ಸ್ಥಿತಿಯನ್ನು ನವೀಕರಿಸಲಾಗಿದೆ"
+    }
+  }
+}

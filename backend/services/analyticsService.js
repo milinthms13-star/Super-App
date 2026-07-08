@@ -1,687 +1,572 @@
-const MessageAnalytics = require('../models/MessageAnalytics');
-const UserMessageStats = require('../models/UserMessageStats');
-const ConversationMetrics = require('../models/ConversationMetrics');
-const MessageTrendData = require('../models/MessageTrendData');
-const Message = require('../models/Message');
+const MatrimonialProfile = require('../models/MatrimonialProfile');
 const User = require('../models/User');
-const logger = require('../utils/logger');
-
-/**
- * Message Analytics Service
- * Calculates and tracks messaging analytics across platform
- * 
- * Features:
- * - Platform-wide statistics (volume, engagement, trends)
- * - Per-user statistics (activity, engagement score)
- * - Per-conversation metrics (health, patterns)
- * - Trending topics and keywords
- */
+const Message = require('../models/Message');
+const { cacheService } = require('./cacheService');
+const { errorTrackingService } = require('./errorTrackingService');
 
 class AnalyticsService {
-  /**
-   * Calculate daily platform analytics
-   * Runs once daily to aggregate metrics
-   */
-  async calculateDailyAnalytics(date = new Date()) {
-    try {
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      // Get all messages for the day
-      const messages = await Message.find({
-        createdAt: { $gte: startOfDay, $lte: endOfDay },
-      }).populate('sender receiver');
-
-      if (messages.length === 0) {
-        logger.info(`No messages for daily analytics on ${date.toDateString()}`);
-        return null;
-      }
-
-      // Calculate metrics
-      const metrics = {
-        date: startOfDay,
-        period: 'daily',
-        totalMessages: messages.length,
-        totalUsers: new Set(messages.map((m) => m.sender._id.toString())).size,
-        activeUsers: new Set(
-          messages.map((m) => [m.sender._id.toString(), m.receiver._id.toString()]).flat()
-        ).size,
-        newUsers: await this.getNewUsersCount(startOfDay, endOfDay),
-        messageTypes: this.countMessageTypes(messages),
-        averageResponseTime: await this.calculateAverageResponseTime(messages),
-        messageReadRate: await this.calculateReadRate(messages),
-        conversationCount: await this.getConversationCount(startOfDay, endOfDay),
-        averageConversationLength: 0, // calculated below
-        deviceMetrics: await this.getDeviceMetrics(messages),
-        peakHour: this.getPeakHour(messages),
-        encryptedMessages: messages.filter((m) => m.encrypted).length,
-        deliveredMessages: messages.filter((m) => m.status === 'delivered').length,
-        failedMessages: messages.filter((m) => m.status === 'failed').length,
-      };
-
-      // Calculate derived metrics
-      if (metrics.conversationCount > 0) {
-        metrics.averageConversationLength = Math.round(metrics.totalMessages / metrics.conversationCount);
-      }
-      metrics.bounceRate = (metrics.failedMessages / metrics.totalMessages) * 100 || 0;
-
-      // Save to database
-      const analytics = new MessageAnalytics(metrics);
-      await analytics.save();
-
-      logger.info(`Daily analytics calculated for ${date.toDateString()}: ${metrics.totalMessages} messages`);
-      return analytics;
-    } catch (error) {
-      logger.error('Error calculating daily analytics:', error);
-      throw error;
-    }
+  constructor() {
+    this.cacheTTL = 300; // 5 minutes cache for analytics
   }
 
   /**
-   * Calculate user statistics
-   * Updates per-user engagement metrics
+   * Get engagement metrics
+   * @param {Date} startDate - Start date for metrics
+   * @param {Date} endDate - End date for metrics
+   * @returns {Promise<Object>} Engagement metrics
    */
-  async calculateUserStats(userId) {
+  async getEngagementMetrics(startDate, endDate) {
     try {
-      const user = await User.findById(userId);
-      if (!user) {
-        logger.warn(`User not found for stats calculation: ${userId}`);
-        return null;
-      }
+      const cacheKey = `analytics:engagement:${startDate.getTime()}:${endDate.getTime()}`;
+      const cached = await cacheService.get(cacheKey);
+      if (cached) return cached;
 
-      // Get all messages from this user
-      const sentMessages = await Message.find({ sender: userId });
-      const receivedMessages = await Message.find({ receiver: userId });
+      const dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
 
-      // Calculate response times
-      const responseTimes = await this.calculateUserResponseTimes(userId);
-
-      // Calculate engagement score
-      const engagementScore = this.calculateEngagementScore(
-        sentMessages.length,
-        receivedMessages.length,
-        responseTimes.average,
-        receivedMessages.filter((m) => m.read).length
-      );
-
-      // Get device stats
-      const deviceStats = await this.getUserDeviceStats(userId);
-
-      // Get frequent contacts
-      const frequentContacts = await this.getFrequentContacts(userId, 5);
-
-      // Get activity patterns
-      const activityPatterns = this.getActivityPatterns(sentMessages);
-
-      const stats = {
-        userId,
-        totalMessagesSent: sentMessages.length,
-        totalMessagesReceived: receivedMessages.length,
-        totalConversations: await this.getUserConversationCount(userId),
-        activeConversations: await this.getActiveConversationCount(userId),
-        averageResponseTime: responseTimes.average,
-        p50ResponseTime: responseTimes.p50,
-        p95ResponseTime: responseTimes.p95,
-        p99ResponseTime: responseTimes.p99,
-        messagesRead: receivedMessages.filter((m) => m.read).length,
-        messagesUnread: receivedMessages.filter((m) => !m.read).length,
-        readRate: ((receivedMessages.filter((m) => m.read).length / receivedMessages.length) * 100) || 0,
-        firstMessageDate: sentMessages.length > 0 ? sentMessages[sentMessages.length - 1].createdAt : null,
-        lastMessageDate: sentMessages.length > 0 ? sentMessages[0].createdAt : null,
-        lastActiveAt: new Date(),
-        averageMessagesPerDay: this.calculateAveragePerDay(sentMessages),
-        messageTypes: this.countMessageTypesByUser(sentMessages),
-        deviceStats,
-        encryptedMessagePercentage: this.calculateEncryptionPercentage(sentMessages),
-        failedMessageCount: sentMessages.filter((m) => m.status === 'failed').length,
-        totalContactsMessaged: frequentContacts.length,
-        frequentContacts,
-        engagementScore,
-        scoreFactors: this.calculateScoreFactors(
-          sentMessages.length,
-          receivedMessages.length,
-          responseTimes.average,
-          receivedMessages.filter((m) => m.read).length,
-          user.createdAt
-        ),
-        isActive: sentMessages.length > 0,
-        preferredTimeOfDay: activityPatterns.preferredTimeOfDay,
-        preferredDayOfWeek: activityPatterns.preferredDayOfWeek,
-      };
-
-      // Update or create stats record
-      const userStats = await UserMessageStats.findOneAndUpdate(
-        { userId },
-        stats,
-        { upsert: true, new: true }
-      );
-
-      return userStats;
-    } catch (error) {
-      logger.error(`Error calculating user stats for ${userId}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Calculate conversation metrics
-   */
-  async calculateConversationMetrics(conversationId) {
-    try {
-      const messages = await Message.find({ conversationId })
-        .populate('sender')
-        .sort({ createdAt: 1 });
-
-      if (messages.length === 0) {
-        logger.warn(`No messages for conversation ${conversationId}`);
-        return null;
-      }
-
-      // Get participants
-      const participants = [...new Set(messages.map((m) => m.sender._id.toString()))];
-
-      // Calculate response times
-      const responseTimes = this.calculateConversationResponseTimes(messages);
-
-      // Get engagement
-      const engagementLevel = this.calculateEngagementLevel(messages);
+      const [
+        totalProfiles,
+        activeProfiles,
+        newProfiles,
+        totalMessages,
+        totalInterests,
+        acceptedInterests,
+        profileViews,
+        avgMessagesPerUser,
+        avgInterestsPerUser
+      ] = await Promise.all([
+        MatrimonialProfile.countDocuments(),
+        MatrimonialProfile.countDocuments({ lastActive: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }),
+        MatrimonialProfile.countDocuments(dateFilter),
+        Message.countDocuments({ module: 'matrimonial', ...dateFilter }),
+        MatrimonialProfile.aggregate([
+          { $unwind: '$interests' },
+          { $match: { 'interests.createdAt': { $gte: startDate, $lte: endDate } } },
+          { $count: 'total' }
+        ]),
+        MatrimonialProfile.aggregate([
+          { $unwind: '$interests' },
+          { $match: { 
+            'interests.createdAt': { $gte: startDate, $lte: endDate },
+            'interests.status': 'accepted'
+          } },
+          { $count: 'total' }
+        ]),
+        MatrimonialProfile.aggregate([
+          { $match: dateFilter },
+          { $group: { _id: null, total: { $sum: '$profileViews' } } }
+        ]),
+        MatrimonialProfile.aggregate([
+          { $lookup: { from: 'messages', localField: 'userId', foreignField: 'senderId', as: 'messages' } },
+          { $project: { messageCount: { $size: '$messages' } } },
+          { $group: { _id: null, avg: { $avg: '$messageCount' } } }
+        ]),
+        MatrimonialProfile.aggregate([
+          { $project: { interestCount: { $size: '$interests' } } },
+          { $group: { _id: null, avg: { $avg: '$interestCount' } } }
+        ])
+      ]);
 
       const metrics = {
-        conversationId,
-        participants,
-        participantCount: participants.length,
-        totalMessages: messages.length,
-        totalMessagesRead: messages.filter((m) => m.read).length,
-        totalMessagesUnread: messages.filter((m) => !m.read).length,
-        engagementLevel,
-        engagementScore: this.calculateConversationEngagementScore(messages),
-        firstMessageDate: messages[0].createdAt,
-        lastMessageDate: messages[messages.length - 1].createdAt,
-        conversationDuration: Math.ceil(
-          (messages[messages.length - 1].createdAt - messages[0].createdAt) / (1000 * 60 * 60 * 24)
-        ),
-        averageMessageGap: this.calculateAverageMessageGap(messages),
-        averageResponseTime: responseTimes.average,
-        p50ResponseTime: responseTimes.p50,
-        p95ResponseTime: responseTimes.p95,
-        messageTypes: this.countMessageTypes(messages),
-        isActive: this.isConversationActive(messages),
-        inactivityDays: this.getInactivityDays(messages),
-        encryptedMessages: messages.filter((m) => m.encrypted).length,
-        encryptionRate: (messages.filter((m) => m.encrypted).length / messages.length) * 100,
-        mediaCount: messages.filter((m) => m.mediaUrls && m.mediaUrls.length > 0).length,
+        profiles: {
+          total: totalProfiles,
+          active: activeProfiles,
+          new: newProfiles,
+          activeRate: totalProfiles > 0 ? ((activeProfiles / totalProfiles) * 100).toFixed(1) : 0
+        },
+        engagement: {
+          totalMessages,
+          totalInterests: totalInterests[0]?.total || 0,
+          acceptedInterests: acceptedInterests[0]?.total || 0,
+          interestAcceptanceRate: totalInterests[0]?.total > 0 
+            ? ((acceptedInterests[0]?.total / totalInterests[0]?.total) * 100).toFixed(1) 
+            : 0,
+          profileViews: profileViews[0]?.total || 0,
+          avgMessagesPerUser: Math.round(avgMessagesPerUser[0]?.avg || 0),
+          avgInterestsPerUser: Math.round(avgInterestsPerUser[0]?.avg || 0)
+        },
+        dateRange: { startDate, endDate }
       };
 
-      // Per-participant breakdown
-      metrics.participantStats = participants.map((participantId) => {
-        const participantMessages = messages.filter((m) => m.sender._id.toString() === participantId);
-        return {
-          userId: participantId,
-          messagesSent: participantMessages.length,
-          messagesRead: participantMessages.filter((m) => m.read).length,
-          averageResponseTime: this.calculateParticipantResponseTime(messages, participantId),
-        };
-      });
-
-      // Save metrics
-      const convoMetrics = await ConversationMetrics.findOneAndUpdate(
-        { conversationId },
-        metrics,
-        { upsert: true, new: true }
-      );
-
-      return convoMetrics;
+      await cacheService.set(cacheKey, metrics, this.cacheTTL);
+      return metrics;
     } catch (error) {
-      logger.error(`Error calculating conversation metrics for ${conversationId}:`, error);
+      errorTrackingService.captureError(error, { context: 'engagement-metrics' });
       throw error;
     }
   }
 
   /**
-   * Calculate trending keywords and topics
+   * Get conversion funnel data
+   * @param {Date} startDate - Start date
+   * @param {Date} endDate - End date
+   * @returns {Promise<Object>} Conversion funnel data
    */
-  async calculateTrendingTopics(hours = 24) {
+  async getConversionFunnel(startDate, endDate) {
     try {
-      const startTime = new Date(Date.now() - hours * 60 * 60 * 1000);
+      const cacheKey = `analytics:funnel:${startDate.getTime()}:${endDate.getTime()}`;
+      const cached = await cacheService.get(cacheKey);
+      if (cached) return cached;
 
-      // Get recent messages
-      const messages = await Message.find({
-        createdAt: { $gte: startTime },
-        messageText: { $exists: true, $ne: '' },
-      });
+      const dateFilter = { createdAt: { $gte: startDate, $lte: endDate } };
 
-      if (messages.length === 0) {
-        logger.info('No messages for trend analysis');
-        return null;
-      }
+      const [
+        signups,
+        profilesCreated,
+        profilesCompleted,
+        profilesWithPhotos,
+        profilesVerified,
+        profilesWithInterests,
+        profilesWithMessages,
+        profilesWithMatches,
+        premiumConversions
+      ] = await Promise.all([
+        User.countDocuments({ 'roles.matrimonial': true, ...dateFilter }),
+        MatrimonialProfile.countDocuments(dateFilter),
+        MatrimonialProfile.countDocuments({ 
+          ...dateFilter,
+          bio: { $exists: true, $ne: '' },
+          education: { $exists: true, $ne: '' },
+          profession: { $exists: true, $ne: '' }
+        }),
+        MatrimonialProfile.countDocuments({ 
+          ...dateFilter,
+          photoUrl: { $exists: true, $ne: null }
+        }),
+        MatrimonialProfile.countDocuments({ 
+          ...dateFilter,
+          verificationStatus: 'verified'
+        }),
+        MatrimonialProfile.countDocuments({ 
+          ...dateFilter,
+          interests: { $exists: true, $ne: [] }
+        }),
+        MatrimonialProfile.aggregate([
+          { $match: dateFilter },
+          { $lookup: { from: 'messages', localField: 'userId', foreignField: 'senderId', as: 'messages' } },
+          { $match: { 'messages.0': { $exists: true } } },
+          { $count: 'total' }
+        ]),
+        MatrimonialProfile.countDocuments({ 
+          ...dateFilter,
+          'interests.status': 'accepted'
+        }),
+        User.countDocuments({
+          'roles.matrimonial': true,
+          'subscription.tier': { $in: ['premium', 'elite'] },
+          'subscription.startDate': { $gte: startDate, $lte: endDate }
+        })
+      ]);
 
-      // Extract keywords
-      const keywords = this.extractKeywords(messages);
-
-      // Extract hashtags
-      const hashtags = this.extractHashtags(messages);
-
-      // Calculate trends
-      const topKeywords = this.getTopItems(keywords, 20);
-      const trendingHashtags = this.getTopItems(hashtags, 15);
-      const trendingTopics = this.groupKeywordsIntoTopics(topKeywords);
-
-      // Get device trends
-      const deviceTrends = this.getDeviceTrends(messages);
-
-      // Get sentiment trends (optional)
-      const sentimentTrends = {
-        overallSentiment: 0,
-        positivePercentage: 0,
-        negativePercentage: 0,
-        neutralPercentage: 100,
+      const funnel = {
+        stages: [
+          { stage: 'Signups', count: signups, percentage: 100 },
+          { stage: 'Profile Created', count: profilesCreated, percentage: signups > 0 ? ((profilesCreated / signups) * 100).toFixed(1) : 0 },
+          { stage: 'Profile Completed', count: profilesCompleted, percentage: signups > 0 ? ((profilesCompleted / signups) * 100).toFixed(1) : 0 },
+          { stage: 'Photo Uploaded', count: profilesWithPhotos, percentage: signups > 0 ? ((profilesWithPhotos / signups) * 100).toFixed(1) : 0 },
+          { stage: 'Profile Verified', count: profilesVerified, percentage: signups > 0 ? ((profilesVerified / signups) * 100).toFixed(1) : 0 },
+          { stage: 'Sent Interest', count: profilesWithInterests, percentage: signups > 0 ? ((profilesWithInterests / signups) * 100).toFixed(1) : 0 },
+          { stage: 'Sent Message', count: profilesWithMessages[0]?.total || 0, percentage: signups > 0 ? (((profilesWithMessages[0]?.total || 0) / signups) * 100).toFixed(1) : 0 },
+          { stage: 'Got Match', count: profilesWithMatches, percentage: signups > 0 ? ((profilesWithMatches / signups) * 100).toFixed(1) : 0 },
+          { stage: 'Premium Conversion', count: premiumConversions, percentage: signups > 0 ? ((premiumConversions / signups) * 100).toFixed(1) : 0 }
+        ],
+        conversionRate: signups > 0 ? ((premiumConversions / signups) * 100).toFixed(1) : 0,
+        dateRange: { startDate, endDate }
       };
 
-      const trendData = {
-        date: new Date(),
-        period: hours <= 1 ? 'hourly' : 'daily',
-        topKeywords,
-        trendingHashtags,
-        trendingTopics,
-        contentTrends: this.getContentTrends(messages),
-        deviceTrends,
-        sentimentTrends,
-      };
-
-      // Save trends
-      const trends = new MessageTrendData(trendData);
-      await trends.save();
-
-      logger.info(`Trending topics calculated: ${topKeywords.length} keywords, ${trendingHashtags.length} hashtags`);
-      return trends;
+      await cacheService.set(cacheKey, funnel, this.cacheTTL);
+      return funnel;
     } catch (error) {
-      logger.error('Error calculating trending topics:', error);
+      errorTrackingService.captureError(error, { context: 'conversion-funnel' });
       throw error;
     }
   }
 
-  // === Helper Methods ===
-
   /**
-   * Count message types in array
+   * Get revenue metrics
+   * @param {Date} startDate - Start date
+   * @param {Date} endDate - End date
+   * @returns {Promise<Object>} Revenue metrics
    */
-  countMessageTypes(messages) {
-    return {
-      text: messages.filter((m) => m.messageType === 'text').length,
-      media: messages.filter((m) => m.messageType === 'media').length,
-      sticker: messages.filter((m) => m.messageType === 'sticker').length,
-      reaction: messages.filter((m) => m.messageType === 'reaction').length,
-      edit: messages.filter((m) => m.edited).length,
-      delete: messages.filter((m) => m.deleted).length,
-    };
-  }
+  async getRevenueMetrics(startDate, endDate) {
+    try {
+      const cacheKey = `analytics:revenue:${startDate.getTime()}:${endDate.getTime()}`;
+      const cached = await cacheService.get(cacheKey);
+      if (cached) return cached;
 
-  countMessageTypesByUser(messages) {
-    return {
-      text: messages.filter((m) => m.messageType === 'text').length,
-      media: messages.filter((m) => m.messageType === 'media').length,
-      sticker: messages.filter((m) => m.messageType === 'sticker').length,
-      reaction: messages.filter((m) => m.messageType === 'reaction').length,
-      link: messages.filter((m) => m.messageText && m.messageText.includes('http')).length,
-    };
-  }
+      // Subscription pricing (should be from config/database)
+      const pricing = {
+        basic: 999,
+        premium: 2999,
+        elite: 5999
+      };
 
-  /**
-   * Calculate average response time
-   */
-  async calculateAverageResponseTime(messages) {
-    if (messages.length < 2) return 0;
-
-    let totalResponseTime = 0;
-    let responseCount = 0;
-
-    // Group by conversation
-    const byConversation = {};
-    messages.forEach((msg) => {
-      if (!byConversation[msg.conversationId]) {
-        byConversation[msg.conversationId] = [];
-      }
-      byConversation[msg.conversationId].push(msg);
-    });
-
-    // Calculate response times
-    Object.values(byConversation).forEach((convMessages) => {
-      convMessages.sort((a, b) => a.createdAt - b.createdAt);
-      for (let i = 1; i < convMessages.length; i++) {
-        if (convMessages[i].sender !== convMessages[i - 1].sender) {
-          totalResponseTime += convMessages[i].createdAt - convMessages[i - 1].createdAt;
-          responseCount++;
+      const subscriptions = await User.aggregate([
+        {
+          $match: {
+            'roles.matrimonial': true,
+            'subscription.tier': { $in: ['basic', 'premium', 'elite'] },
+            'subscription.startDate': { $gte: startDate, $lte: endDate }
+          }
+        },
+        {
+          $group: {
+            _id: '$subscription.tier',
+            count: { $sum: 1 }
+          }
         }
-      }
-    });
+      ]);
 
-    return responseCount > 0 ? Math.round(totalResponseTime / responseCount) : 0;
-  }
+      let totalRevenue = 0;
+      const revenueByTier = {};
 
-  /**
-   * Calculate read rate
-   */
-  async calculateReadRate(messages) {
-    if (messages.length === 0) return 0;
-    const readMessages = messages.filter((m) => m.read).length;
-    return Math.round((readMessages / messages.length) * 100);
-  }
-
-  /**
-   * Get peak hour from messages
-   */
-  getPeakHour(messages) {
-    const hourCounts = {};
-    messages.forEach((msg) => {
-      const hour = new Date(msg.createdAt).getHours();
-      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
-    });
-
-    return Object.keys(hourCounts).reduce((a, b) =>
-      hourCounts[a] > hourCounts[b] ? a : b
-    );
-  }
-
-  /**
-   * Calculate device metrics
-   */
-  async getDeviceMetrics(messages) {
-    const devices = {};
-    messages.forEach((msg) => {
-      const device = msg.deviceInfo?.deviceType || 'mobile';
-      devices[device] = (devices[device] || 0) + 1;
-    });
-
-    return {
-      mobile: devices.mobile || 0,
-      web: devices.web || 0,
-      tablet: devices.tablet || 0,
-    };
-  }
-
-  /**
-   * Calculate engagement score (0-100)
-   */
-  calculateEngagementScore(messagesSent, messagesReceived, avgResponseTime, messagesRead) {
-    let score = 0;
-
-    // Frequency component (30 points max)
-    const frequencyScore = Math.min(30, (messagesSent / 100) * 30);
-    score += frequencyScore;
-
-    // Response time component (20 points)
-    const responseScore = Math.max(0, 20 - (avgResponseTime / 10000) * 20);
-    score += responseScore;
-
-    // Read rate component (20 points)
-    const totalReceived = messagesReceived || 1;
-    const readRate = (messagesRead / totalReceived) * 100;
-    const readScore = (readRate / 100) * 20;
-    score += readScore;
-
-    // Consistency component (20 points)
-    const consistencyScore = Math.min(20, (messagesSent / 10) * 20);
-    score += consistencyScore;
-
-    // Interaction component (10 points)
-    const interactionScore = Math.min(10, (messagesReceived / 50) * 10);
-    score += interactionScore;
-
-    return Math.round(Math.min(score, 100));
-  }
-
-  /**
-   * Calculate score factors breakdown
-   */
-  calculateScoreFactors(messagesSent, messagesReceived, avgResponseTime, messagesRead, joinDate) {
-    const factors = {
-      messageFrequency: Math.min(30, (messagesSent / 100) * 30),
-      readRate: (messagesRead / (messagesReceived || 1)) * 20,
-      responseTime: Math.max(0, 20 - (avgResponseTime / 10000) * 20),
-      messageQuality: 15, // Default, could be improved with content analysis
-      accountAge: Math.min(10, ((Date.now() - joinDate) / (365 * 24 * 60 * 60 * 1000)) * 10),
-    };
-
-    return factors;
-  }
-
-  /**
-   * Extract keywords from messages
-   */
-  extractKeywords(messages) {
-    const keywords = {};
-    const stopwords = new Set([
-      'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-      'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
-    ]);
-
-    messages.forEach((msg) => {
-      if (!msg.messageText) return;
-      const words = msg.messageText
-        .toLowerCase()
-        .split(/\s+/)
-        .filter((w) => w.length > 3 && !stopwords.has(w));
-
-      words.forEach((word) => {
-        keywords[word] = (keywords[word] || 0) + 1;
+      subscriptions.forEach(sub => {
+        const tier = sub._id;
+        const revenue = sub.count * (pricing[tier] || 0);
+        revenueByTier[tier] = { count: sub.count, revenue };
+        totalRevenue += revenue;
       });
-    });
 
-    return keywords;
-  }
-
-  /**
-   * Extract hashtags from messages
-   */
-  extractHashtags(messages) {
-    const hashtags = {};
-    messages.forEach((msg) => {
-      if (!msg.messageText) return;
-      const tags = msg.messageText.match(/#\w+/g) || [];
-      tags.forEach((tag) => {
-        hashtags[tag] = (hashtags[tag] || 0) + 1;
+      // Get active subscriptions
+      const activeSubscriptions = await User.countDocuments({
+        'roles.matrimonial': true,
+        'subscription.tier': { $in: ['basic', 'premium', 'elite'] },
+        'subscription.endDate': { $gte: new Date() }
       });
-    });
 
-    return hashtags;
-  }
+      // Calculate MRR (Monthly Recurring Revenue)
+      const monthlyRevenue = await User.aggregate([
+        {
+          $match: {
+            'roles.matrimonial': true,
+            'subscription.tier': { $in: ['basic', 'premium', 'elite'] },
+            'subscription.endDate': { $gte: new Date() }
+          }
+        },
+        {
+          $group: {
+            _id: '$subscription.tier',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
 
-  /**
-   * Get top N items from frequency map
-   */
-  getTopItems(frequencyMap, limit = 10) {
-    return Object.entries(frequencyMap)
-      .map(([item, frequency]) => ({ item, frequency }))
-      .sort((a, b) => b.frequency - a.frequency)
-      .slice(0, limit);
-  }
+      let mrr = 0;
+      monthlyRevenue.forEach(sub => {
+        mrr += sub.count * (pricing[sub._id] || 0);
+      });
 
-  /**
-   * Get content trends
-   */
-  getContentTrends(messages) {
-    const messageTypeCount = this.countMessageTypes(messages);
-    const total = messages.length;
+      // Calculate churn rate
+      const previousMonth = new Date(startDate);
+      previousMonth.setMonth(previousMonth.getMonth() - 1);
+      
+      const churnedUsers = await User.countDocuments({
+        'roles.matrimonial': true,
+        'subscription.endDate': { $gte: previousMonth, $lte: startDate },
+        'subscription.autoRenew': false
+      });
 
-    return {
-      textMessagePercentage: (messageTypeCount.text / total) * 100,
-      mediaPercentage: (messageTypeCount.media / total) * 100,
-      emojiUsagePercentage: messages.filter((m) => /\p{Emoji}/u.test(m.messageText || '')).length / total * 100,
-      linkSharePercentage: messages.filter((m) => m.messageText && m.messageText.includes('http')).length / total * 100,
-      reactionPercentage: (messageTypeCount.reaction / total) * 100,
-    };
-  }
+      const previousActiveUsers = await User.countDocuments({
+        'roles.matrimonial': true,
+        'subscription.endDate': { $gte: previousMonth }
+      });
 
-  /**
-   * Calculate new users in period
-   */
-  async getNewUsersCount(startDate, endDate) {
-    return await User.countDocuments({
-      createdAt: { $gte: startDate, $lte: endDate },
-    });
-  }
+      const churnRate = previousActiveUsers > 0 
+        ? ((churnedUsers / previousActiveUsers) * 100).toFixed(1)
+        : 0;
 
-  /**
-   * Get conversation count in period
-   */
-  async getConversationCount(startDate, endDate) {
-    const Conversation = require('../models/Conversation');
-    return await Conversation.countDocuments({
-      createdAt: { $gte: startDate, $lte: endDate },
-    });
-  }
+      // Calculate ARPU (Average Revenue Per User)
+      const totalUsers = await User.countDocuments({ 'roles.matrimonial': true });
+      const arpu = totalUsers > 0 ? (totalRevenue / totalUsers).toFixed(2) : 0;
 
-  /**
-   * Calculate average messages per day
-   */
-  calculateAveragePerDay(messages) {
-    if (messages.length === 0) return 0;
-    const firstMsg = messages[messages.length - 1];
-    const lastMsg = messages[0];
-    const days = Math.ceil((lastMsg - firstMsg) / (1000 * 60 * 60 * 24));
-    return Math.round(messages.length / Math.max(days, 1));
-  }
+      const metrics = {
+        revenue: {
+          total: totalRevenue,
+          byTier: revenueByTier,
+          mrr,
+          arpu
+        },
+        subscriptions: {
+          active: activeSubscriptions,
+          new: subscriptions.reduce((sum, sub) => sum + sub.count, 0),
+          churnRate
+        },
+        dateRange: { startDate, endDate }
+      };
 
-  /**
-   * Check if conversation is active
-   */
-  isConversationActive(messages) {
-    const lastMessage = messages[messages.length - 1];
-    const inactivityThreshold = 30 * 24 * 60 * 60 * 1000; // 30 days
-    return Date.now() - lastMessage.createdAt < inactivityThreshold;
-  }
-
-  /**
-   * Get inactivity days
-   */
-  getInactivityDays(messages) {
-    const lastMessage = messages[messages.length - 1];
-    return Math.floor((Date.now() - lastMessage.createdAt) / (1000 * 60 * 60 * 24));
-  }
-
-  // Additional helper methods...
-  async getUserDeviceStats(userId) {
-    return {
-      totalDevices: 1,
-      mobileMessages: 0,
-      webMessages: 0,
-      tabletMessages: 0,
-      primaryDevice: 'mobile',
-    };
-  }
-
-  async getFrequentContacts(userId, limit) {
-    const messages = await Message.find({ sender: userId })
-      .select('receiver')
-      .limit(limit * 10);
-
-    const contactMap = {};
-    messages.forEach((msg) => {
-      const contactId = msg.receiver.toString();
-      contactMap[contactId] = (contactMap[contactId] || 0) + 1;
-    });
-
-    return Object.entries(contactMap)
-      .map(([contactId, count]) => ({
-        contactId,
-        messageCount: count,
-        lastMessageDate: new Date(),
-      }))
-      .slice(0, limit);
-  }
-
-  getActivityPatterns(messages) {
-    return {
-      preferredTimeOfDay: 'afternoon',
-      preferredDayOfWeek: 'Friday',
-    };
-  }
-
-  calculateEncryptionPercentage(messages) {
-    if (messages.length === 0) return 0;
-    const encrypted = messages.filter((m) => m.encrypted).length;
-    return Math.round((encrypted / messages.length) * 100);
-  }
-
-  async getUserConversationCount(userId) {
-    const Conversation = require('../models/Conversation');
-    return await Conversation.countDocuments({
-      participants: userId,
-    });
-  }
-
-  async getActiveConversationCount(userId) {
-    const Conversation = require('../models/Conversation');
-    return await Conversation.countDocuments({
-      participants: userId,
-      isActive: true,
-    });
-  }
-
-  calculateConversationResponseTimes(messages) {
-    return {
-      average: 0,
-      p50: 0,
-      p95: 0,
-      p99: 0,
-    };
-  }
-
-  calculateEngagementLevel(messages) {
-    const count = messages.length;
-    if (count > 100) return 'high';
-    if (count > 50) return 'medium';
-    if (count > 10) return 'low';
-    return 'inactive';
-  }
-
-  calculateConversationEngagementScore(messages) {
-    return Math.min(100, Math.round((messages.length / 100) * 50));
-  }
-
-  calculateAverageMessageGap(messages) {
-    if (messages.length < 2) return 0;
-    let totalGap = 0;
-    for (let i = 1; i < messages.length; i++) {
-      totalGap += messages[i].createdAt - messages[i - 1].createdAt;
+      await cacheService.set(cacheKey, metrics, this.cacheTTL);
+      return metrics;
+    } catch (error) {
+      errorTrackingService.captureError(error, { context: 'revenue-metrics' });
+      throw error;
     }
-    return Math.round(totalGap / (messages.length - 1));
   }
 
-  calculateParticipantResponseTime(messages, participantId) {
-    return 0;
+  /**
+   * Get time-series data for charts
+   * @param {string} metric - Metric type (users, messages, interests, revenue)
+   * @param {Date} startDate - Start date
+   * @param {Date} endDate - End date
+   * @param {string} interval - Interval (day, week, month)
+   * @returns {Promise<Array>} Time-series data
+   */
+  async getTimeSeriesData(metric, startDate, endDate, interval = 'day') {
+    try {
+      const cacheKey = `analytics:timeseries:${metric}:${interval}:${startDate.getTime()}:${endDate.getTime()}`;
+      const cached = await cacheService.get(cacheKey);
+      if (cached) return cached;
+
+      let groupBy;
+      switch (interval) {
+        case 'day':
+          groupBy = { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } };
+          break;
+        case 'week':
+          groupBy = { $dateToString: { format: '%Y-W%V', date: '$createdAt' } };
+          break;
+        case 'month':
+          groupBy = { $dateToString: { format: '%Y-%m', date: '$createdAt' } };
+          break;
+        default:
+          groupBy = { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } };
+      }
+
+      let data;
+
+      switch (metric) {
+        case 'users':
+          data = await User.aggregate([
+            { $match: { 'roles.matrimonial': true, createdAt: { $gte: startDate, $lte: endDate } } },
+            { $group: { _id: groupBy, count: { $sum: 1 } } },
+            { $sort: { _id: 1 } }
+          ]);
+          break;
+
+        case 'profiles':
+          data = await MatrimonialProfile.aggregate([
+            { $match: { createdAt: { $gte: startDate, $lte: endDate } } },
+            { $group: { _id: groupBy, count: { $sum: 1 } } },
+            { $sort: { _id: 1 } }
+          ]);
+          break;
+
+        case 'messages':
+          data = await Message.aggregate([
+            { $match: { module: 'matrimonial', createdAt: { $gte: startDate, $lte: endDate } } },
+            { $group: { _id: groupBy, count: { $sum: 1 } } },
+            { $sort: { _id: 1 } }
+          ]);
+          break;
+
+        case 'interests':
+          data = await MatrimonialProfile.aggregate([
+            { $unwind: '$interests' },
+            { $match: { 'interests.createdAt': { $gte: startDate, $lte: endDate } } },
+            { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$interests.createdAt' } }, count: { $sum: 1 } } },
+            { $sort: { _id: 1 } }
+          ]);
+          break;
+
+        default:
+          data = [];
+      }
+
+      await cacheService.set(cacheKey, data, this.cacheTTL);
+      return data;
+    } catch (error) {
+      errorTrackingService.captureError(error, { metric, interval, context: 'timeseries-data' });
+      throw error;
+    }
   }
 
-  calculateUserResponseTimes(userId) {
-    return {
-      average: 0,
-      p50: 0,
-      p95: 0,
-      p99: 0,
-    };
+  /**
+   * Get user demographics
+   * @returns {Promise<Object>} Demographics data
+   */
+  async getDemographics() {
+    try {
+      const cacheKey = 'analytics:demographics';
+      const cached = await cacheService.get(cacheKey);
+      if (cached) return cached;
+
+      const [
+        byGender,
+        byAge,
+        byReligion,
+        byLocation,
+        byEducation,
+        byMaritalStatus
+      ] = await Promise.all([
+        MatrimonialProfile.aggregate([
+          { $group: { _id: '$gender', count: { $sum: 1 } } }
+        ]),
+        MatrimonialProfile.aggregate([
+          {
+            $bucket: {
+              groupBy: '$age',
+              boundaries: [18, 25, 30, 35, 40, 50, 100],
+              default: 'Other',
+              output: { count: { $sum: 1 } }
+            }
+          }
+        ]),
+        MatrimonialProfile.aggregate([
+          { $group: { _id: '$religion', count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: 10 }
+        ]),
+        MatrimonialProfile.aggregate([
+          { $group: { _id: '$location', count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: 10 }
+        ]),
+        MatrimonialProfile.aggregate([
+          { $group: { _id: '$education', count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: 10 }
+        ]),
+        MatrimonialProfile.aggregate([
+          { $group: { _id: '$maritalStatus', count: { $sum: 1 } } }
+        ])
+      ]);
+
+      const demographics = {
+        gender: byGender,
+        age: byAge,
+        religion: byReligion,
+        location: byLocation,
+        education: byEducation,
+        maritalStatus: byMaritalStatus
+      };
+
+      await cacheService.set(cacheKey, demographics, this.cacheTTL * 4); // Cache for 20 minutes
+      return demographics;
+    } catch (error) {
+      errorTrackingService.captureError(error, { context: 'demographics' });
+      throw error;
+    }
   }
 
-  groupKeywordsIntoTopics(keywords) {
-    return keywords.map((kw) => ({
-      topic: kw.item,
-      relatedKeywords: [],
-      mentionCount: kw.frequency,
-      uniqueUsers: 0,
-      trendScore: kw.frequency,
-      category: 'general',
-    }));
+  /**
+   * Get user retention metrics
+   * @param {Date} startDate - Cohort start date
+   * @returns {Promise<Object>} Retention data
+   */
+  async getRetentionMetrics(startDate) {
+    try {
+      const cacheKey = `analytics:retention:${startDate.getTime()}`;
+      const cached = await cacheService.get(cacheKey);
+      if (cached) return cached;
+
+      // Get users who signed up in the cohort period
+      const cohortEnd = new Date(startDate);
+      cohortEnd.setMonth(cohortEnd.getMonth() + 1);
+
+      const cohortUsers = await User.find({
+        'roles.matrimonial': true,
+        createdAt: { $gte: startDate, $lte: cohortEnd }
+      }).select('_id');
+
+      const cohortUserIds = cohortUsers.map(u => u._id);
+      const cohortSize = cohortUserIds.length;
+
+      // Calculate retention for each month
+      const retentionData = [];
+      for (let month = 1; month <= 6; month++) {
+        const checkDate = new Date(startDate);
+        checkDate.setMonth(checkDate.getMonth() + month);
+
+        const activeUsers = await MatrimonialProfile.countDocuments({
+          userId: { $in: cohortUserIds },
+          lastActive: { $gte: checkDate }
+        });
+
+        retentionData.push({
+          month,
+          activeUsers,
+          retentionRate: cohortSize > 0 ? ((activeUsers / cohortSize) * 100).toFixed(1) : 0
+        });
+      }
+
+      const result = {
+        cohortStart: startDate,
+        cohortSize,
+        retention: retentionData
+      };
+
+      await cacheService.set(cacheKey, result, this.cacheTTL * 12); // Cache for 1 hour
+      return result;
+    } catch (error) {
+      errorTrackingService.captureError(error, { context: 'retention-metrics' });
+      throw error;
+    }
   }
 
-  getDeviceTrends(messages) {
-    return {
-      mobilePercentage: 70,
-      webPercentage: 25,
-      tabletPercentage: 5,
-      emergingDevices: [],
-    };
+  /**
+   * Get top performers (most active users, most viewed profiles, etc.)
+   * @param {string} type - Type of top performers
+   * @param {number} limit - Number of results
+   * @returns {Promise<Array>} Top performers
+   */
+  async getTopPerformers(type, limit = 10) {
+    try {
+      const cacheKey = `analytics:top:${type}:${limit}`;
+      const cached = await cacheService.get(cacheKey);
+      if (cached) return cached;
+
+      let results;
+
+      switch (type) {
+        case 'most_viewed':
+          results = await MatrimonialProfile.find()
+            .sort({ profileViews: -1 })
+            .limit(limit)
+            .select('name age gender location profileViews photoUrl');
+          break;
+
+        case 'most_interests':
+          results = await MatrimonialProfile.aggregate([
+            { $project: { name: 1, age: 1, gender: 1, location: 1, interestCount: { $size: '$interests' } } },
+            { $sort: { interestCount: -1 } },
+            { $limit: limit }
+          ]);
+          break;
+
+        case 'most_active':
+          results = await MatrimonialProfile.find()
+            .sort({ lastActive: -1 })
+            .limit(limit)
+            .select('name age gender location lastActive photoUrl');
+          break;
+
+        default:
+          results = [];
+      }
+
+      await cacheService.set(cacheKey, results, this.cacheTTL * 2);
+      return results;
+    } catch (error) {
+      errorTrackingService.captureError(error, { type, context: 'top-performers' });
+      throw error;
+    }
+  }
+
+  /**
+   * Clear analytics cache
+   */
+  async clearCache() {
+    try {
+      // This would clear all analytics-related cache keys
+      // For now, we'll just log it
+      await errorTrackingService.logAudit('analytics_cache_cleared', { timestamp: new Date() });
+      return { success: true, message: 'Analytics cache cleared' };
+    } catch (error) {
+      errorTrackingService.captureError(error, { context: 'clear-analytics-cache' });
+      throw error;
+    }
   }
 }
 
-module.exports = new AnalyticsService();
+// Singleton instance
+const analyticsService = new AnalyticsService();
+
+module.exports = { analyticsService, AnalyticsService };

@@ -871,6 +871,15 @@ const initializeWebSocket = (server, options = {}) => {
     });
   });
 
+  // Initialize Tourism WebSocket Service
+  try {
+    const TourismWebSocketService = require('../services/TourismWebSocketService');
+    TourismWebSocketService.initialize(io);
+    console.log('[WebSocket] Tourism WebSocket Service initialized');
+  } catch (error) {
+    console.error('[WebSocket] Failed to initialize Tourism WebSocket Service:', error);
+  }
+
   return io;
 };
 

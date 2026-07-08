@@ -304,12 +304,20 @@ router.post(
   paymentCreateLimiter,
   async (req, res) => {
     try {
+      const paymentService = require('../services/paymentService');
       const subscriptionTier = String(req.body?.subscriptionTier || '').trim().toLowerCase();
       const userEmail = req.user?.email;
       const price = asPositiveNumber(req.body?.amount, TIER_PRICING[subscriptionTier] || 0);
 
       if (!userEmail || !subscriptionTier || !TIER_PRICING[subscriptionTier]) {
         return res.status(400).json({ success: false, message: 'Invalid payment request' });
+      }
+
+      if (!paymentService.isConfigured()) {
+        return res.status(503).json({
+          success: false,
+          message: 'Payment service not configured'
+        });
       }
 
       const profileId = await resolveProfileId(req, req.body?.profileId);
@@ -386,6 +394,7 @@ router.post(
   paymentVerifyLimiter,
   async (req, res) => {
     try {
+      const paymentService = require('../services/paymentService');
       const {
         razorpay_payment_id: paymentId,
         razorpay_order_id: orderId,
@@ -397,18 +406,26 @@ router.post(
         return res.status(400).json({ success: false, message: 'Missing verification fields' });
       }
 
-      const secret = process.env.RAZORPAY_KEY_SECRET;
-      if (!secret) {
-        return res.status(500).json({
+      // Verify signature
+      const isValid = paymentService.verifyPaymentSignature(orderId, paymentId, signature);
+
+      if (!isValid) {
+        logger.warn(`Payment verification failed: ${paymentId}`);
+        return res.status(400).json({
           success: false,
-          message: 'Payment verification is not configured',
+          message: 'Payment verification failed'
         });
       }
 
-      const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(`${orderId}|${paymentId}`)
-        .digest('hex');
+      // Fetch payment details from Razorpay
+      const payment = await paymentService.fetchPayment(paymentId);
+
+      if (payment.status !== 'captured' && payment.status !== 'authorized') {
+        return res.status(400).json({
+          success: false,
+          message: `Payment not successful. Status: ${payment.status}`
+        });
+      }
 
       const subscription = await MatrimonialSubscription.findOne({
         userEmail,
@@ -419,6 +436,7 @@ router.post(
         return res.status(404).json({ success: false, message: 'Pending payment not found' });
       }
 
+      // Update subscription payment history
       subscription.paymentHistory = Array.isArray(subscription.paymentHistory)
         ? subscription.paymentHistory
         : [];
@@ -426,37 +444,35 @@ router.post(
         (entry) => entry.orderId === orderId
       );
 
-      if (expectedSignature !== signature) {
-        subscription.paymentStatus = 'failed';
-        subscription.isActive = false;
-        subscription.lastPaymentError = 'Signature verification failed';
-        if (historyIndex >= 0) {
-          subscription.paymentHistory[historyIndex].status = 'failed';
-          subscription.paymentHistory[historyIndex].failureReason = 'Signature verification failed';
-        }
-        await subscription.save();
-        return res.status(400).json({
-          success: false,
-          message: 'Razorpay signature verification failed',
-        });
-      }
-
+      // Activate subscription
       subscription.paymentStatus = 'completed';
       subscription.isActive = true;
       subscription.paymentMethod = 'razorpay';
       subscription.transactionId = paymentId;
       subscription.lastPaymentError = '';
+      
       if (historyIndex >= 0) {
         subscription.paymentHistory[historyIndex].status = 'completed';
         subscription.paymentHistory[historyIndex].paymentId = paymentId;
         subscription.paymentHistory[historyIndex].verifiedAt = new Date();
+        subscription.paymentHistory[historyIndex].gateway = payment.method || 'razorpay';
       }
+
       await subscription.save();
+
+      // Generate invoice
+      const invoice = await paymentService.generateInvoice(
+        subscription,
+        subscription.paymentHistory[historyIndex]
+      );
+
+      logger.info(`Payment verified and subscription activated: ${subscription._id}`);
 
       return res.json({
         success: true,
         message: 'Payment verified and subscription activated',
         data: mapSubscriptionResponse(subscription),
+        invoice
       });
     } catch (error) {
       logger.error(`Error verifying Razorpay payment: ${error.message}`);

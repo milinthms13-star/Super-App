@@ -1,594 +1,357 @@
-/**
- * NotificationService.js
- * Real-time notifications across email, SMS, push, and in-app
- */
+const logger = require('../utils/logger');
 
-const logger = require('../config/logger');
+// Twilio for SMS
+const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
+  ? require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  : null;
+
+// SendGrid for Email
+const sgMail = process.env.SENDGRID_API_KEY
+  ? require('@sendgrid/mail')
+  : null;
+
+if (sgMail && process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
+
+// WhatsApp via Twilio
+const TWILIO_PHONE = process.env.TWILIO_PHONE_NUMBER || '';
+const TWILIO_WHATSAPP = process.env.TWILIO_WHATSAPP_NUMBER || '';
+const SENDGRID_FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'noreply@malabarbazaar.com';
+const SENDGRID_FROM_NAME = process.env.SENDGRID_FROM_NAME || 'Malabar Bazaar Finance';
+
+const NotificationTemplates = {
+  LEAD_RECEIVED: {
+    sms: (data) => `Dear ${data.name}, your loan application ${data.leadId} for ₹${data.amount} has been received. We'll contact you within 24 hours. - Malabar Bazaar`,
+    email: {
+      subject: (data) => `Loan Application Received - ${data.leadId}`,
+      html: (data) => `
+        <h2>Thank You for Your Application!</h2>
+        <p>Dear ${data.name},</p>
+        <p>Your loan application has been successfully received.</p>
+        <p><strong>Application Details:</strong></p>
+        <ul>
+          <li>Lead ID: ${data.leadId}</li>
+          <li>Loan Type: ${data.loanCategory}</li>
+          <li>Amount: ₹${data.amount}</li>
+          <li>Applied On: ${new Date(data.createdAt).toLocaleString()}</li>
+        </ul>
+        <p>Our consultant will contact you within 24 hours to proceed with your application.</p>
+        <p>You can track your application status anytime.</p>
+        <br>
+        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
+      `,
+    },
+    whatsapp: (data) => `🎉 Your loan application ${data.leadId} for ₹${data.amount} received!\n\nWe'll reach out within 24 hours.\n\nTrack status: [Link]\n\n- Malabar Bazaar`,
+  },
+
+  DOCUMENTS_PENDING: {
+    sms: (data) => `Dear ${data.name}, please upload pending documents for ${data.leadId}. Upload now to process faster. - Malabar Bazaar`,
+    email: {
+      subject: (data) => `Action Required: Upload Documents - ${data.leadId}`,
+      html: (data) => `
+        <h2>Documents Required</h2>
+        <p>Dear ${data.name},</p>
+        <p>To proceed with your loan application ${data.leadId}, we need the following documents:</p>
+        <ul>
+          ${(data.pendingDocs || []).map(doc => `<li>${doc}</li>`).join('')}
+        </ul>
+        <p>Please upload these documents at your earliest convenience to avoid delays.</p>
+        <p><a href="${data.uploadLink}" style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Upload Documents</a></p>
+        <br>
+        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
+      `,
+    },
+    whatsapp: (data) => `📄 Action needed for ${data.leadId}!\n\nPlease upload:\n${(data.pendingDocs || []).join('\n')}\n\nUpload: [Link]\n\n- Malabar Bazaar`,
+  },
+
+  CONSULTANT_ASSIGNED: {
+    sms: (data) => `Dear ${data.name}, consultant ${data.consultantName} (${data.consultantPhone}) has been assigned to ${data.leadId}. Expect a call soon. - Malabar Bazaar`,
+    email: {
+      subject: (data) => `Consultant Assigned - ${data.leadId}`,
+      html: (data) => `
+        <h2>Consultant Assigned to Your Application</h2>
+        <p>Dear ${data.name},</p>
+        <p>Good news! Your loan application has been assigned to our expert consultant.</p>
+        <p><strong>Consultant Details:</strong></p>
+        <ul>
+          <li>Name: ${data.consultantName}</li>
+          <li>Phone: ${data.consultantPhone}</li>
+          <li>Application: ${data.leadId}</li>
+        </ul>
+        <p>Your consultant will reach out to you shortly to discuss your application and guide you through the next steps.</p>
+        <br>
+        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
+      `,
+    },
+    whatsapp: (data) => `👤 Consultant assigned to ${data.leadId}!\n\n${data.consultantName}\n📞 ${data.consultantPhone}\n\nExpect a call soon.\n\n- Malabar Bazaar`,
+  },
+
+  STATUS_UPDATE: {
+    sms: (data) => `Dear ${data.name}, ${data.leadId} status: ${data.statusLabel}. ${data.note || ''} - Malabar Bazaar`,
+    email: {
+      subject: (data) => `Application Update - ${data.leadId}`,
+      html: (data) => `
+        <h2>Application Status Update</h2>
+        <p>Dear ${data.name},</p>
+        <p>Your loan application ${data.leadId} has been updated.</p>
+        <p><strong>Current Status:</strong> ${data.statusLabel}</p>
+        ${data.note ? `<p><strong>Note:</strong> ${data.note}</p>` : ''}
+        <p>Track your application for more details.</p>
+        <br>
+        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
+      `,
+    },
+    whatsapp: (data) => `📊 Update for ${data.leadId}\n\nStatus: ${data.statusLabel}\n${data.note ? `\nNote: ${data.note}` : ''}\n\n- Malabar Bazaar`,
+  },
+
+  APPROVED: {
+    sms: (data) => `🎉 Congratulations ${data.name}! ${data.leadId} for ₹${data.amount} approved by ${data.institutionName}. Contact ${data.consultantName} for next steps. - Malabar Bazaar`,
+    email: {
+      subject: (data) => `🎉 Loan Application Approved - ${data.leadId}`,
+      html: (data) => `
+        <h2 style="color: green;">🎉 Congratulations! Your Loan is Approved!</h2>
+        <p>Dear ${data.name},</p>
+        <p>We're delighted to inform you that your loan application has been approved!</p>
+        <p><strong>Approval Details:</strong></p>
+        <ul>
+          <li>Lead ID: ${data.leadId}</li>
+          <li>Amount: ₹${data.amount}</li>
+          <li>Approved By: ${data.institutionName}</li>
+          <li>Consultant: ${data.consultantName} (${data.consultantPhone})</li>
+        </ul>
+        <p>Please contact your consultant to proceed with the final documentation and disbursement process with ${data.institutionName}.</p>
+        <br>
+        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
+      `,
+    },
+    whatsapp: (data) => `🎉 Congratulations!\n\n${data.leadId} APPROVED!\n\nAmount: ₹${data.amount}\nBy: ${data.institutionName}\n\nContact ${data.consultantName}\n📞 ${data.consultantPhone}\n\n- Malabar Bazaar`,
+  },
+
+  REJECTED: {
+    sms: (data) => `Dear ${data.name}, ${data.leadId} could not be approved at this time. ${data.reason || 'Contact consultant for options.'} - Malabar Bazaar`,
+    email: {
+      subject: (data) => `Application Update - ${data.leadId}`,
+      html: (data) => `
+        <h2>Application Update</h2>
+        <p>Dear ${data.name},</p>
+        <p>Thank you for your interest in our loan services.</p>
+        <p>After careful review, we regret to inform you that your application ${data.leadId} could not be approved at this time.</p>
+        ${data.reason ? `<p><strong>Reason:</strong> ${data.reason}</p>` : ''}
+        <p>Please don't be discouraged. You can:</p>
+        <ul>
+          <li>Improve your credit score and reapply</li>
+          <li>Consider alternative loan options</li>
+          <li>Contact our consultant for guidance</li>
+        </ul>
+        <p>We're here to help you find the right financial solution.</p>
+        <br>
+        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
+      `,
+    },
+    whatsapp: (data) => `Dear ${data.name},\n\n${data.leadId} update:\n\n${data.reason || 'Could not be approved at this time.'}\n\nContact consultant for options.\n\n- Malabar Bazaar`,
+  },
+
+  SLA_REMINDER_CONSULTANT: {
+    sms: (data) => `⚠️ SLA Alert: ${data.overdueCount} overdue leads. Please take action. - Malabar Bazaar Admin`,
+    email: {
+      subject: (data) => `⚠️ SLA Alert: ${data.overdueCount} Overdue Leads`,
+      html: (data) => `
+        <h2 style="color: red;">⚠️ SLA Alert</h2>
+        <p>Dear Consultant,</p>
+        <p>You have <strong>${data.overdueCount}</strong> leads that are overdue for action.</p>
+        <ul>
+          <li>Overdue: ${data.overdueCount}</li>
+          <li>Due Soon: ${data.dueSoonCount}</li>
+          <li>Without SLA: ${data.withoutSlaCount}</li>
+        </ul>
+        <p>Please log in to the system and take necessary actions to maintain our service standards.</p>
+        <br>
+        <p>Malabar Bazaar Admin</p>
+      `,
+    },
+  },
+};
 
 class NotificationService {
-  /**
-   * Send notification to user
-   */
-  static async sendNotification(userId, notificationData) {
+  async sendSMS(phone, message) {
+    if (!twilioClient) {
+      logger.warn('Twilio not configured, skipping SMS');
+      return { success: false, reason: 'twilio-not-configured' };
+    }
+
     try {
-      const User = require('../models/User');
-      const Notification = require('../models/Notification');
-
-      const user = await User.findById(userId);
-      if (!user) throw new Error('User not found');
-
-      const notification = new Notification({
-        userId,
-        type: notificationData.type,
-        title: notificationData.title,
-        message: notificationData.message,
-        icon: notificationData.icon,
-        data: notificationData.data || {},
-        channels: notificationData.channels || ['in-app'], // in-app, email, sms, push
-        read: false,
-        createdAt: new Date(),
+      const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+      const result = await twilioClient.messages.create({
+        body: message,
+        from: TWILIO_PHONE,
+        to: formattedPhone,
       });
 
-      await notification.save();
-
-      // Send through specified channels
-      if (notification.channels.includes('email')) {
-        await this._sendEmail(user.email, notification);
-      }
-
-      if (notification.channels.includes('sms') && user.phone) {
-        await this._sendSMS(user.phone, notification);
-      }
-
-      if (notification.channels.includes('push') && user.deviceTokens?.length > 0) {
-        await this._sendPushNotification(user.deviceTokens, notification);
-      }
-
-      logger.info(`Notification sent to user ${userId}`);
-
-      return {
-        success: true,
-        data: notification,
-        message: 'Notification sent',
-      };
+      logger.info(`SMS sent to ${phone}: ${result.sid}`);
+      return { success: true, sid: result.sid };
     } catch (error) {
-      logger.error('Error sending notification:', error);
-      throw error;
+      logger.error(`SMS send failed to ${phone}: ${error.message}`);
+      return { success: false, error: error.message };
     }
   }
 
-  /**
-   * Send bulk notification
-   */
-  static async sendBulkNotification(userIds, notificationData) {
+  async sendEmail(to, subject, html, fromName = SENDGRID_FROM_NAME) {
+    if (!sgMail) {
+      logger.warn('SendGrid not configured, skipping email');
+      return { success: false, reason: 'sendgrid-not-configured' };
+    }
+
     try {
-      const results = await Promise.all(
-        userIds.map(userId => this.sendNotification(userId, notificationData))
-      );
-
-      logger.info(`Bulk notification sent to ${userIds.length} users`);
-
-      return {
-        success: true,
-        sent: results.filter(r => r.success).length,
-        failed: results.filter(r => !r.success).length,
+      const msg = {
+        to,
+        from: {
+          email: SENDGRID_FROM_EMAIL,
+          name: fromName,
+        },
+        subject,
+        html,
       };
+
+      await sgMail.send(msg);
+      logger.info(`Email sent to ${to}: ${subject}`);
+      return { success: true };
     } catch (error) {
-      logger.error('Error sending bulk notification:', error);
-      throw error;
+      logger.error(`Email send failed to ${to}: ${error.message}`);
+      return { success: false, error: error.message };
     }
   }
 
-  /**
-   * Get user notifications
-   */
-  static async getUserNotifications(userId, filters = {}) {
-    try {
-      const Notification = require('../models/Notification');
-
-      const { page = 1, limit = 20, unreadOnly = false } = filters;
-      const skip = (page - 1) * limit;
-
-      let query = { userId };
-      if (unreadOnly) {
-        query.read = false;
-      }
-
-      const total = await Notification.countDocuments(query);
-
-      const notifications = await Notification.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
-
-      return {
-        notifications,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
-        },
-        unreadCount: await Notification.countDocuments({
-          userId,
-          read: false,
-        }),
-      };
-    } catch (error) {
-      logger.error('Error getting user notifications:', error);
-      throw error;
+  async sendWhatsApp(phone, message) {
+    if (!twilioClient || !TWILIO_WHATSAPP) {
+      logger.warn('Twilio WhatsApp not configured, skipping');
+      return { success: false, reason: 'whatsapp-not-configured' };
     }
-  }
 
-  /**
-   * Mark notification as read
-   */
-  static async markAsRead(notificationId) {
     try {
-      const Notification = require('../models/Notification');
-
-      const notification = await Notification.findByIdAndUpdate(
-        notificationId,
-        { read: true, readAt: new Date() },
-        { new: true }
-      );
-
-      if (!notification) throw new Error('Notification not found');
-
-      return {
-        success: true,
-        data: notification,
-      };
-    } catch (error) {
-      logger.error('Error marking notification as read:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Mark all notifications as read
-   */
-  static async markAllAsRead(userId) {
-    try {
-      const Notification = require('../models/Notification');
-
-      await Notification.updateMany(
-        { userId, read: false },
-        { read: true, readAt: new Date() }
-      );
-
-      logger.info(`All notifications marked as read for user ${userId}`);
-
-      return {
-        success: true,
-        message: 'All notifications marked as read',
-      };
-    } catch (error) {
-      logger.error('Error marking all as read:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Delete notification
-   */
-  static async deleteNotification(notificationId) {
-    try {
-      const Notification = require('../models/Notification');
-
-      await Notification.findByIdAndDelete(notificationId);
-
-      return {
-        success: true,
-        message: 'Notification deleted',
-      };
-    } catch (error) {
-      logger.error('Error deleting notification:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Set notification preferences
-   */
-  static async setNotificationPreferences(userId, preferences) {
-    try {
-      const User = require('../models/User');
-
-      const user = await User.findByIdAndUpdate(
-        userId,
-        { notificationPreferences: preferences },
-        { new: true }
-      );
-
-      if (!user) throw new Error('User not found');
-
-      logger.info(`Notification preferences updated for user ${userId}`);
-
-      return {
-        success: true,
-        data: preferences,
-        message: 'Preferences updated',
-      };
-    } catch (error) {
-      logger.error('Error setting notification preferences:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get notification preferences
-   */
-  static async getNotificationPreferences(userId) {
-    try {
-      const User = require('../models/User');
-
-      const user = await User.findById(userId).select('notificationPreferences');
-      if (!user) throw new Error('User not found');
-
-      const defaultPreferences = {
-        email: {
-          orders: true,
-          reviews: true,
-          promotions: false,
-          newsletters: true,
-        },
-        sms: {
-          orders: true,
-          urgent: true,
-          promotions: false,
-        },
-        push: {
-          orders: true,
-          messages: true,
-          promotions: false,
-        },
-        inApp: {
-          all: true,
-        },
-      };
-
-      return {
-        preferences: user.notificationPreferences || defaultPreferences,
-      };
-    } catch (error) {
-      logger.error('Error getting notification preferences:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Send order notification
-   */
-  static async sendOrderNotification(orderId, eventType) {
-    try {
-      const Order = require('../models/Order');
-
-      const order = await Order.findById(orderId).populate('userId');
-      if (!order) throw new Error('Order not found');
-
-      const notificationMap = {
-        order_confirmed: {
-          title: '✅ Order Confirmed!',
-          message: `Your order #${order.orderNumber} has been confirmed. Expected delivery: ${order.expectedDelivery}`,
-          type: 'order_confirmed',
-        },
-        order_shipped: {
-          title: '📦 Order Shipped!',
-          message: `Your order #${order.orderNumber} has been shipped. Track your package.`,
-          type: 'order_shipped',
-        },
-        order_delivered: {
-          title: '🎉 Delivered!',
-          message: `Your order #${order.orderNumber} has been delivered. Thank you for shopping!`,
-          type: 'order_delivered',
-        },
-        order_cancelled: {
-          title: '❌ Order Cancelled',
-          message: `Your order #${order.orderNumber} has been cancelled. Refund will be processed.`,
-          type: 'order_cancelled',
-        },
-      };
-
-      const notifData = notificationMap[eventType];
-      if (!notifData) throw new Error('Invalid event type');
-
-      await this.sendNotification(order.userId._id, {
-        ...notifData,
-        data: { orderId, orderNumber: order.orderNumber },
-        channels: ['in-app', 'email', 'push'],
+      const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+      const result = await twilioClient.messages.create({
+        body: message,
+        from: `whatsapp:${TWILIO_WHATSAPP}`,
+        to: `whatsapp:${formattedPhone}`,
       });
 
-      return { success: true, message: 'Order notification sent' };
+      logger.info(`WhatsApp sent to ${phone}: ${result.sid}`);
+      return { success: true, sid: result.sid };
     } catch (error) {
-      logger.error('Error sending order notification:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Send promotional notification
-   */
-  static async sendPromotionalNotification(userIds, promotionData) {
-    try {
-      const notification = {
-        title: promotionData.title,
-        message: promotionData.message,
-        type: 'promotion',
-        icon: promotionData.icon,
-        data: {
-          promotionId: promotionData.promotionId,
-          discount: promotionData.discount,
-          code: promotionData.code,
-        },
-        channels: ['in-app', 'email', 'push'],
-      };
-
-      await this.sendBulkNotification(userIds, notification);
-
-      logger.info(`Promotional notification sent to ${userIds.length} users`);
-
-      return {
-        success: true,
-        message: 'Promotional notification sent',
-      };
-    } catch (error) {
-      logger.error('Error sending promotional notification:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Send email notification
-   */
-  static async _sendEmail(email, notification) {
-    try {
-      if (!email) {
-        logger.warn('No email address provided for notification');
-        return false;
-      }
-
-      // Use EmailNotificationService if available
-      try {
-        const EmailNotificationService = require('./EmailNotificationService');
-        await EmailNotificationService.getInstance().send({
-          to: email,
-          subject: notification.title || 'Notification',
-          html: `
-            <div style="font-family: Arial, sans-serif; padding: 20px;">
-              <h2>${notification.title || 'Notification'}</h2>
-              <p>${notification.message || ''}</p>
-              ${notification.data ? `<p><strong>Details:</strong> ${JSON.stringify(notification.data)}</p>` : ''}
-              <p>Thank you!</p>
-            </div>
-          `,
-          text: notification.message || '',
-        });
-        logger.info(`Email sent to ${email}: ${notification.title}`);
-        return true;
-      } catch (emailServiceError) {
-        logger.warn(`EmailNotificationService not available: ${emailServiceError.message}`);
-        logger.info(`[Mock] Email to ${email}: ${notification.title}`);
-        return true;
-      }
-    } catch (error) {
-      logger.error(`Error sending email: ${error.message}`);
-      return false;
-    }
-  }
-
-  /**
-   * Send SMS notification
-   */
-  static async _sendSMS(phone, notification) {
-    try {
-      if (!phone) {
-        logger.warn('No phone number provided for SMS');
-        return false;
-      }
-
-      // Use SMS service if available
-      try {
-        const smsService = require('../services/smsService');
-        if (smsService && smsService.sendSMS) {
-          await smsService.sendSMS({
-            phoneNumber: phone,
-            message: notification.message || notification.title,
-          });
-          logger.info(`SMS sent to ${phone}: ${notification.message?.substring(0, 50)}`);
-          return true;
-        }
-      } catch (smsError) {
-        logger.warn(`SMS service not available: ${smsError.message}`);
-      }
-
-      logger.info(`[Mock] SMS to ${phone}: ${notification.message?.substring(0, 50)}`);
-      return true;
-    } catch (error) {
-      logger.error(`Error sending SMS: ${error.message}`);
-      return false;
-    }
-  }
-
-  /**
-   * Send push notification
-   */
-  static async _sendPushNotification(deviceTokens, notification) {
-    try {
-      if (!Array.isArray(deviceTokens) || deviceTokens.length === 0) {
-        logger.warn('No device tokens provided for push notification');
-        return false;
-      }
-
-      // Use Firebase Cloud Messaging if available
-      try {
-        const admin = require('firebase-admin');
-        const message = {
-          notification: {
-            title: notification.title || 'Notification',
-            body: notification.message || '',
-          },
-          data: notification.data ? Object.entries(notification.data).reduce((acc, [key, value]) => {
-            acc[key] = String(value);
-            return acc;
-          }, {}) : {},
-        };
-
-        const responses = await Promise.all(
-          deviceTokens.map(token =>
-            admin.messaging().send({
-              ...message,
-              token,
-            }).catch(err => {
-              logger.warn(`Failed to send push to token ${token}: ${err.message}`);
-              return null;
-            })
-          )
-        );
-
-        const successCount = responses.filter(r => r !== null).length;
-        logger.info(`Push sent to ${successCount}/${deviceTokens.length} devices: ${notification.title}`);
-        return successCount > 0;
-      } catch (firebaseError) {
-        logger.warn(`Firebase not available: ${firebaseError.message}`);
-        logger.info(`[Mock] Push to ${deviceTokens.length} devices: ${notification.title}`);
-        return true;
-      }
-    } catch (error) {
-      logger.error(`Error sending push notification: ${error.message}`);
-      return false;
-    }
-  }
-
-  /**
-   * Send astrology consultation booking confirmation email
-   */
-  static async sendBookingConfirmationEmail(bookingData = {}) {
-    try {
-      const { userEmail, userName, consultantName, slotTime, confirmationCode } = bookingData;
-
-      const emailContent = `
-        <h2>Booking Confirmation</h2>
-        <p>Dear ${userName},</p>
-        <p>Your consultation has been successfully booked!</p>
-        <p><strong>Details:</strong></p>
-        <ul>
-          <li>Consultant: ${consultantName}</li>
-          <li>Slot: ${slotTime}</li>
-          <li>Confirmation Code: ${confirmationCode}</li>
-        </ul>
-        <p>We will send you a reminder 30 minutes before your consultation.</p>
-        <p>Thank you for choosing AstroNila!</p>
-      `;
-
-      logger.info(`Booking confirmation email sent to ${userEmail} for consultant ${consultantName}`);
-      
-      // In production: use Nodemailer or SendGrid
-      // For now, log the action
-      return { success: true, message: 'Booking confirmation email queued' };
-    } catch (error) {
-      logger.error('Error sending booking confirmation email:', error);
+      logger.error(`WhatsApp send failed to ${phone}: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
 
-  /**
-   * Send astrology consultation reminder email
-   */
-  static async sendReminderEmail(bookingData = {}) {
-    try {
-      const { userEmail, userName, consultantName, slotTime } = bookingData;
-
-      const emailContent = `
-        <h2>Consultation Reminder</h2>
-        <p>Dear ${userName},</p>
-        <p>Your consultation is starting in 30 minutes.</p>
-        <p><strong>Details:</strong></p>
-        <ul>
-          <li>Consultant: ${consultantName}</li>
-          <li>Time: ${slotTime}</li>
-        </ul>
-        <p>Please be ready for your consultation.</p>
-      `;
-
-      logger.info(`Reminder email sent to ${userEmail} for consultation with ${consultantName}`);
-
-      // In production: use Nodemailer or SendGrid
-      return { success: true, message: 'Reminder email queued' };
-    } catch (error) {
-      logger.error('Error sending reminder email:', error);
-      return { success: false, error: error.message };
+  async sendNotification(type, channels, data) {
+    const template = NotificationTemplates[type];
+    if (!template) {
+      logger.warn(`No template found for notification type: ${type}`);
+      return { success: false, reason: 'template-not-found' };
     }
+
+    const results = {};
+
+    if (channels.includes('sms') && data.phone && template.sms) {
+      results.sms = await this.sendSMS(data.phone, template.sms(data));
+    }
+
+    if (channels.includes('email') && data.email && template.email) {
+      const { subject, html } = template.email;
+      results.email = await this.sendEmail(
+        data.email,
+        subject(data),
+        html(data)
+      );
+    }
+
+    if (channels.includes('whatsapp') && data.phone && data.whatsappOptIn && template.whatsapp) {
+      results.whatsapp = await this.sendWhatsApp(data.phone, template.whatsapp(data));
+    }
+
+    return results;
   }
 
-  /**
-   * Send astrology consultation booking confirmation SMS
-   */
-  static async sendBookingConfirmationSMS(bookingData = {}) {
-    try {
-      const { phoneNumber, consultantName, slotTime, confirmationCode } = bookingData;
-
-      const message = `AstroNila: Your consultation with ${consultantName} is booked for ${slotTime}. Confirmation: ${confirmationCode}`;
-
-      logger.info(`Booking confirmation SMS sent to ${phoneNumber}`);
-
-      // In production: use Twilio or AWS SNS
-      return { success: true, message: 'Booking confirmation SMS queued' };
-    } catch (error) {
-      logger.error('Error sending booking confirmation SMS:', error);
-      return { success: false, error: error.message };
-    }
+  async notifyLeadReceived(lead, userEmail = '') {
+    return this.sendNotification('LEAD_RECEIVED', ['sms', 'email'], {
+      name: lead.fullName,
+      phone: lead.phone,
+      email: userEmail,
+      leadId: lead.leadId,
+      amount: lead.amount,
+      loanCategory: lead.loanCategory,
+      createdAt: lead.createdAt,
+    });
   }
 
-  /**
-   * Send astrology consultation reminder SMS
-   */
-  static async sendReminderSMS(bookingData = {}) {
-    try {
-      const { phoneNumber, consultantName, slotTime } = bookingData;
-
-      const message = `AstroNila Reminder: Your consultation with ${consultantName} starts in 30 min at ${slotTime}`;
-
-      logger.info(`Reminder SMS sent to ${phoneNumber}`);
-
-      // In production: use Twilio or AWS SNS
-      return { success: true, message: 'Reminder SMS queued' };
-    } catch (error) {
-      logger.error('Error sending reminder SMS:', error);
-      return { success: false, error: error.message };
-    }
+  async notifyDocumentsPending(lead, pendingDocs = [], userEmail = '') {
+    return this.sendNotification('DOCUMENTS_PENDING', ['sms', 'email', 'whatsapp'], {
+      name: lead.fullName,
+      phone: lead.phone,
+      email: userEmail,
+      leadId: lead.leadId,
+      pendingDocs,
+      whatsappOptIn: lead.whatsappOptIn,
+      uploadLink: `${process.env.APP_URL || 'https://malabarbazaar.com'}/finance#apply`,
+    });
   }
 
-  /**
-   * Notify consultant of new astrology consultation booking
-   */
-  static async notifyConsultantOfBooking(consultantData = {}) {
-    try {
-      const { consultantEmail, consultantName, userName, slotTime, bookingCode } = consultantData;
+  async notifyConsultantAssigned(lead, userEmail = '') {
+    return this.sendNotification('CONSULTANT_ASSIGNED', ['sms', 'email', 'whatsapp'], {
+      name: lead.fullName,
+      phone: lead.phone,
+      email: userEmail,
+      leadId: lead.leadId,
+      consultantName: lead.consultant?.name || '',
+      consultantPhone: lead.consultant?.phone || '',
+      whatsappOptIn: lead.whatsappOptIn,
+    });
+  }
 
-      const emailContent = `
-        <h2>New Consultation Booking</h2>
-        <p>Dear ${consultantName},</p>
-        <p>You have a new consultation booking:</p>
-        <p><strong>Details:</strong></p>
-        <ul>
-          <li>Client: ${userName}</li>
-          <li>Slot: ${slotTime}</li>
-          <li>Booking Code: ${bookingCode}</li>
-        </ul>
-        <p>Please log in to the admin panel for more details.</p>
-      `;
+  async notifyStatusUpdate(lead, statusLabel, note = '', userEmail = '') {
+    return this.sendNotification('STATUS_UPDATE', ['sms', 'email', 'whatsapp'], {
+      name: lead.fullName,
+      phone: lead.phone,
+      email: userEmail,
+      leadId: lead.leadId,
+      statusLabel,
+      note,
+      whatsappOptIn: lead.whatsappOptIn,
+    });
+  }
 
-      logger.info(`Consultant notification sent to ${consultantEmail} for booking ${bookingCode}`);
+  async notifyApproved(lead, userEmail = '') {
+    return this.sendNotification('APPROVED', ['sms', 'email', 'whatsapp'], {
+      name: lead.fullName,
+      phone: lead.phone,
+      email: userEmail,
+      leadId: lead.leadId,
+      amount: lead.amount,
+      institutionName: lead.institution?.name || 'Our partner',
+      consultantName: lead.consultant?.name || '',
+      consultantPhone: lead.consultant?.phone || '',
+      whatsappOptIn: lead.whatsappOptIn,
+    });
+  }
 
-      // In production: use Nodemailer or SendGrid
-      return { success: true, message: 'Consultant notification email queued' };
-    } catch (error) {
-      logger.error('Error notifying consultant:', error);
-      return { success: false, error: error.message };
-    }
+  async notifyRejected(lead, reason = '', userEmail = '') {
+    return this.sendNotification('REJECTED', ['sms', 'email'], {
+      name: lead.fullName,
+      phone: lead.phone,
+      email: userEmail,
+      leadId: lead.leadId,
+      reason,
+      whatsappOptIn: lead.whatsappOptIn,
+    });
+  }
+
+  async notifySLAAlert(consultantEmail, slaData) {
+    return this.sendNotification('SLA_REMINDER_CONSULTANT', ['email'], {
+      email: consultantEmail,
+      ...slaData,
+    });
   }
 }
 
-module.exports = NotificationService;
+module.exports = new NotificationService();

@@ -2262,3 +2262,623 @@ router.bootstrap = bootstrapFinanceInstitutions;
 void bootstrapFinanceInstitutions();
 
 module.exports = router;
+
+// ========================================
+// NEW ROUTES FOR ENHANCED SERVICES
+// ========================================
+
+const notificationService = require('../services/notificationService');
+const creditBureauService = require('../services/creditBureauService');
+const documentVerificationService = require('../services/documentVerificationService');
+const fraudDetectionService = require('../services/fraudDetectionService');
+const reportingService = require('../services/reportingService');
+const workflowService = require('../services/workflowService');
+const crmService = require('../services/crmService');
+const { i18nMiddleware, getSupportedLocales } = require('../middleware/i18n');
+
+// Apply i18n middleware to all routes
+router.use(i18nMiddleware);
+
+/**
+ * GET /api/finance/locales
+ * Get supported locales
+ */
+router.get('/locales', publicReadLimiter, (_req, res) => {
+  try {
+    const locales = getSupportedLocales();
+    res.json({
+      success: true,
+      locales,
+    });
+  } catch (error) {
+    logger.error(`Get locales error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * POST /api/finance/credit-bureau/check
+ * Fetch credit bureau report
+ */
+router.post('/credit-bureau/check', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const { fullName, pan, phone, dob, gender, state, district, pincode } = req.body;
+
+    if (!fullName || !pan || !phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: fullName, pan, phone',
+      });
+    }
+
+    const payload = {
+      fullName,
+      pan,
+      phone: normalizePhone(phone),
+      dob,
+      gender,
+      state,
+      district,
+      pincode,
+      consentTimestamp: new Date().toISOString(),
+    };
+
+    const result = await creditBureauService.fetchCreditReport(payload);
+
+    if (result.success) {
+      const insights = creditBureauService.extractInsights(result.data);
+      
+      await createAuditLog(req, {
+        actionType: 'credit_bureau_check',
+        details: {
+          pan,
+          score: result.data.score,
+          provider: result.provider,
+        },
+      });
+
+      res.json({
+        success: true,
+        data: {
+          ...result.data,
+          insights: insights.insights,
+          recommendations: insights.recommendations,
+        },
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: result.error || 'Credit bureau check failed',
+      });
+    }
+  } catch (error) {
+    logger.error(`Credit bureau check error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * POST /api/finance/documents/verify
+ * Verify document (OCR + DigiLocker)
+ */
+router.post('/documents/verify', authenticate, secureActionLimiter, requireFinanceConsultant, upload.single('document'), async (req, res) => {
+  try {
+    const { documentType, aadhaarNumber, panNumber } = req.body;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No document file uploaded',
+      });
+    }
+
+    // Scan file for viruses
+    await scanFile(req.file.path);
+
+    // Check document quality
+    const qualityCheck = await documentVerificationService.verifyDocumentQuality(req.file.path);
+
+    if (!qualityCheck.valid) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({
+        success: false,
+        message: qualityCheck.reason,
+      });
+    }
+
+    // Extract text via OCR
+    const ocrResult = await documentVerificationService.extractTextFromDocument(
+      req.file.path,
+      documentType
+    );
+
+    let verificationResult = null;
+
+    // Verify via DigiLocker if applicable
+    if (documentType === 'aadhaar' && aadhaarNumber) {
+      verificationResult = await documentVerificationService.verifyAadhaarDigiLocker(
+        aadhaarNumber,
+        req.body.digilockerToken || ''
+      );
+    } else if (documentType === 'pan' && panNumber) {
+      verificationResult = await documentVerificationService.verifyPANDigiLocker(
+        panNumber,
+        req.body.digilockerToken || ''
+      );
+    }
+
+    await createAuditLog(req, {
+      actionType: 'document_verification',
+      details: {
+        documentType,
+        ocrSuccess: ocrResult.success,
+        verificationSuccess: verificationResult?.success || false,
+      },
+    });
+
+    // Clean up uploaded file
+    fs.unlinkSync(req.file.path);
+
+    res.json({
+      success: true,
+      data: {
+        qualityScore: qualityCheck.score,
+        ocrExtracted: ocrResult.extracted || {},
+        verification: verificationResult || null,
+      },
+    });
+  } catch (error) {
+    logger.error(`Document verification error: ${error.message}`);
+    if (req.file?.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    }
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * POST /api/finance/fraud/check
+ * Perform fraud detection check
+ */
+router.post('/fraud/check', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const { phone, pan, aadhaarNumber } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number is required',
+      });
+    }
+
+    const leadData = {
+      phone: normalizePhone(phone),
+      pan,
+      aadhaarNumber,
+    };
+
+    const ipAddress = req.ip || '';
+    const userAgent = req.get('user-agent') || '';
+
+    const fraudCheck = await fraudDetectionService.performFraudCheck(
+      leadData,
+      ipAddress,
+      userAgent
+    );
+
+    await createAuditLog(req, {
+      actionType: 'fraud_check',
+      details: {
+        phone: leadData.phone,
+        riskScore: fraudCheck.riskScore,
+        overallRisk: fraudCheck.overallRisk,
+        blocked: fraudCheck.blocked,
+      },
+    });
+
+    res.json({
+      success: true,
+      data: fraudCheck,
+    });
+  } catch (error) {
+    logger.error(`Fraud check error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * GET /api/finance/reports/lead/:leadId/pdf
+ * Generate PDF report for a lead
+ */
+router.get('/reports/lead/:leadId/pdf', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const result = await reportingService.generateLeadReportPDF(req.params.leadId);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to generate PDF',
+      });
+    }
+
+    await createAuditLog(req, {
+      actionType: 'report_generated',
+      leadId: req.params.leadId,
+      details: { reportType: 'pdf' },
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.send(result.buffer);
+  } catch (error) {
+    logger.error(`PDF generation error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * POST /api/finance/reports/leads/excel
+ * Generate Excel export of leads
+ */
+router.post('/reports/leads/excel', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const filters = req.body;
+    const result = await reportingService.generateLeadsExcel(filters);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to generate Excel',
+      });
+    }
+
+    await createAuditLog(req, {
+      actionType: 'bulk_export',
+      details: { format: 'excel', filters },
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.send(result.buffer);
+  } catch (error) {
+    logger.error(`Excel generation error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * GET /api/finance/reports/analytics
+ * Generate analytics report
+ */
+router.get('/reports/analytics', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const { startDate, endDate, format = 'json' } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'startDate and endDate are required',
+      });
+    }
+
+    const result = await reportingService.generateAnalyticsReport(startDate, endDate, format);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to generate analytics',
+      });
+    }
+
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      res.send(result.buffer);
+    } else {
+      res.json(result);
+    }
+  } catch (error) {
+    logger.error(`Analytics report error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * POST /api/finance/workflow/assign-lead
+ * Auto-assign lead to consultant
+ */
+router.post('/workflow/assign-lead', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const { leadId, strategy = 'load-balanced' } = req.body;
+
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: 'leadId is required',
+      });
+    }
+
+    const result = await workflowService.assignLeadToConsultant(leadId, strategy);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || result.reason || 'Failed to assign lead',
+      });
+    }
+
+    await createAuditLog(req, {
+      actionType: 'auto_assign_lead',
+      leadId,
+      details: {
+        strategy,
+        consultantId: result.consultant.id,
+        consultantName: result.consultant.name,
+      },
+    });
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`Auto-assign error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * POST /api/finance/workflow/bulk-assign
+ * Auto-assign multiple unassigned leads
+ */
+router.post('/workflow/bulk-assign', authenticate, secureActionLimiter, requireFinanceAdmin, async (req, res) => {
+  try {
+    const { limit = 50 } = req.body;
+
+    const result = await workflowService.autoAssignUnassignedLeads(limit);
+
+    await createAuditLog(req, {
+      actionType: 'bulk_auto_assign',
+      details: {
+        assigned: result.assigned,
+        failed: result.failed,
+      },
+    });
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`Bulk assign error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * POST /api/finance/crm/calls
+ * Log a call activity
+ */
+router.post('/crm/calls', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const { leadId, ...callData } = req.body;
+
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: 'leadId is required',
+      });
+    }
+
+    const result = await crmService.logCall(leadId, req.user._id, callData);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to log call',
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`Log call error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * POST /api/finance/crm/notes
+ * Add a note to lead
+ */
+router.post('/crm/notes', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const { leadId, ...noteData } = req.body;
+
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: 'leadId is required',
+      });
+    }
+
+    const result = await crmService.addNote(leadId, req.user._id, noteData);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to add note',
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`Add note error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * POST /api/finance/crm/tasks
+ * Create a task
+ */
+router.post('/crm/tasks', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const { leadId, ...taskData } = req.body;
+
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: 'leadId is required',
+      });
+    }
+
+    const result = await crmService.createTask(leadId, req.user._id, taskData);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to create task',
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`Create task error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * PATCH /api/finance/crm/tasks/:taskId/complete
+ * Complete a task
+ */
+router.patch('/crm/tasks/:taskId/complete', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const result = await crmService.completeTask(req.params.taskId, req.user._id);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to complete task',
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`Complete task error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * GET /api/finance/crm/tasks/pending
+ * Get pending tasks for current user
+ */
+router.get('/crm/tasks/pending', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const filters = {
+      priority: req.query.priority,
+      overdue: req.query.overdue === 'true',
+      limit: parseInt(req.query.limit) || 50,
+    };
+
+    const result = await crmService.getPendingTasks(req.user._id, filters);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to get pending tasks',
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`Get pending tasks error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * GET /api/finance/crm/timeline/:leadId
+ * Get activity timeline for a lead
+ */
+router.get('/crm/timeline/:leadId', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const filters = {
+      activityType: req.query.activityType,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+      limit: parseInt(req.query.limit) || 100,
+    };
+
+    const result = await crmService.getLeadTimeline(req.params.leadId, filters);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to get timeline',
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`Get timeline error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * GET /api/finance/crm/activity-summary
+ * Get activity summary for consultant
+ */
+router.get('/crm/activity-summary', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30;
+
+    const result = await crmService.getConsultantActivitySummary(req.user._id, days);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to get activity summary',
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`Get activity summary error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * POST /api/finance/crm/meetings
+ * Schedule a meeting
+ */
+router.post('/crm/meetings', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const { leadId, ...meetingData } = req.body;
+
+    if (!leadId) {
+      return res.status(400).json({
+        success: false,
+        message: 'leadId is required',
+      });
+    }
+
+    const result = await crmService.scheduleMeeting(leadId, req.user._id, meetingData);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Failed to schedule meeting',
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`Schedule meeting error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Mount institution portal routes
+router.use('/institution', require('./institutionPortal'));

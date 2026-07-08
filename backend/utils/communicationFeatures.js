@@ -4,6 +4,7 @@
  */
 
 const mongoose = require('mongoose');
+const videoCallService = require('./videoCallService');
 
 const CallRecordSchema = new mongoose.Schema({
   id: { type: String, default: () => require('crypto').randomUUID() },
@@ -22,6 +23,13 @@ const CallRecordSchema = new mongoose.Schema({
     enum: ['voice', 'video', 'scheduled'],
     required: true
   },
+  provider: {
+    type: String,
+    enum: ['twilio', 'jitsi'],
+    default: 'jitsi'
+  },
+  roomId: String,
+  roomUrl: String,
   status: {
     type: String,
     enum: ['initiated', 'ringing', 'connected', 'ended', 'rejected', 'missed'],
@@ -105,17 +113,17 @@ const updateTypingIndicator = async (fromId, toId, isTyping = true) => {
  */
 const initiateVoiceCall = async (fromProfileId, toProfileId) => {
   try {
-    const callRecord = {
-      id: require('crypto').randomUUID(),
+    const { callRecord, roomData } = await videoCallService.createCallRecord(
       fromProfileId,
       toProfileId,
-      callType: 'voice',
-      status: 'initiated',
-      startTime: new Date(),
-      createdAt: new Date()
-    };
+      'voice',
+      'jitsi' // or 'twilio' based on configuration
+    );
 
-    return callRecord;
+    return {
+      ...callRecord,
+      roomData
+    };
   } catch (error) {
     console.error('Error initiating voice call:', error);
     throw error;
@@ -125,20 +133,40 @@ const initiateVoiceCall = async (fromProfileId, toProfileId) => {
 /**
  * Initiate video call
  */
-const initiateVideoCall = async (fromProfileId, toProfileId, roomUrl) => {
+const initiateVideoCall = async (fromProfileId, toProfileId, provider = 'jitsi') => {
   try {
-    const callRecord = {
-      id: require('crypto').randomUUID(),
+    const { callRecord, roomData } = await videoCallService.createCallRecord(
       fromProfileId,
       toProfileId,
-      callType: 'video',
-      status: 'initiated',
-      startTime: new Date(),
-      roomUrl,
-      createdAt: new Date()
-    };
+      'video',
+      provider
+    );
 
-    return callRecord;
+    // Generate access tokens if using Twilio
+    if (provider === 'twilio' && roomData.roomSid) {
+      const fromToken = videoCallService.generateTwilioAccessToken(
+        fromProfileId.toString(),
+        roomData.roomName
+      );
+      const toToken = videoCallService.generateTwilioAccessToken(
+        toProfileId.toString(),
+        roomData.roomName
+      );
+
+      return {
+        ...callRecord,
+        roomData: {
+          ...roomData,
+          fromToken,
+          toToken
+        }
+      };
+    }
+
+    return {
+      ...callRecord,
+      roomData
+    };
   } catch (error) {
     console.error('Error initiating video call:', error);
     throw error;
@@ -150,18 +178,12 @@ const initiateVideoCall = async (fromProfileId, toProfileId, roomUrl) => {
  */
 const updateCallStatus = async (callId, status, options = {}) => {
   try {
-    const update = {
+    const update = await videoCallService.updateCallStatus(callId, status, options);
+
+    return {
       id: callId,
-      status,
-      timestamp: new Date()
+      ...update
     };
-
-    if (options.duration) update.duration = options.duration;
-    if (options.rejectionReason) update.rejectionReason = options.rejectionReason;
-    if (options.callQuality) update.callQuality = options.callQuality;
-    if (options.recordingUrl) update.recordingUrl = options.recordingUrl;
-
-    return update;
   } catch (error) {
     console.error('Error updating call status:', error);
     throw error;
@@ -174,15 +196,63 @@ const updateCallStatus = async (callId, status, options = {}) => {
 const scheduleCall = async (fromProfileId, toProfileId, scheduledTime, callType = 'video') => {
   try {
     return {
+      id: require('crypto').randomUUID(),
       fromProfileId,
       toProfileId,
       callType,
       status: 'scheduled',
       scheduledTime: new Date(scheduledTime),
-      notificationSent: false,
       createdAt: new Date()
     };
   } catch (error) {
+    console.error('Error scheduling call:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get call history
+ */
+const getCallHistory = async (profileId, limit = 20) => {
+  try {
+    return await videoCallService.getCallHistory(profileId, limit);
+  } catch (error) {
+    console.error('Error fetching call history:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get call statistics
+ */
+const getCallStatistics = async (profileId) => {
+  try {
+    return await videoCallService.getCallStatistics(profileId);
+  } catch (error) {
+    console.error('Error fetching call statistics:', error);
+    throw error;
+  }
+};
+
+/**
+ * Save voice note
+ */
+const saveVoiceNote = async (fromProfileId, toProfileId, audioUrl, duration) => {
+  try {
+    return {
+      id: require('crypto').randomUUID(),
+      fromProfileId,
+      toProfileId,
+      audioUrl,
+      duration,
+      status: 'sent',
+      createdAt: new Date()
+    };
+  } catch (error) {
+    console.error('Error saving voice note:', error);
+    throw error;
+  }
+};
     console.error('Error scheduling call:', error);
     throw error;
   }
@@ -201,14 +271,20 @@ const createWhatsAppLink = (phoneNumber, message = '') => {
  */
 const sendWhatsAppMessage = async (toPhoneNumber, message) => {
   try {
-    // This would integrate with WhatsApp Business API
-    // For now, returns the link that user can use
+    const whatsappService = require('../services/whatsappService');
+    
+    if (whatsappService.isConfigured()) {
+      return await whatsappService.sendTextMessage(toPhoneNumber, message);
+    }
+    
+    // Fallback to WhatsApp link
     return {
       type: 'whatsapp',
       recipient: toPhoneNumber,
       message,
       link: createWhatsAppLink(toPhoneNumber, message),
       status: 'ready_to_send',
+      fallback: true,
       instructions: 'Click the link to open WhatsApp and send the message'
     };
   } catch (error) {

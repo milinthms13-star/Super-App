@@ -1,26 +1,61 @@
-FROM node:20-bookworm-slim
+# Multi-stage build for optimized production image
+FROM node:18-alpine AS builder
 
-ENV NODE_ENV=production
-ENV PORT=8080
-ENV PYTHON_BIN=python3
-ENV FFMPEG_PATH=/usr/bin/ffmpeg
-
+# Set working directory
 WORKDIR /app
 
-# Install ffmpeg for video-studio rendering.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg espeak-ng ca-certificates python3 python3-pip fontconfig fonts-dejavu-core \
-  && ffmpeg -hide_banner -filters | grep -q drawtext \
-  && rm -rf /var/lib/apt/lists/*
-
+# Copy package files
 COPY package*.json ./
-RUN npm ci --omit=dev
 
+# Install dependencies (including dev dependencies for build)
+RUN npm ci
+
+# Copy source code
 COPY . .
 
-# Install Python dependencies for scene-based text-to-video pipeline.
-RUN python3 -m pip install --no-cache-dir --break-system-packages -r scripts/requirements-hf-text-to-video.txt
+# Build stage is complete
+# ============================================
 
-EXPOSE 8080
+# Production stage
+FROM node:18-alpine
 
-CMD ["npm", "start"]
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Create app user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Copy built application from builder
+COPY --from=builder --chown=nodejs:nodejs /app .
+
+# Create required directories
+RUN mkdir -p uploads/business-logos uploads/miniapp-banners uploads/product-images \
+    uploads/invoice-attachments uploads/qrcodes exports logs email-templates && \
+    chown -R nodejs:nodejs uploads exports logs email-templates
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the application
+CMD ["node", "server.js"]

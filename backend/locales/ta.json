@@ -1,0 +1,76 @@
+{
+  "common": {
+    "welcome": "மலபார் பஜார் நிதிக்கு வரவேற்கிறோம்",
+    "submit": "சமர்ப்பிக்கவும்",
+    "cancel": "ரத்து செய்",
+    "save": "சேமி",
+    "edit": "திருத்து",
+    "delete": "நீக்கு",
+    "search": "தேடு",
+    "filter": "வடிகட்டி",
+    "export": "ஏற்றுமதி",
+    "download": "பதிவிறக்கம்",
+    "upload": "பதிவேற்றம்",
+    "back": "பின்",
+    "next": "அடுத்து",
+    "previous": "முந்தைய",
+    "loading": "ஏற்றுகிறது...",
+    "success": "வெற்றி",
+    "error": "பிழை",
+    "warning": "எச்சரிக்கை",
+    "info": "தகவல்"
+  },
+  "finance": {
+    "title": "நிதி மையம்",
+    "apply_now": "கடனுக்கு விண்ணப்பிக்கவும்",
+    "check_eligibility": "தகுதியை சரிபார்க்கவும்",
+    "calculate_emi": "EMI கணக்கிடுங்கள்",
+    "track_application": "உங்கள் விண்ணப்பத்தை கண்காணிக்கவும்",
+    "loan_categories": {
+      "business": "வணிக கடன்",
+      "personal": "தனிப்பட்ட கடன்",
+      "gold": "தங்க கடன்",
+      "home": "வீட்டுக் கடன்",
+      "vehicle": "வாகன கடன்",
+      "education": "கல்வி கடன்"
+    },
+    "status": {
+      "submitted": "சமர்ப்பிக்கப்பட்டது",
+      "under_review": "மதிப்பாய்வில்",
+      "documents_requested": "ஆவணங்கள் தேவை",
+      "institution_review": "நிறுவன மதிப்பாய்வு",
+      "approved": "ஒப்புதல்",
+      "rejected": "நிராகரிக்கப்பட்டது",
+      "withdrawn": "திரும்பப் பெறப்பட்டது"
+    },
+    "form": {
+      "full_name": "முழு பெயர்",
+      "phone": "தொலைபேசி எண்",
+      "email": "மின்னஞ்சல் முகவரி",
+      "loan_amount": "கடன் தொகை",
+      "loan_category": "கடன் வகை",
+      "preferred_tenure": "விருப்பமான காலம் (மாதங்கள்)",
+      "monthly_income": "மாத வருமானம்",
+      "existing_emi": "தற்போதைய EMI",
+      "cibil_score": "CIBIL மதிப்பெண்",
+      "employment_type": "வேலை வகை",
+      "state": "மாநிலம்",
+      "district": "மாவட்டம்",
+      "pincode": "அஞ்சல் குறியீடு"
+    },
+    "documents": {
+      "aadhaar": "ஆதார் அட்டை",
+      "pan": "PAN அட்டை",
+      "salary_slips": "சம்பள சீட்டுகள்",
+      "bank_statements": "வங்கி அறிக்கைகள்",
+      "business_proof": "வணிக சான்று",
+      "gst_certificate": "GST சான்றிதழ்"
+    },
+    "messages": {
+      "application_submitted": "உங்கள் கடன் விண்ணப்பம் வெற்றிகரமாக சமர்ப்பிக்கப்பட்டது!",
+      "documents_uploaded": "ஆவணங்கள் வெற்றிகரமாக பதிவேற்றப்பட்டன",
+      "consultant_assigned": "உங்கள் விண்ணப்பத்திற்கு ஒரு ஆலோசகர் நியமிக்கப்பட்டுள்ளார்",
+      "status_updated": "விண்ணப்ப நிலை புதுப்பிக்கப்பட்டது"
+    }
+  }
+}

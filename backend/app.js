@@ -47,6 +47,14 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./config/swagger');
+const { 
+  rateLimiters, 
+  xssProtection, 
+  mongoSanitization, 
+  securityLogger 
+} = require('./middleware/securityMiddleware');
 
 const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
@@ -143,6 +151,24 @@ app.use(compression());
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(morgan('combined'));
+
+// Security middleware
+app.use(xssProtection);
+app.use(mongoSanitization);
+app.use(securityLogger);
+
+// Swagger API documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Business Builder API Documentation'
+}));
+
+// Serve swagger spec as JSON
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
+
 app.use('/api/astrology/payment/webhook/razorpay', express.raw({ type: 'application/json', limit: '20mb' }));
 app.use('/api/astrology/payment/webhook', express.raw({ type: 'application/json', limit: '20mb' }));
 app.use('/webhooks/payment', express.raw({ type: 'application/json', limit: '20mb' }));
@@ -227,13 +253,23 @@ const createLazyRouteMiddleware = (modulePath) => {
 const authRoutes = require('./routes/auth');
 const sessionManagementRoutes = require('./routes/sessionManagementRoutes');
 const appDataRoutes = require('./routes/appData');
+const { cacheMiddleware, keyGenerators } = require('./middleware/cacheMiddleware');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/auth', sessionManagementRoutes);
 app.use('/api/appdata', appDataRoutes);
 app.use('/api/app-data', appDataRoutes);
 app.use('/api/realestate', require('./routes/realestate'));
-app.use('/api/business-builder', require('./routes/businessBuilderRoutes'));
+
+// Business Builder routes with caching and rate limiting
+app.use('/api/business-builder', rateLimiters.general, require('./routes/businessBuilderRoutes'));
+app.use('/api/business-builder/advanced', rateLimiters.general, require('./routes/businessBuilderAdvancedRoutes'));
+app.use('/api/business-builder/upload', rateLimiters.upload, require('./routes/businessBuilderUploadRoutes'));
+app.use('/api/qrcode', rateLimiters.qrcode, require('./routes/qrCodeRoutes'));
+app.use('/api/webhooks', rateLimiters.general, require('./routes/webhookRoutes'));
+app.use('/api/audit-logs', rateLimiters.general, cacheMiddleware(60, keyGenerators.user), require('./routes/auditLogRoutes'));
+app.use('/api/payments', rateLimiters.payment, require('./routes/paymentRoutes'));
+app.use('/api/export', rateLimiters.export, require('./routes/exportRoutes'));
 app.use('/api/video-studio', createLazyRouteMiddleware('./routes/videoStudio'));
 app.use('/api/kids-video-hf', createLazyRouteMiddleware('./routes/kidsVideoGeneratorHF'));
 app.use('/api/kids-story', createLazyRouteMiddleware('./routes/kidsStoryGeneratorRoutes'));
@@ -258,6 +294,19 @@ if (typeof freelancerRoutes.bootstrap === 'function') {
   void freelancerRoutes.bootstrap();
 }
 app.use('/api/freelancer', freelancerRoutes);
+
+// Education module routes
+const educationRoutes = require('./routes/education');
+const skillLearningRoutes = require('./routes/skilllearning');
+const tuitionRoutes = require('./routes/tuition');
+const { educationRateLimiter } = require('./middleware/rateLimiters');
+app.use('/api/education', educationRateLimiter, educationRoutes);
+app.use('/api/skilllearning', educationRateLimiter, skillLearningRoutes);
+app.use('/api/app-data/skilllearning', educationRateLimiter, skillLearningRoutes);
+app.use('/api/education/tuition', educationRateLimiter, tuitionRoutes);
+app.use('/api/app-data/education', educationRateLimiter, educationRoutes);
+app.use('/api/app-data/education/tuition', educationRateLimiter, tuitionRoutes);
+
 app.use('/api/strategic-modules', require('./routes/strategicModules'));
 
 app.use('/api/messaging/v4/reactions', require('./routes/messageReactionsRoutes'));
@@ -315,6 +364,7 @@ safeUse('/api/tax', './routes/taxCalculationRoutes');
 
 app.use('/api/business-services', require('./routes/businessServices'));
 app.use('/api/devadarshan', require('./routes/devadarshan'));
+app.use('/api/tourism', require('./routes/tourismNew'));
 
 app.use('/webhooks/carrier', require('./routes/carrierWebhookRoutes'));
 app.use('/webhooks/fulfillment', require('./routes/fulfillmentWebhookRoutes'));
@@ -357,6 +407,16 @@ app.use('/api/matrimonial', require('./routes/matrimonial-communication'));
 app.use('/api/matrimonial', require('./routes/matrimonial-referral'));
 app.use('/api/matrimonial', require('./routes/matrimonial-admin-analytics'));
 app.use('/api/matrimonial', require('./routes/matrimonial-seo'));
+app.use('/api/matrimonial/realtime', require('./routes/matrimonial-realtime'));
+app.use('/api/matrimonial/webhooks', require('./routes/matrimonial-payment-webhook'));
+app.use('/api/matrimonial/calls', require('./routes/matrimonial-calls'));
+app.use('/api/matrimonial/whatsapp', require('./routes/matrimonial-whatsapp'));
+app.use('/api/matrimonial/matching', require('./routes/matrimonial-matching'));
+app.use('/api/matrimonial/admin', require('./routes/matrimonial-admin'));
+app.use('/api/matrimonial/location', require('./routes/matrimonial-location'));
+app.use('/api/matrimonial/moderation', require('./routes/matrimonial-moderation'));
+app.use('/api/matrimonial/analytics', require('./routes/matrimonial-analytics'));
+app.use('/api/matrimonial/success-stories', require('./routes/matrimonial-success-stories'));
 app.use('/api/jobportal', require('./routes/jobportal'));
 app.use('/api/hotelbooking', require('./routes/hotelbooking'));
 app.use('/api/hotelbookings', require('./routes/hotelbooking'));
