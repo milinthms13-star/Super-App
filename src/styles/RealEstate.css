@@ -3748,3 +3748,42 @@
   .re-nearby-category-tabs { gap: 0.25rem; }
   .re-nearby-cat-tab { font-size: 0.72rem; padding: 0.25rem 0.5rem; }
 }
+
+/* ── ListingForm: Amenity Picker ────────────────────────────────────── */
+.realestate-field-label {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.85rem; font-weight: 500; color: var(--realestate-ink);
+  margin-bottom: 0.4rem;
+}
+.re-amenity-picker-toggle {
+  background: none; border: none; cursor: pointer;
+  font-size: 0.75rem; color: var(--realestate-primary); font-weight: 600; padding: 0;
+}
+.re-amenity-picker {
+  display: flex; flex-wrap: wrap; gap: 0.35rem;
+  margin-bottom: 0.5rem; max-height: 180px; overflow-y: auto;
+  padding: 0.5rem; background: #f6fbfb; border-radius: 10px;
+  border: 1px solid var(--realestate-border);
+}
+.re-amenity-chip {
+  padding: 0.25rem 0.6rem; border-radius: 999px; border: 1.5px solid var(--realestate-border);
+  background: #fff; cursor: pointer; font-size: 0.76rem; transition: all 0.12s;
+  white-space: nowrap;
+}
+.re-amenity-chip:hover { border-color: var(--realestate-primary); color: var(--realestate-primary); }
+.re-amenity-chip.selected {
+  background: var(--realestate-primary); color: #fff; border-color: var(--realestate-primary);
+}
+.re-amenity-selected-preview {
+  display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.4rem;
+}
+.re-amenity-selected-chip {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  background: rgba(13,122,105,0.1); color: var(--realestate-primary);
+  padding: 0.2rem 0.5rem; border-radius: 999px; font-size: 0.75rem;
+}
+.re-amenity-remove {
+  background: none; border: none; cursor: pointer; color: var(--realestate-primary);
+  font-size: 0.65rem; padding: 0; line-height: 1; display: flex; align-items: center;
+}
+.re-amenity-remove:hover { color: var(--realestate-danger); }

@@ -260,15 +260,60 @@ const ListingForm = ({
           <input name="mapPreviewUrl" value={listingForm.mapPreviewUrl} onChange={onInputChange} />
         </label>
 
-        <label className="realestate-field">
-          <span>{listingForm.postingType === "property" ? "Amenities (comma separated)" : "Must-have amenities"}</span>
-          <input 
-            name={listingForm.postingType === "property" ? "amenitiesInput" : "mustHaveAmenities"} 
-            value={listingForm.postingType === "property" ? listingForm.amenitiesInput : listingForm.mustHaveAmenities} 
-            onChange={onInputChange} 
-            placeholder={listingForm.postingType === "property" ? "WiFi, Parking, Gym..." : "Swimming pool, Gym, Security..."}
+        <div className="realestate-field">
+          <span className="realestate-field-label">
+            {listingForm.postingType === "property" ? "Amenities" : "Must-have amenities"}
+            <button
+              type="button"
+              className="re-amenity-picker-toggle"
+              onClick={() => setShowAmenitiesPicker((s) => !s)}
+            >
+              {showAmenitiesPicker ? "Hide picker" : `Choose from ${AMENITIES_LIST.length} options`}
+            </button>
+          </span>
+
+          {/* Clickable chip picker */}
+          {showAmenitiesPicker && (
+            <div className="re-amenity-picker">
+              {AMENITIES_LIST.map((amenity) => (
+                <button
+                  key={amenity}
+                  type="button"
+                  className={`re-amenity-chip ${selectedAmenities.has(amenity) ? "selected" : ""}`}
+                  onClick={() => toggleAmenity(amenity)}
+                  aria-pressed={selectedAmenities.has(amenity)}
+                >
+                  {selectedAmenities.has(amenity) ? "✓ " : ""}{amenity}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Selected preview */}
+          {selectedAmenities.size > 0 && (
+            <div className="re-amenity-selected-preview">
+              {[...selectedAmenities].map((a) => (
+                <span key={a} className="re-amenity-selected-chip">
+                  {a}
+                  <button
+                    type="button"
+                    className="re-amenity-remove"
+                    onClick={() => toggleAmenity(a)}
+                    aria-label={`Remove ${a}`}
+                  >✕</button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Manual text fallback */}
+          <input
+            name={amenitiesFieldName}
+            value={amenitiesValue}
+            onChange={onInputChange}
+            placeholder="Or type: WiFi, Parking, Gym…"
           />
-        </label>
+        </div>
 
         {listingForm.postingType === "requirement" && (
           <label className="realestate-field">
