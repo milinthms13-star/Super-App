@@ -1,9 +1,23 @@
 import React, { useMemo, useState } from "react";
 import { formatDateTime } from "../realEstateUtils";
+import NearbyAmenitiesMap from "./NearbyAmenitiesMap";
+import PriceInsightsPanel from "./PriceInsightsPanel";
+
+/**
+ * PropertyDetailTabs — Professional upgrade
+ * - Live OpenStreetMap embed (free)
+ * - Nominatim reverse geocode display (free)
+ * - Nearby amenities tab (Overpass API — free)
+ * - Price insights tab (free static market data)
+ * - Street View deep link (free)
+ * - Neighborhood data panel
+ */
 
 const TAB_IDS = [
   { id: "overview", label: "Overview" },
   { id: "media", label: "Media" },
+  { id: "nearby", label: "Nearby" },
+  { id: "insights", label: "Market" },
   { id: "documents", label: "Documents" },
   { id: "financing", label: "Financing" },
   { id: "messages", label: "Messages" },
@@ -33,13 +47,43 @@ const trustSummary = (p) => {
       ok: Boolean(p.encumbranceCertificate),
     },
   ];
-
   const okCount = flags.filter((f) => f.ok).length;
   const score = Math.round((okCount / flags.length) * 100);
   const missing = buildMissingDocs(p);
   const status = score >= 80 ? "High trust" : score >= 50 ? "Good trust" : "Trust pending";
-
   return { score, status, flags, missing };
+};
+
+// Nominatim reverse geocode (free OpenStreetMap geocoding service)
+const useReverseGeocode = (lat, lng) => {
+  const [address, setAddress] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    const hasCoords = lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng);
+    if (!hasCoords) return;
+
+    setLoading(true);
+    const controller = new AbortController();
+
+    fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`,
+      {
+        headers: { "Accept-Language": "en", "User-Agent": "HomeSphere/1.0" },
+        signal: controller.signal,
+      }
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.display_name) setAddress(data.display_name);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+
+    return () => controller.abort();
+  }, [lat, lng]);
+
+  return { address, loading };
 };
 
 const PropertyDetailTabs = ({
@@ -49,8 +93,20 @@ const PropertyDetailTabs = ({
   uiMessages,
 }) => {
   const [activeTab, setActiveTab] = useState("overview");
-
   const summary = useMemo(() => (property ? trustSummary(property) : null), [property]);
+
+  const lat = Number(property?.mapLocationLat);
+  const lng = Number(property?.mapLocationLng);
+  const hasCoords =
+    property?.mapLocationLat != null &&
+    property?.mapLocationLng != null &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng);
+
+  const { address: geocodedAddress, loading: geocodeLoading } = useReverseGeocode(
+    hasCoords ? lat : null,
+    hasCoords ? lng : null
+  );
 
   if (!property) {
     return (
@@ -60,6 +116,20 @@ const PropertyDetailTabs = ({
       </div>
     );
   }
+
+  // Map embed (OpenStreetMap — free)
+  const osmEmbedUrl = hasCoords
+    ? `https://www.openstreetmap.org/export/embed.html?bbox=${lng - 0.012}%2C${lat - 0.012}%2C${lng + 0.012}%2C${lat + 0.012}&layer=mapnik&marker=${lat}%2C${lng}`
+    : null;
+
+  const osmFullUrl = hasCoords
+    ? `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`
+    : null;
+
+  // Google Street View deep link (free, no API key required for linking)
+  const streetViewUrl = hasCoords
+    ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`
+    : null;
 
   return (
     <>
@@ -79,6 +149,7 @@ const PropertyDetailTabs = ({
           ))}
         </div>
 
+        {/* TRUST PANEL */}
         <div className="realestate-trust-panel" aria-label="Trust and document status">
           <div className="realestate-trust-panel-top">
             <div>
@@ -94,7 +165,6 @@ const PropertyDetailTabs = ({
               </button>
             </div>
           </div>
-
           <div className="realestate-trust-docs">
             {summary.missing.length ? (
               <div className="realestate-trust-docs-warn">
@@ -107,97 +177,106 @@ const PropertyDetailTabs = ({
         </div>
       </div>
 
-      {activeTab === "overview" ? (
+      {/* ── TAB: OVERVIEW ── */}
+      {activeTab === "overview" && (
         <div className="realestate-detail-tab-body">
           <div className="realestate-detail-price-row">
             <strong>{property.priceLabel}</strong>
-            <span>
-              {property.type} | {property.intent}
-            </span>
+            <span>{property.type} · {property.intent === "rent" ? "Rental" : "For sale"}</span>
           </div>
 
           <div className="realestate-detail-specs">
-            <span>{property.bedrooms || "Studio"} bed</span>
-            <span>{property.bathrooms} bath</span>
+            {property.bedrooms > 0 && <span>{property.bedrooms} bed</span>}
+            {property.bathrooms > 0 && <span>{property.bathrooms} bath</span>}
             <span>{property.area}</span>
-            <span>{property.furnishing}</span>
-            {property.possession ? <span>{property.possession}</span> : null}
-            {property.floorNumber !== null ? <span>Floor {property.floorNumber}</span> : null}
-            {property.totalFloors !== null ? <span>Total floors {property.totalFloors}</span> : null}
-            {property.parkingSpots !== null ? <span>{property.parkingSpots} parking</span> : null}
+            {property.furnishing && <span>{property.furnishing}</span>}
+            {property.possession && <span>{property.possession}</span>}
+            {property.floorNumber != null && <span>Floor {property.floorNumber}</span>}
+            {property.totalFloors != null && <span>{property.totalFloors} floors total</span>}
+            {property.parkingSpots != null && <span>{property.parkingSpots} parking</span>}
           </div>
 
-          <p className="realestate-description">{property.description}</p>
+          {property.description && (
+            <p className="realestate-description">{property.description}</p>
+          )}
 
-          <div className="realestate-chip-cloud">
-            {property.amenities.map((amenity) => (
-              <span key={amenity}>{amenity}</span>
-            ))}
-          </div>
+          {property.amenities?.length > 0 && (
+            <div className="realestate-chip-cloud">
+              {[...new Set(property.amenities)].map((a) => (
+                <span key={a}>{a}</span>
+              ))}
+            </div>
+          )}
 
+          {/* ENHANCED MAP SECTION */}
           <div className="realestate-map-card">
-            <strong>Map location</strong>
-            <span>{property.mapLabel}</span>
-            {(() => {
-              const lat = Number(property.mapLocationLat);
-              const lng = Number(property.mapLocationLng);
-              const hasCoordinates =
-                property.mapLocationLat !== "" &&
-                property.mapLocationLng !== "" &&
-                Number.isFinite(lat) &&
-                Number.isFinite(lng);
-              if (hasCoordinates) {
-                return (
-                  <>
-                    <span>
-                      {lat.toFixed(5)}, {lng.toFixed(5)}
-                    </span>
-                    <div className="realestate-map-embed">
-                      <iframe
-                        title="Property location"
-                        src={`https://www.openstreetmap.org/export/embed.html?bbox=${lng - 0.01}%2C${lat - 0.01}%2C${lng + 0.01}%2C${lat + 0.01}&layer=mapnik&marker=${lat}%2C${lng}`}
-                        loading="lazy"
-                      />
-                    </div>
-                    <a
-                      href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open live map
-                    </a>
-                  </>
-                );
-              }
-              if (property.mapPreviewUrl) {
-                return (
-                  <div className="realestate-map-preview">
-                    <img src={property.mapPreviewUrl} alt={`Map preview for ${property.title}`} />
-                  </div>
-                );
-              }
-              return <span>Location details will appear here when GPS coordinates are available.</span>;
-            })()}
+            <div className="re-map-header">
+              <strong>📍 Location</strong>
+              <div className="re-map-header-actions">
+                {osmFullUrl && (
+                  <a href={osmFullUrl} target="_blank" rel="noreferrer" className="re-map-action-link">
+                    Open map ↗
+                  </a>
+                )}
+                {streetViewUrl && (
+                  <a href={streetViewUrl} target="_blank" rel="noreferrer" className="re-map-action-link">
+                    Street view ↗
+                  </a>
+                )}
+              </div>
+            </div>
+
+            <span className="re-map-label">{property.mapLabel || property.address || property.location}</span>
+
+            {/* Nominatim reverse geocoded address */}
+            {hasCoords && (
+              <div className="re-map-geocode">
+                {geocodeLoading ? (
+                  <span className="re-map-geocode-loading">Resolving address…</span>
+                ) : geocodedAddress ? (
+                  <span className="re-map-geocode-result">🗺 {geocodedAddress}</span>
+                ) : null}
+              </div>
+            )}
+
+            {/* Coordinates */}
+            {hasCoords && (
+              <span className="re-map-coords">{lat.toFixed(5)}, {lng.toFixed(5)}</span>
+            )}
+
+            {/* OpenStreetMap embed */}
+            {osmEmbedUrl ? (
+              <div className="realestate-map-embed">
+                <iframe
+                  title={`Map location for ${property.title}`}
+                  src={osmEmbedUrl}
+                  loading="lazy"
+                  allowFullScreen
+                />
+              </div>
+            ) : property.mapPreviewUrl ? (
+              <div className="realestate-map-preview">
+                <img src={property.mapPreviewUrl} alt={`Map preview for ${property.title}`} />
+              </div>
+            ) : (
+              <span className="re-map-no-coords">Location coordinates will appear here once the seller adds GPS data.</span>
+            )}
           </div>
 
+          {/* CONTACT CARD */}
           <div className="realestate-contact-card">
             <strong>{property.sellerName}</strong>
-            <span>
-              {property.sellerRole} | {property.languageSupport?.join(", ") || "English"}
-            </span>
-            <span>
-              {property.rating?.toFixed(1)} / 5 from {property.reviewCount || property.reviews?.length || 0} reviews
-            </span>
-            {property.contactPhone ? <span>Call: {property.contactPhone}</span> : null}
+            <span>{property.sellerRole} · {(property.languageSupport || ["English"]).join(", ")}</span>
+            <span>⭐ {property.rating?.toFixed(1) || "—"} / 5 from {property.reviewCount || property.reviews?.length || 0} reviews</span>
+            {property.contactPhone && <span>📱 {property.contactPhone}</span>}
           </div>
 
+          {/* TRUST FLAGS */}
           <div className="realestate-trust-flags-grid">
             {summary.flags.map((f) => (
               <div key={f.key} className={`realestate-trust-flag ${f.ok ? "ok" : "warn"}`}>
                 <span className={`realestate-trust-flag-dot ${f.ok ? "ok" : "warn"}`} />
-                <div>
-                  <strong>{f.label}</strong>
-                </div>
+                <div><strong>{f.label}</strong></div>
               </div>
             ))}
           </div>
@@ -208,91 +287,99 @@ const PropertyDetailTabs = ({
             <span>Media: {property.mediaGallery?.length || property.mediaCount || 0} assets</span>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {activeTab === "media" ? (
+      {/* ── TAB: MEDIA ── */}
+      {activeTab === "media" && (
         <div className="realestate-detail-tab-body">
           <div className="realestate-detail-media-grid">
             {property.mediaGallery?.length > 0 ? (
               property.mediaGallery.slice(0, 8).map((media) => (
                 <div key={media.id} className="realestate-detail-media-item">
-                  {media.type === "image" ? <img src={media.url} alt={media.label || property.title} /> : null}
-                  {media.type !== "image" ? (
-                    <a href={media.url} target="_blank" rel="noreferrer">
-                      {media.type === "video" ? "Video tour" : media.type === "floor-plan" ? "Floor plan" : media.type === "brochure" ? "Brochure PDF" : "Map preview"}
+                  {media.type === "image" ? (
+                    <img
+                      src={media.url}
+                      alt={media.label || property.title}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    <a href={media.url} target="_blank" rel="noreferrer" className="re-media-link">
+                      <span className="re-media-link-icon">
+                        {media.type === "video" ? "▶" : media.type === "floor-plan" ? "📐" : media.type === "brochure" ? "📄" : "🗺"}
+                      </span>
+                      <span>
+                        {media.type === "video" ? "Video tour" : media.type === "floor-plan" ? "Floor plan" : media.type === "brochure" ? "Brochure PDF" : "Map preview"}
+                      </span>
                     </a>
-                  ) : null}
-                  <span>{media.label || media.type}</span>
+                  )}
+                  <span className="re-media-label">{media.label || media.type}</span>
                 </div>
               ))
             ) : (
               <div className="realestate-detail-media">
-                <strong>Media gallery available</strong>
-                <span>{property.mediaCount} media assets</span>
+                <strong>Media gallery</strong>
+                <span>{property.mediaCount || 0} assets available from the seller</span>
               </div>
             )}
           </div>
-        </div>
-      ) : null}
 
-      {activeTab === "documents" ? (
+          {/* VIDEO TOUR QUICK LINK */}
+          {property.videoTourUrl && (
+            <div className="re-media-video-section">
+              <a href={property.videoTourUrl} target="_blank" rel="noreferrer" className="re-media-video-btn">
+                ▶ Watch video tour
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB: NEARBY (Overpass API — FREE) ── */}
+      {activeTab === "nearby" && (
+        <div className="realestate-detail-tab-body">
+          <NearbyAmenitiesMap property={property} />
+        </div>
+      )}
+
+      {/* ── TAB: MARKET INSIGHTS ── */}
+      {activeTab === "insights" && (
+        <div className="realestate-detail-tab-body">
+          <PriceInsightsPanel property={property} />
+        </div>
+      )}
+
+      {/* ── TAB: DOCUMENTS ── */}
+      {activeTab === "documents" && (
         <div className="realestate-detail-tab-body">
           <div className="realestate-docs-card">
             <div className="realestate-section-heading">
-              <h3>Verification & documents</h3>
+              <h3>Verification &amp; documents</h3>
               <p>Transparent status for KYC, RERA, and key property documents.</p>
             </div>
 
             <div className="realestate-docs-grid">
-              <div className="realestate-docs-item">
-                <span className={`realestate-docs-dot ${property.verified ? "ok" : "warn"}`} />
-                <div>
-                  <strong>KYC</strong>
-                  <span>{property.verified ? "Owner verified" : "Verification pending"}</span>
+              {[
+                { ok: property.verified, label: "KYC", detail: property.verified ? "Owner verified" : "Verification pending" },
+                { ok: Boolean(property.reraNumber), label: "RERA", detail: property.reraNumber || "RERA pending" },
+                {
+                  ok: property.titleDeedStatus === "verified",
+                  bad: property.titleDeedStatus === "rejected",
+                  label: "Title deed",
+                  detail: property.titleDeedStatus,
+                },
+                { ok: property.taxReceipt, label: "Tax receipt", detail: property.taxReceipt ? "Available" : "Pending" },
+                { ok: property.buildingPermit, label: "Building permit", detail: property.buildingPermit ? "Available" : "Pending" },
+                { ok: property.encumbranceCertificate, label: "Encumbrance certificate", detail: property.encumbranceCertificate ? "Available" : "Pending" },
+              ].map((doc) => (
+                <div key={doc.label} className="realestate-docs-item">
+                  <span className={`realestate-docs-dot ${doc.ok ? "ok" : doc.bad ? "bad" : "warn"}`} />
+                  <div>
+                    <strong>{doc.label}</strong>
+                    <span>{doc.detail}</span>
+                  </div>
                 </div>
-              </div>
-
-              <div className="realestate-docs-item">
-                <span className={`realestate-docs-dot ${property.reraNumber ? "ok" : "warn"}`} />
-                <div>
-                  <strong>RERA</strong>
-                  <span>{property.reraNumber ? property.reraNumber : "RERA pending"}</span>
-                </div>
-              </div>
-
-              <div className="realestate-docs-item">
-                <span
-                  className={`realestate-docs-dot ${property.titleDeedStatus === "verified" ? "ok" : property.titleDeedStatus === "rejected" ? "bad" : "warn"}`}
-                />
-                <div>
-                  <strong>Title deed</strong>
-                  <span>{property.titleDeedStatus}</span>
-                </div>
-              </div>
-
-              <div className="realestate-docs-item">
-                <span className={`realestate-docs-dot ${property.taxReceipt ? "ok" : "warn"}`} />
-                <div>
-                  <strong>Tax receipt</strong>
-                  <span>{property.taxReceipt ? "Available" : "Pending"}</span>
-                </div>
-              </div>
-
-              <div className="realestate-docs-item">
-                <span className={`realestate-docs-dot ${property.buildingPermit ? "ok" : "warn"}`} />
-                <div>
-                  <strong>Building permit</strong>
-                  <span>{property.buildingPermit ? "Available" : "Pending"}</span>
-                </div>
-              </div>
-
-              <div className="realestate-docs-item">
-                <span className={`realestate-docs-dot ${property.encumbranceCertificate ? "ok" : "warn"}`} />
-                <div>
-                  <strong>Encumbrance certificate</strong>
-                  <span>{property.encumbranceCertificate ? "Available" : "Pending"}</span>
-                </div>
-              </div>
+              ))}
             </div>
 
             <div className="realestate-docs-ctas">
@@ -305,27 +392,25 @@ const PropertyDetailTabs = ({
             </div>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {activeTab === "financing" ? (
+      {activeTab === "financing" && (
         <div className="realestate-detail-tab-body">{loanCalculator}</div>
-      ) : null}
+      )}
 
-      {activeTab === "messages" ? (
+      {activeTab === "messages" && (
         <div className="realestate-detail-tab-body">{uiMessages?.messages}</div>
-      ) : null}
+      )}
 
-      {activeTab === "reviews" ? (
+      {activeTab === "reviews" && (
         <div className="realestate-detail-tab-body">{uiMessages?.reviews}</div>
-      ) : null}
+      )}
 
-      {activeTab === "actions" ? (
+      {activeTab === "actions" && (
         <div className="realestate-detail-tab-body">{uiMessages?.actions}</div>
-      ) : null}
+      )}
     </>
   );
 };
 
 export default PropertyDetailTabs;
-
-

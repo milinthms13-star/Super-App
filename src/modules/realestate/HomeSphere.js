@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
 import PropertyCard from "./components/PropertyCard";
 import PropertyDetailTabs from "./components/PropertyDetailTabs";
@@ -7,8 +7,10 @@ import LoanCalculator from "./components/LoanCalculator";
 import PopularLocations from "./components/PopularLocations";
 import PropertyCategories from "./components/PropertyCategories";
 import {
+  ALL_SEED_PROPERTIES,
   HOME_LOAN_PARTNERS,
-  REAL_ESTATE_SEED_PROPERTIES,
+  MARKET_TRENDS,
+  RBI_RATE_INFO,
 } from "./realEstateConstants";
 import {
   calculateEMI,
@@ -82,6 +84,34 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
   const [loanTenure, setLoanTenure] = useState("20");
   const [loanInterest, setLoanInterest] = useState("8.5");
   const [loanEstimateResult, setLoanEstimateResult] = useState("");
+  const [loanEligibility, setLoanEligibility] = useState({ monthlyIncome: "95000", existingEmi: "15000" });
+
+  // Nominatim search autocomplete
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
+  const nominatimDebounce = useRef(null);
+
+  const fetchLocationSuggestions = useCallback((query) => {
+    clearTimeout(nominatimDebounce.current);
+    if (!query || query.length < 3) { setLocationSuggestions([]); return; }
+    nominatimDebounce.current = setTimeout(async () => {
+      try {
+        const resp = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=in&format=json&limit=5&addressdetails=1`,
+          { headers: { "Accept-Language": "en", "User-Agent": "HomeSphere/1.0" } }
+        );
+        const data = await resp.json();
+        setLocationSuggestions(
+          data.map((item) => ({
+            label: item.display_name.split(",").slice(0, 3).join(", "),
+            city: item.address?.city || item.address?.town || item.address?.village || "",
+          }))
+        );
+        setShowLocationSuggestions(true);
+      } catch { setLocationSuggestions([]); }
+    }, 400);
+  }, []);
+
   const [asyncState, setAsyncState] = useState({
     enquiry: false,
     message: false,
@@ -100,14 +130,14 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     }, 3800);
   };
 
-  // Load properties
+  // Load properties — use ALL_SEED_PROPERTIES (6 properties across India) as fallback
   const sourceProperties = useMemo(() => {
     const incomingProperties = Array.isArray(mockData?.realestateProperties)
       ? mockData.realestateProperties
       : [];
     return incomingProperties.length > 0
       ? incomingProperties
-      : REAL_ESTATE_SEED_PROPERTIES;
+      : ALL_SEED_PROPERTIES;
   }, [mockData?.realestateProperties]);
 
   const properties = useMemo(
@@ -151,6 +181,14 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
       avgPrice,
     };
   }, [properties]);
+
+  // Active city market trend chip
+  const activeTrend = useMemo(() => {
+    const city = locationFilter !== "All" ? locationFilter : null;
+    if (!city) return null;
+    const entry = Object.entries(MARKET_TRENDS).find(([k]) => k.toLowerCase() === city.toLowerCase());
+    return entry ? entry[1] : null;
+  }, [locationFilter]);
 
   // Apply filters
   const filteredProperties = useMemo(() => {
@@ -196,7 +234,13 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     const copy = [...filteredProperties];
     if (sortBy === "price-asc") return copy.sort((a, b) => a.priceValue - b.priceValue);
     if (sortBy === "price-desc") return copy.sort((a, b) => b.priceValue - a.priceValue);
-    if (sortBy === "newest") return copy.reverse();
+    if (sortBy === "newest") return copy.sort((a, b) => new Date(b.postedOn) - new Date(a.postedOn));
+    if (sortBy === "rating") return copy.sort((a, b) => b.rating - a.rating);
+    if (sortBy === "ppsf-asc") return copy.sort((a, b) => {
+      const pa = a.areaSqft > 0 ? (a.priceValue * 100000) / a.areaSqft : Infinity;
+      const pb = b.areaSqft > 0 ? (b.priceValue * 100000) / b.areaSqft : Infinity;
+      return pa - pb;
+    });
     return copy; // featured
   }, [filteredProperties, sortBy]);
 
@@ -392,7 +436,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
           </div>
 
           {/* SEARCH BAR + LOCATION + TYPE */}
-          <div className="homesphere-search-row">
+          <div className="homesphere-search-row" style={{ position: "relative" }}>
             <input
               type="text"
               className="homesphere-search-input"
@@ -400,17 +444,38 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
               onChange={(e) => setSearchText(e.target.value)}
               placeholder="Search by location, landmark, builder..."
             />
-            <select
-              className="homesphere-search-select"
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-            >
-              {locations.map((loc) => (
-                <option key={loc} value={loc}>
-                  {loc}
-                </option>
-              ))}
-            </select>
+            <div className="hs-location-autocomplete" style={{ position: "relative" }}>
+              <input
+                type="text"
+                className="homesphere-search-select"
+                placeholder="City or area…"
+                value={locationFilter === "All" ? "" : locationFilter}
+                onChange={(e) => {
+                  setLocationFilter(e.target.value || "All");
+                  fetchLocationSuggestions(e.target.value);
+                }}
+                onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 200)}
+                aria-label="Filter by location"
+              />
+              {showLocationSuggestions && locationSuggestions.length > 0 && (
+                <ul className="hs-location-suggestions" role="listbox">
+                  {locationSuggestions.map((s, i) => (
+                    <li
+                      key={i}
+                      role="option"
+                      className="hs-location-suggestion-item"
+                      onMouseDown={() => {
+                        const city = s.city || s.label.split(",")[0];
+                        setLocationFilter(city);
+                        setShowLocationSuggestions(false);
+                      }}
+                    >
+                      📍 {s.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <select
               className="homesphere-search-select"
               value={typeFilter}
@@ -421,7 +486,27 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                   {type}
                 </option>
               ))}
-              </select>
+            </select>
+          </div>
+
+          {/* MARKET TREND CHIP */}
+          {activeTrend && (
+            <div className="hs-trend-chips">
+              <span className="hs-trend-chip">
+                📈 {locationFilter}: +{activeTrend.yoyGrowthPct}% YoY
+              </span>
+              <span className="hs-trend-chip">
+                💰 ₹{activeTrend.avgPricePerSqft.toLocaleString("en-IN")}/sqft
+              </span>
+              <span className="hs-trend-chip hs-trend-demand">
+                {activeTrend.demandIndex} demand
+              </span>
+            </div>
+          )}
+
+          {/* RBI RATE TICKER */}
+          <div className="hs-rbi-ticker">
+            🏦 RBI repo: <strong>{RBI_RATE_INFO.repoRate}%</strong> · Home loans: <strong>{RBI_RATE_INFO.homeLoansRangeMin}–{RBI_RATE_INFO.homeLoansRangeMax}%</strong> · {RBI_RATE_INFO.lastUpdated}
           </div>
 
           <div className="homesphere-hero-actions">
@@ -662,11 +747,14 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                     setLoanTenure={setLoanTenure}
                     loanInterest={loanInterest}
                     setLoanInterest={setLoanInterest}
-                    loanEligibility={{}}
-                    setLoanEligibility={() => {}}
+                    loanEligibility={loanEligibility}
+                    setLoanEligibility={setLoanEligibility}
                     bankComparison={bankComparison}
                     loanEstimateResult={loanEstimateResult}
                     onEstimate={handleLoanEstimate}
+                    propertyLocation={selectedProperty?.location}
+                    propertyPriceValue={selectedProperty?.priceValue}
+                    isUnderConstruction={selectedProperty?.underConstruction}
                     loading={false}
                   />
                 }

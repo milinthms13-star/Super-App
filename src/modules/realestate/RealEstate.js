@@ -17,7 +17,7 @@ import {
   CONSTRUCTION_SERVICES,
   DEFAULT_LISTING_FORM,
   HOME_LOAN_PARTNERS,
-  REAL_ESTATE_SEED_PROPERTIES,
+  ALL_SEED_PROPERTIES,
   ROLE_MODES,
   SUBSCRIPTION_PLANS,
   TENANT_UTILITIES,
@@ -171,7 +171,7 @@ const RealEstate = () => {
 
   const sourceProperties = useMemo(() => {
     const incomingProperties = Array.isArray(mockData?.realestateProperties) ? mockData.realestateProperties : [];
-    return incomingProperties.length > 0 ? incomingProperties : REAL_ESTATE_SEED_PROPERTIES;
+    return incomingProperties.length > 0 ? incomingProperties : ALL_SEED_PROPERTIES;
   }, [mockData?.realestateProperties]);
 
   const properties = useMemo(
@@ -244,6 +244,22 @@ const RealEstate = () => {
         (filters.nearbyFilter === "hospital" && typeof property.nearbyHospitalKm === "number" && property.nearbyHospitalKm <= 3) ||
         (filters.nearbyFilter === "metro" && typeof property.nearbyMetroKm === "number" && property.nearbyMetroKm <= 2.5);
 
+      // New professional filters
+      const matchesBedrooms =
+        !filters.bedroomsFilter || filters.bedroomsFilter === "all" ||
+        (filters.bedroomsFilter === "0" && property.bedrooms === 0) ||
+        (filters.bedroomsFilter === "4" && property.bedrooms >= 4) ||
+        String(property.bedrooms) === filters.bedroomsFilter;
+
+      const matchesRera =
+        !filters.reraFilter || filters.reraFilter === "all" ||
+        (filters.reraFilter === "rera-only" && Boolean(property.reraNumber));
+
+      const pricePerSqft = property.areaSqft > 0 ? (property.priceValue * 100000) / property.areaSqft : 0;
+      const matchesPpsf =
+        !filters.maxPricePerSqft || Number(filters.maxPricePerSqft) === 0 ||
+        pricePerSqft <= Number(filters.maxPricePerSqft);
+
       return (
         matchesSearch &&
         matchesIntent &&
@@ -255,7 +271,10 @@ const RealEstate = () => {
         matchesVerified &&
         matchesPossession &&
         matchesAmenity &&
-        matchesNearby
+        matchesNearby &&
+        matchesBedrooms &&
+        matchesRera &&
+        matchesPpsf
       );
     });
 
@@ -264,6 +283,12 @@ const RealEstate = () => {
       if (filters.sortBy === "price-desc") return second.priceValue - first.priceValue;
       if (filters.sortBy === "newest") return new Date(second.postedOn) - new Date(first.postedOn);
       if (filters.sortBy === "popularity") return second.leads.length - first.leads.length;
+      if (filters.sortBy === "rating") return second.rating - first.rating;
+      if (filters.sortBy === "ppsf-asc") {
+        const ppsfA = first.areaSqft > 0 ? (first.priceValue * 100000) / first.areaSqft : Infinity;
+        const ppsfB = second.areaSqft > 0 ? (second.priceValue * 100000) / second.areaSqft : Infinity;
+        return ppsfA - ppsfB;
+      }
       return Number(second.featured) - Number(first.featured) || second.rating - first.rating;
     });
 
@@ -1206,6 +1231,9 @@ const RealEstate = () => {
                   onEstimate={handleLoanEstimate}
                   onApply={handleLoanApply}
                   loading={asyncState.loanApply}
+                  propertyLocation={selectedProperty?.location}
+                  propertyPriceValue={selectedProperty?.priceValue}
+                  isUnderConstruction={selectedProperty?.underConstruction}
                 />
               }
               uiMessages={{
