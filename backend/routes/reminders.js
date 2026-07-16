@@ -273,7 +273,9 @@ router.post('/', async (req, res) => {
       whatsappPhoneNumber,
       telegramChatId,
       pushEnabled,
-      templateId
+      templateId,
+      recipientContactId,
+      deliveryMode,
     } = req.body;
 
     const validationMessage = validateReminderFields({
@@ -295,6 +297,27 @@ router.post('/', async (req, res) => {
     }
     const ownerId = getReminderOwnerId(req.user);
 
+    // Validate recipientContactId if provided
+    if (recipientContactId && !mongoose.Types.ObjectId.isValid(recipientContactId)) {
+      return res.status(400).json({ success: false, message: 'Invalid recipient contact ID' });
+    }
+
+    // Ensure the contact is not blocked by the owner
+    if (recipientContactId) {
+      const Contact = require('../models/Contact');
+      const contactRecord = await Contact.findOne({
+        userId: ownerId,
+        contactUserId: recipientContactId,
+        isBlocked: false,
+      });
+      if (!contactRecord) {
+        return res.status(400).json({
+          success: false,
+          message: 'Recipient is not in your contacts or is blocked',
+        });
+      }
+    }
+
     const reminder = new Reminder({
       userId: ownerId,
       title: title.trim(),
@@ -305,6 +328,8 @@ router.post('/', async (req, res) => {
       dueTime,
       reminders,
       recurring,
+      recipientContactId: recipientContactId || null,
+      deliveryMode: deliveryMode || 'text',
       reminderBeforeOffsets:
         Array.isArray(reminderBeforeOffsets) && reminderBeforeOffsets.length
           ? reminderBeforeOffsets
@@ -378,7 +403,9 @@ router.put('/:id', async (req, res) => {
       whatsappPhoneNumber,
       telegramChatId,
       pushEnabled,
-      templateId
+      templateId,
+      recipientContactId,
+      deliveryMode,
     } = req.body;
 
     const validationMessage = validateReminderFields(
@@ -457,6 +484,29 @@ router.put('/:id', async (req, res) => {
     }
     if (templateId !== undefined) {
       reminder.templateId = templateId || undefined;
+    }
+    if (recipientContactId !== undefined) {
+      if (recipientContactId && !mongoose.Types.ObjectId.isValid(recipientContactId)) {
+        return res.status(400).json({ success: false, message: 'Invalid recipient contact ID' });
+      }
+      if (recipientContactId) {
+        const Contact = require('../models/Contact');
+        const contactRecord = await Contact.findOne({
+          userId: ownerId,
+          contactUserId: recipientContactId,
+          isBlocked: false,
+        });
+        if (!contactRecord) {
+          return res.status(400).json({
+            success: false,
+            message: 'Recipient is not in your contacts or is blocked',
+          });
+        }
+      }
+      reminder.recipientContactId = recipientContactId || null;
+    }
+    if (deliveryMode !== undefined && ['text', 'voice'].includes(deliveryMode)) {
+      reminder.deliveryMode = deliveryMode;
     }
 
     if (reminder.messageType === 'text') {
@@ -3230,6 +3280,277 @@ router.get('/:id/whatsapp-group-status', authenticate, async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to fetch group status' });
   }
 });
+
+// ============ PRO REMINDER: CONTACT DELIVERY ENDPOINTS ============
+
+/**
+ * POST /api/reminders/:id/notify-contact
+ * Send a reminder notification to the recipient contact via:
+ *   1. WhatsApp (Meta WABA free tier) — if whatsappPhoneNumber is set on the contact
+ *   2. Telegram — if telegramChatId is set
+ *   3. In-app notification fallback (always fires)
+ * The scheduler also calls this internally when a contact reminder is due.
+ */
+router.post('/:id/notify-contact', authenticate, async (req, res) => {
+  try {
+    const ownerId = getReminderOwnerId(req.user);
+
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId: ownerId })
+      .populate('recipientContactId', 'name username email');
+
+    if (!reminder) {
+      return res.status(404).json({ success: false, message: 'Reminder not found' });
+    }
+
+    if (!reminder.recipientContactId) {
+      return res.status(400).json({ success: false, message: 'This reminder has no recipient contact configured' });
+    }
+
+    const recipientUser = reminder.recipientContactId;
+    const recipientName = recipientUser?.name || recipientUser?.username || 'someone';
+    const senderName = req.user?.name || req.user?.username || 'A contact';
+
+    const dueLabel = reminder.dueTime
+      ? `${reminder.dueDate.toLocaleDateString('en-IN')} at ${reminder.dueTime}`
+      : reminder.dueDate.toLocaleDateString('en-IN');
+
+    const messageBody =
+      `🔔 Reminder from ${senderName}\n\n` +
+      `📋 *${reminder.title}*\n` +
+      (reminder.description ? `${reminder.description}\n\n` : '\n') +
+      `📅 Due: ${dueLabel}\n` +
+      `⚡ Priority: ${reminder.priority}`;
+
+    const deliveryResults = [];
+
+    // ── 1. WhatsApp via Meta WABA (free with approved template) ──────────────
+    if (reminder.whatsappPhoneNumber) {
+      try {
+        const { sendWhatsAppReminder } = require('../utils/sendWhatsAppReminder');
+        const waResult = await sendWhatsAppReminder(reminder.whatsappPhoneNumber, {
+          senderName,
+          title: reminder.title,
+          description: reminder.description || '',
+          dueLabel,
+          priority: reminder.priority,
+        });
+        deliveryResults.push({ channel: 'WhatsApp', ...waResult });
+        reminder.recordNotificationSent(0, 'WhatsApp');
+      } catch (waErr) {
+        logger.warn('WhatsApp notify-contact failed:', waErr.message);
+        deliveryResults.push({ channel: 'WhatsApp', success: false, error: waErr.message });
+      }
+    }
+
+    // ── 2. Telegram bot (free) ───────────────────────────────────────────────
+    if (reminder.telegramChatId) {
+      try {
+        const { sendTelegramMessage } = require('../utils/sendTelegramMessage');
+        const tgResult = await sendTelegramMessage(reminder.telegramChatId, messageBody);
+        deliveryResults.push({ channel: 'Telegram', ...tgResult });
+        reminder.recordNotificationSent(0, 'Telegram');
+      } catch (tgErr) {
+        logger.warn('Telegram notify-contact failed:', tgErr.message);
+        deliveryResults.push({ channel: 'Telegram', success: false, error: tgErr.message });
+      }
+    }
+
+    // ── 3. In-app notification (always) ─────────────────────────────────────
+    try {
+      const { emitInAppNotification } = require('../utils/inAppNotification');
+      await emitInAppNotification(String(recipientUser._id), {
+        type: 'reminder',
+        title: `Reminder: ${reminder.title}`,
+        body: `${senderName} set a reminder for you. Due: ${dueLabel}`,
+        reminderId: String(reminder._id),
+        priority: reminder.priority,
+      });
+      deliveryResults.push({ channel: 'In-app', success: true });
+    } catch (inAppErr) {
+      logger.warn('In-app notify-contact failed:', inAppErr.message);
+      deliveryResults.push({ channel: 'In-app', success: false, error: inAppErr.message });
+    }
+
+    await reminder.save();
+
+    logger.info(`notify-contact: reminder ${reminder._id} delivered to ${String(recipientUser._id)} via ${deliveryResults.map(r => r.channel).join(', ')}`);
+
+    const anySuccess = deliveryResults.some(r => r.success);
+    res.status(anySuccess ? 200 : 207).json({
+      success: anySuccess,
+      data: {
+        reminderId: reminder._id,
+        recipientName,
+        deliveryResults,
+      },
+      message: anySuccess
+        ? 'Reminder notification sent to contact'
+        : 'Notification attempted but all channels failed',
+    });
+  } catch (error) {
+    logger.error('Error in notify-contact:', error);
+    res.status(500).json({ success: false, message: 'Failed to notify contact' });
+  }
+});
+
+/**
+ * POST /api/reminders/:id/call-contact
+ * Initiate a phone call to the reminder's recipient contact.
+ * Strategy:
+ *   - If Twilio is configured → place an automated call (TTS / pre-recorded)
+ *   - Otherwise → return a tel: URI so the browser can open the native dialer
+ * The frontend can detect the response type and act accordingly.
+ */
+router.post('/:id/call-contact', authenticate, async (req, res) => {
+  try {
+    const ownerId = getReminderOwnerId(req.user);
+
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId: ownerId })
+      .populate('recipientContactId', 'name username email');
+
+    if (!reminder) {
+      return res.status(404).json({ success: false, message: 'Reminder not found' });
+    }
+
+    // Resolve the phone number: prefer the explicit recipientPhoneNumber on the
+    // reminder; fall back to the contact's saved phoneNumber field if present.
+    const Contact = require('../models/Contact');
+    let phoneNumber = String(reminder.recipientPhoneNumber || '').trim();
+
+    if (!phoneNumber && reminder.recipientContactId) {
+      const contactRecord = await Contact.findOne({
+        userId: ownerId,
+        contactUserId: reminder.recipientContactId._id,
+      }).select('phoneNumber');
+      phoneNumber = String(contactRecord?.phoneNumber || '').trim();
+    }
+
+    if (!phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'No phone number available for this contact. Please add a phone number to the reminder or the contact profile.',
+      });
+    }
+
+    const recipientName =
+      reminder.recipientContactId?.name ||
+      reminder.recipientContactId?.username ||
+      'Contact';
+
+    // ── Twilio path ──────────────────────────────────────────────────────────
+    const twilioConfig = require('../config/twilio');
+    if (twilioConfig.isConfigured()) {
+      try {
+        const callResult = await voiceCallService.initiateVoiceCall({
+          reminderId: String(reminder._id),
+          recipientPhoneNumber: phoneNumber,
+          voiceMessage: reminder.voiceMessage || `You have a reminder: ${reminder.title}`,
+          messageType: reminder.messageType || 'text',
+          senderName: req.user?.name || 'Reminder Service',
+          voiceNoteUrl: reminder.voiceNoteUrl || '',
+        });
+
+        reminder.recordCallAttempt('ringing', callResult.callSid || null);
+        await reminder.save();
+
+        return res.json({
+          success: true,
+          callMethod: 'twilio',
+          data: {
+            reminderId: reminder._id,
+            recipientName,
+            phoneNumber,
+            callSid: callResult.callSid,
+            message: `Automated call placed to ${recipientName}`,
+          },
+        });
+      } catch (twilioErr) {
+        logger.warn('Twilio call failed, falling back to tel: URI:', twilioErr.message);
+        // Fall through to tel: URI
+      }
+    }
+
+    // ── tel: URI fallback (zero API cost) ─────────────────────────────────
+    // The frontend opens this in the browser to trigger the native dialer.
+    const telUri = `tel:${phoneNumber.replace(/\s/g, '')}`;
+
+    res.json({
+      success: true,
+      callMethod: 'tel-uri',
+      data: {
+        reminderId: reminder._id,
+        recipientName,
+        phoneNumber,
+        telUri,
+        message: `Open dialer to call ${recipientName}`,
+      },
+    });
+  } catch (error) {
+    logger.error('Error in call-contact:', error);
+    res.status(500).json({ success: false, message: 'Failed to initiate call' });
+  }
+});
+
+/**
+ * GET /api/reminders/contacts/search
+ * Search the current user's non-blocked contacts for the reminder recipient picker.
+ * Returns: id, name, username, email, phoneNumber, whatsappPhoneNumber, avatar
+ */
+router.get('/contacts/search', authenticate, async (req, res) => {
+  try {
+    const ownerId = getReminderOwnerId(req.user);
+    const { q = '' } = req.query;
+
+    const Contact = require('../models/Contact');
+    const query = { userId: ownerId, isBlocked: false };
+
+    const contacts = await Contact.find(query)
+      .populate('contactUserId', 'name username email avatar status')
+      .sort({ lastInteractionAt: -1 })
+      .limit(50);
+
+    const searchTerm = String(q).trim().toLowerCase();
+
+    const results = contacts
+      .map((c) => {
+        const u = c.contactUserId;
+        if (!u) return null;
+        return {
+          contactId: String(c._id),
+          userId: String(u._id),
+          name: u.name || u.username || 'Unknown',
+          username: u.username || '',
+          email: u.email || '',
+          avatar: u.avatar || '',
+          status: u.status || '',
+          // Phone saved at contact level
+          phoneNumber: c.phoneNumber || '',
+          category: c.category || 'personal',
+          isFavorite: Boolean(c.isFavorite),
+        };
+      })
+      .filter(Boolean)
+      .filter((c) => {
+        if (!searchTerm) return true;
+        return (
+          c.name.toLowerCase().includes(searchTerm) ||
+          c.username.toLowerCase().includes(searchTerm) ||
+          c.email.toLowerCase().includes(searchTerm) ||
+          c.phoneNumber.includes(searchTerm)
+        );
+      });
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    logger.error('Error searching reminder contacts:', error);
+    res.status(500).json({ success: false, message: 'Failed to search contacts' });
+  }
+});
+
+// ── Pro Reminder: save recipientContactId + deliveryMode when creating/updating ──
+// (Handled in the existing POST / PUT routes by reading these fields from req.body)
+// The existing POST route already stores arbitrary fields via spread — we add explicit
+// handling below as a patch to the two primary routes.
 
 module.exports = router;
 module.exports.__testables = {

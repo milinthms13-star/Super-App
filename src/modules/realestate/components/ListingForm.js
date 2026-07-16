@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AMENITIES_LIST, LISTING_TYPE_OPTIONS, TITLE_DEED_OPTIONS } from "../realEstateConstants";
 
 const ListingForm = ({
@@ -12,6 +12,32 @@ const ListingForm = ({
   onSubmit,
 }) => {
   const [showAmenitiesPicker, setShowAmenitiesPicker] = useState(false);
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [showLocationSugg, setShowLocationSugg] = useState(false);
+  const nominatimTimer = useRef(null);
+
+  useEffect(() => {
+    const query = listingForm.location;
+    clearTimeout(nominatimTimer.current);
+    if (!query || query.length < 3) { setLocationSuggestions([]); return; }
+    nominatimTimer.current = setTimeout(async () => {
+      try {
+        const resp = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&countrycodes=in&format=json&limit=5&addressdetails=1`,
+          { headers: { "Accept-Language": "en", "User-Agent": "HomeSphere/1.0" } }
+        );
+        const data = await resp.json();
+        setLocationSuggestions(data.map((item) => ({
+          label: item.display_name.split(",").slice(0, 3).join(", "),
+          city: item.address?.city || item.address?.town || item.address?.village || "",
+          lat: item.lat,
+          lon: item.lon,
+        })));
+        setShowLocationSugg(true);
+      } catch { setLocationSuggestions([]); }
+    }, 500);
+    return () => clearTimeout(nominatimTimer.current);
+  }, [listingForm.location]);
 
   if (!["owner", "agent", "builder"].includes(activeRole)) {
     return null;
@@ -103,11 +129,45 @@ const ListingForm = ({
           </>
         )}
 
-        <label className="realestate-field">
-          <span>Location</span>
-          <input name="location" value={listingForm.location} onChange={onInputChange} />
-          {fieldErrors.location ? <small className="realestate-field-error">{fieldErrors.location}</small> : null}
-        </label>
+        <div className="realestate-field" style={{ position: "relative" }}>
+          <label>
+            <span>Location</span>
+            <input
+              name="location"
+              value={listingForm.location}
+              onChange={onInputChange}
+              onFocus={() => locationSuggestions.length > 0 && setShowLocationSugg(true)}
+              onBlur={() => setTimeout(() => setShowLocationSugg(false), 200)}
+              placeholder="Start typing a city or area…"
+              autoComplete="off"
+            />
+            {fieldErrors.location ? <small className="realestate-field-error">{fieldErrors.location}</small> : null}
+          </label>
+          {showLocationSugg && locationSuggestions.length > 0 && (
+            <ul className="re-filter-suggestions" role="listbox">
+              {locationSuggestions.map((s, i) => (
+                <li
+                  key={i}
+                  role="option"
+                  className="re-filter-suggestion-item"
+                  onMouseDown={() => {
+                    const city = s.city || s.label.split(",")[0];
+                    // Patch location, locality, and optionally coords via synthetic events
+                    onInputChange({ target: { name: "location", value: city } });
+                    onInputChange({ target: { name: "locality", value: s.label.split(",")[0] } });
+                    if (s.lat && s.lon) {
+                      onInputChange({ target: { name: "mapLocationLat", value: s.lat } });
+                      onInputChange({ target: { name: "mapLocationLng", value: s.lon } });
+                    }
+                    setShowLocationSugg(false);
+                  }}
+                >
+                  📍 {s.label}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         {listingForm.postingType === "requirement" && (
           <label className="realestate-field">

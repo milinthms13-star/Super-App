@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useMemo } from "react";
+import { MARKET_TRENDS } from "../realEstateConstants";
 
 const LOCATION_GRADIENTS = [
   "linear-gradient(135deg, #8dc5b6 0%, #2c7a7b 100%)",
@@ -11,40 +12,90 @@ const LOCATION_GRADIENTS = [
   "linear-gradient(135deg, #f5c38b 0%, #b57a2f 100%)",
 ];
 
-const PopularLocations = ({ locations, onLocationClick }) => {
-  const topLocations = locations
-    .filter((loc) => loc !== "All")
-    .slice(0, 8)
-    .map((loc, idx) => ({
-      name: loc,
-      count: 48 + idx * 13,
-      gradient: LOCATION_GRADIENTS[idx % LOCATION_GRADIENTS.length],
-    }));
+/**
+ * PopularLocations — shows real listing counts from the properties array
+ * and enriches each city with market trend data where available.
+ */
+const PopularLocations = ({ locations = [], properties = [], onLocationClick }) => {
+  const enrichedLocations = useMemo(() => {
+    // Build real listing counts from properties
+    const countMap = {};
+    (properties || []).forEach((p) => {
+      const city = (p.location || "").trim();
+      if (city && city !== "All") countMap[city] = (countMap[city] || 0) + 1;
+    });
+
+    // Fallback: use the locations array with 0 counts if no property data
+    const cityList = Object.keys(countMap).length > 0
+      ? Object.entries(countMap)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(([name, count]) => ({ name, count }))
+      : (locations || [])
+          .filter((l) => l !== "All")
+          .slice(0, 8)
+          .map((name) => ({ name, count: 0 }));
+
+    return cityList.map((item, idx) => {
+      const trendKey = Object.keys(MARKET_TRENDS).find(
+        (k) => k.toLowerCase() === item.name.toLowerCase()
+      );
+      const trend = trendKey ? MARKET_TRENDS[trendKey] : null;
+      return {
+        ...item,
+        gradient: LOCATION_GRADIENTS[idx % LOCATION_GRADIENTS.length],
+        yoyGrowth: trend?.yoyGrowthPct ?? null,
+        demandIndex: trend?.demandIndex ?? null,
+        avgPpsf: trend?.avgPricePerSqft ?? null,
+      };
+    });
+  }, [locations, properties]);
+
+  if (enrichedLocations.length === 0) return null;
 
   return (
     <section className="homesphere-popular-locations">
       <article className="homesphere-surface-card">
         <div className="realestate-section-heading">
           <h2>Popular Locations</h2>
-          <p>Discover trending neighborhoods</p>
+          <p>Browse by city — real listing counts and market signals</p>
         </div>
+
         <div className="homesphere-locations-carousel">
-          {topLocations.map((location) => (
+          {enrichedLocations.map((location) => (
             <button
               key={location.name}
               type="button"
-              className="homesphere-location-card"
+              className="re-location-card"
               onClick={() => onLocationClick?.(location.name)}
+              aria-label={`Browse ${location.name} — ${location.count} listings`}
             >
-              <div className="homesphere-location-image">
-                <div
-                  className="homesphere-location-image-placeholder"
-                  style={{ background: location.gradient }}
-                />
+              <div
+                className="re-location-image"
+                style={{ background: location.gradient }}
+                aria-hidden="true"
+              >
+                <span className="re-location-initial">
+                  {location.name.charAt(0)}
+                </span>
               </div>
-              <div className="homesphere-location-content">
+
+              <div className="re-location-content">
                 <strong>{location.name}</strong>
-                <span>{location.count}+ listings</span>
+                <span className="re-location-count">
+                  {location.count > 0
+                    ? `${location.count} listing${location.count !== 1 ? "s" : ""}`
+                    : "Listings available"}
+                </span>
+
+                {location.yoyGrowth != null && (
+                  <span className="re-location-growth">
+                    📈 +{location.yoyGrowth}% YoY
+                  </span>
+                )}
+                {location.demandIndex && (
+                  <span className="re-location-demand">{location.demandIndex} demand</span>
+                )}
               </div>
             </button>
           ))}

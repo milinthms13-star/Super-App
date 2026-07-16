@@ -227,34 +227,24 @@ const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const buildRealEstateListQuery = (filters = {}) => {
   const query = {};
 
-  if (filters.type) {
-    query.type = String(filters.type).trim();
-  }
-
-  if (filters.intent) {
-    query.intent = String(filters.intent).trim();
-  }
-
-  if (filters.status) {
-    query.status = String(filters.status).trim();
-  }
-
-  if (filters.postingType) {
-    query.postingType = String(filters.postingType).trim();
-  }
+  if (filters.type) query.type = String(filters.type).trim();
+  if (filters.intent) query.intent = String(filters.intent).trim();
+  if (filters.status) query.status = String(filters.status).trim();
+  if (filters.postingType) query.postingType = String(filters.postingType).trim();
 
   if (filters.verified !== undefined) {
     const bool = normalizeBooleanFilter(filters.verified);
-    if (typeof bool === 'boolean') {
-      query.verified = bool;
-    }
+    if (typeof bool === 'boolean') query.verified = bool;
   }
 
   if (filters.featured !== undefined) {
     const bool = normalizeBooleanFilter(filters.featured);
-    if (typeof bool === 'boolean') {
-      query.featured = bool;
-    }
+    if (typeof bool === 'boolean') query.featured = bool;
+  }
+
+  if (filters.readyToMove !== undefined) {
+    const bool = normalizeBooleanFilter(filters.readyToMove);
+    if (typeof bool === 'boolean') query.readyToMove = bool;
   }
 
   if (filters.location) {
@@ -265,62 +255,132 @@ const buildRealEstateListQuery = (filters = {}) => {
     query.sellerEmail = String(filters.sellerEmail).trim().toLowerCase();
   }
 
+  // Bedrooms exact match
+  if (filters.bedrooms !== undefined && !isNaN(filters.bedrooms)) {
+    query.bedrooms = Number(filters.bedrooms);
+  }
+
+  // RERA: any non-empty reraNumber
+  if (filters.reraOnly === true || filters.reraOnly === 'true') {
+    query.reraNumber = { $exists: true, $ne: '' };
+  }
+
+  // Price range (priceValue in lakhs)
+  if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
+    query.priceValue = {};
+    if (filters.minPrice !== undefined && !isNaN(filters.minPrice)) query.priceValue.$gte = Number(filters.minPrice);
+    if (filters.maxPrice !== undefined && !isNaN(filters.maxPrice)) query.priceValue.$lte = Number(filters.maxPrice);
+  }
+
+  // Min sqft
+  if (filters.minSqft !== undefined && !isNaN(filters.minSqft)) {
+    query.areaSqft = { $gte: Number(filters.minSqft) };
+  }
+
   return query;
 };
 
 const filterRealEstateProperties = (properties, filters = {}) => {
-  return properties.filter((property) => {
-    if (filters.type && property.type !== String(filters.type).trim()) {
-      return false;
-    }
-
-    if (filters.intent && property.intent !== String(filters.intent).trim()) {
-      return false;
-    }
-
-    if (filters.status && property.status !== String(filters.status).trim()) {
-      return false;
-    }
-
-    if (filters.postingType && property.postingType !== String(filters.postingType).trim()) {
-      return false;
-    }
+  let result = properties.filter((property) => {
+    if (filters.type && property.type !== String(filters.type).trim()) return false;
+    if (filters.intent && property.intent !== String(filters.intent).trim()) return false;
+    if (filters.status && property.status !== String(filters.status).trim()) return false;
+    if (filters.postingType && property.postingType !== String(filters.postingType).trim()) return false;
 
     if (filters.verified !== undefined) {
       const bool = normalizeBooleanFilter(filters.verified);
-      if (typeof bool === 'boolean' && property.verified !== bool) {
-        return false;
-      }
+      if (typeof bool === 'boolean' && property.verified !== bool) return false;
     }
 
     if (filters.featured !== undefined) {
       const bool = normalizeBooleanFilter(filters.featured);
-      if (typeof bool === 'boolean' && property.featured !== bool) {
-        return false;
-      }
+      if (typeof bool === 'boolean' && property.featured !== bool) return false;
+    }
+
+    if (filters.readyToMove !== undefined) {
+      const bool = normalizeBooleanFilter(filters.readyToMove);
+      if (typeof bool === 'boolean' && property.readyToMove !== bool) return false;
     }
 
     if (filters.location) {
-      const locationFilter = String(filters.location).trim().toLowerCase();
-      if (!String(property.location || '').toLowerCase().includes(locationFilter)) {
-        return false;
-      }
+      const loc = String(filters.location).trim().toLowerCase();
+      if (!String(property.location || '').toLowerCase().includes(loc)) return false;
     }
 
     if (filters.sellerEmail) {
-      if (String(property.sellerEmail || '').trim().toLowerCase() !== String(filters.sellerEmail).trim().toLowerCase()) {
-        return false;
-      }
+      if (String(property.sellerEmail || '').toLowerCase() !== String(filters.sellerEmail).toLowerCase()) return false;
+    }
+
+    if (filters.bedrooms !== undefined && !isNaN(filters.bedrooms)) {
+      if (property.bedrooms !== Number(filters.bedrooms)) return false;
+    }
+
+    if (filters.reraOnly === true || filters.reraOnly === 'true') {
+      if (!property.reraNumber) return false;
+    }
+
+    if (filters.minPrice !== undefined && !isNaN(filters.minPrice)) {
+      if ((property.priceValue || 0) < Number(filters.minPrice)) return false;
+    }
+
+    if (filters.maxPrice !== undefined && !isNaN(filters.maxPrice)) {
+      if ((property.priceValue || 0) > Number(filters.maxPrice)) return false;
+    }
+
+    if (filters.minSqft !== undefined && !isNaN(filters.minSqft)) {
+      if ((property.areaSqft || 0) < Number(filters.minSqft)) return false;
+    }
+
+    if (filters.maxPricePerSqft !== undefined && !isNaN(filters.maxPricePerSqft)) {
+      const ppsf = property.areaSqft > 0
+        ? (property.priceValue * 100000) / property.areaSqft
+        : Infinity;
+      if (ppsf > Number(filters.maxPricePerSqft)) return false;
     }
 
     return true;
   });
+
+  // In-memory sort
+  const sortBy = filters.sortBy || 'featured';
+  if (sortBy === 'price-asc') result.sort((a, b) => (a.priceValue || 0) - (b.priceValue || 0));
+  else if (sortBy === 'price-desc') result.sort((a, b) => (b.priceValue || 0) - (a.priceValue || 0));
+  else if (sortBy === 'newest') result.sort((a, b) => new Date(b.postedOn) - new Date(a.postedOn));
+  else if (sortBy === 'rating') result.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  else if (sortBy === 'ppsf-asc') result.sort((a, b) => {
+    const pa = a.areaSqft > 0 ? (a.priceValue * 100000) / a.areaSqft : Infinity;
+    const pb = b.areaSqft > 0 ? (b.priceValue * 100000) / b.areaSqft : Infinity;
+    return pa - pb;
+  });
+  else result.sort((a, b) => Number(b.featured) - Number(a.featured) || (b.rating || 0) - (a.rating || 0));
+
+  const skip = Number(filters.skip || 0);
+  const limit = Number(filters.limit || 50);
+  return result.slice(skip, skip + limit);
 };
 
 const listRealEstateProperties = async (filters = {}) => {
   if (useMongoRealEstate()) {
     const query = buildRealEstateListQuery(filters);
-    const records = await RealEstateProperty.find(query).sort({ createdAt: -1 });
+    const skip = Number(filters.skip || 0);
+    const limit = Number(filters.limit || 50);
+
+    // MongoDB sort
+    const sortMap = {
+      'price-asc': { priceValue: 1 },
+      'price-desc': { priceValue: -1 },
+      'newest': { createdAt: -1 },
+      'rating': { rating: -1 },
+      'ppsf-asc': { priceValue: 1 }, // approximate — DB can't do derived field easily
+      'featured': { featured: -1, rating: -1 },
+    };
+    const mongoSort = sortMap[filters.sortBy] || { featured: -1, createdAt: -1 };
+
+    const records = await RealEstateProperty.find(query)
+      .sort(mongoSort)
+      .skip(skip)
+      .limit(limit);
+
     return records.map(serializeRealEstateProperty);
   }
 

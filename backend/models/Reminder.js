@@ -66,7 +66,22 @@ const reminderSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  // Voice call reminder fields
+  // ── Pro Reminder: recipient contact ──────────────────────────────────────
+  // Who should receive this reminder (null = self)
+  recipientContactId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
+  // Delivery preference for the recipient contact
+  // 'text'  → send WhatsApp message (free Meta WABA) or in-app notification
+  // 'voice' → initiate phone call (tel: link / Twilio if configured)
+  deliveryMode: {
+    type: String,
+    enum: ['text', 'voice'],
+    default: 'text',
+  },
+  // ── Legacy / voice-call reminder fields ──────────────────────────────────
   recipientId: {
     type: String,  // User ID of person receiving the reminder
   },
@@ -306,6 +321,7 @@ const reminderSchema = new mongoose.Schema({
 reminderSchema.index({ userId: 1, dueDate: 1 });
 reminderSchema.index({ userId: 1, completed: 1 });
 reminderSchema.index({ userId: 1, category: 1 });
+reminderSchema.index({ recipientContactId: 1, dueDate: 1 }); // Pro: contact reminders
 reminderSchema.index({ recipientId: 1, callStatus: 1 });  // For finding pending calls
 reminderSchema.index({ nextCallTime: 1, callStatus: 1 });  // For scheduler to find due reminders
 reminderSchema.index({ "attachments._id": 1 });  // For finding reminders by attachment ID

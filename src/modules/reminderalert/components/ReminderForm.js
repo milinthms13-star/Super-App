@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import VoiceNoteRecorder from '../../../components/VoiceNoteRecorder';
+import ProReminderContactPicker from './ProReminderContactPicker';
 import { validateReminderForm } from '../validation';
+import { notifyContact, callContact } from '../../../services/remindersService';
 import { 
   getAriaLabel, 
   trapFocus, 
@@ -111,8 +113,15 @@ const ReminderForm = React.memo(({
   onApplyCurrentDateTime,
   currentDateLabel = '',
   currentClockLabel = '',
+  // Pro Reminder props
+  selectedContact = null,
+  onContactSelect,
+  deliveryMode = 'text',
+  onDeliveryModeChange,
 }) => {
   const [formErrors, setFormErrors] = useState({});
+  const [callActionState, setCallActionState] = useState({ loading: false, error: null, success: null });
+  const [notifyActionState, setNotifyActionState] = useState({ loading: false, error: null, success: null });
   const formRef = useRef(null);
   const focusManagerRef = useRef(null);
 
@@ -127,6 +136,47 @@ const ReminderForm = React.memo(({
       focusManagerRef.current?.restore();
     };
   }, []);
+
+  // ── Pro: manual call action ───────────────────────────────────────────────
+  const handleManualCall = useCallback(async () => {
+    if (!editingTaskId) return;
+    setCallActionState({ loading: true, error: null, success: null });
+    try {
+      const result = await callContact(editingTaskId);
+      if (result.callMethod === 'tel-uri' && result.data?.telUri) {
+        window.location.href = result.data.telUri;
+      }
+      setCallActionState({
+        loading: false,
+        error: null,
+        success: `Call initiated to ${result.data?.recipientName || 'contact'}`,
+      });
+      announceToScreenReader(`Call initiated to ${result.data?.recipientName || 'contact'}`, 'polite');
+    } catch (err) {
+      setCallActionState({ loading: false, error: err.message, success: null });
+    }
+  }, [editingTaskId]);
+
+  // ── Pro: manual notify action ─────────────────────────────────────────────
+  const handleManualNotify = useCallback(async () => {
+    if (!editingTaskId) return;
+    setNotifyActionState({ loading: true, error: null, success: null });
+    try {
+      const result = await notifyContact(editingTaskId);
+      const channels = (result.data?.deliveryResults || [])
+        .filter((r) => r.success)
+        .map((r) => r.channel)
+        .join(', ');
+      setNotifyActionState({
+        loading: false,
+        error: null,
+        success: channels ? `Sent via ${channels}` : 'Notification sent',
+      });
+      announceToScreenReader('Reminder notification sent', 'polite');
+    } catch (err) {
+      setNotifyActionState({ loading: false, error: err.message, success: null });
+    }
+  }, [editingTaskId]);
 
   function handleSubmit(e) {
     if (e && e.preventDefault) {
@@ -198,6 +248,212 @@ const ReminderForm = React.memo(({
             {error}
           </div>
         )}
+
+        {/* ── PRO: Recipient & Delivery Mode ────────────────────────────── */}
+        <fieldset className="reminderalert-section-block pro-recipient-section">
+          <legend className="reminderalert-section-heading">
+            <h3>👤 Who gets this reminder?</h3>
+            <p>Set it for yourself or schedule it for someone in your contacts. The other person must not have blocked you.</p>
+          </legend>
+
+          <ProReminderContactPicker
+            selectedContact={selectedContact}
+            onSelect={onContactSelect}
+            disabled={submitting}
+          />
+
+          {/* Delivery mode selector — shown only when a contact is selected */}
+          {selectedContact && (
+            <div className="pro-delivery-mode">
+              <p className="pro-delivery-mode__label">How should {selectedContact.name} receive this reminder?</p>
+              <div className="pro-delivery-mode__options" role="group" aria-label="Delivery mode">
+                <label
+                  className={`pro-delivery-mode__option ${deliveryMode === 'text' ? 'pro-delivery-mode__option--active' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="deliveryMode"
+                    value="text"
+                    checked={deliveryMode === 'text'}
+                    onChange={() => onDeliveryModeChange('text')}
+                    disabled={submitting}
+                  />
+                  <span className="pro-delivery-mode__icon">💬</span>
+                  <span className="pro-delivery-mode__text">
+                    <strong>Text Message</strong>
+                    <small>WhatsApp (free) or in-app notification</small>
+                  </span>
+                </label>
+
+                <label
+                  className={`pro-delivery-mode__option ${deliveryMode === 'voice' ? 'pro-delivery-mode__option--active' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="deliveryMode"
+                    value="voice"
+                    checked={deliveryMode === 'voice'}
+                    onChange={() => onDeliveryModeChange('voice')}
+                    disabled={submitting}
+                  />
+                  <span className="pro-delivery-mode__icon">📞</span>
+                  <span className="pro-delivery-mode__text">
+                    <strong>Voice Call</strong>
+                    <small>Phone call with spoken message</small>
+                  </span>
+                </label>
+              </div>
+
+              {/* WhatsApp number input for text mode */}
+              {deliveryMode === 'text' && (
+                <div className="pro-delivery-mode__config">
+                  <label className="reminderalert-field">
+                    <span>WhatsApp number for {selectedContact.name}</span>
+                    <input
+                      type="tel"
+                      name="whatsappPhoneNumber"
+                      value={formData.whatsappPhoneNumber || ''}
+                      onChange={onChange}
+                      placeholder={selectedContact.phoneNumber || '+91 98765 43210'}
+                      disabled={submitting}
+                    />
+                    <small className="reminderalert-inline-meta">
+                      Used to send a free WhatsApp reminder. Leave blank to send only in-app.
+                    </small>
+                  </label>
+
+                  {/* Manual notify button on existing reminders */}
+                  {editingTaskId && (
+                    <div className="pro-delivery-mode__action-row">
+                      <button
+                        type="button"
+                        className="pro-delivery-action-btn pro-delivery-action-btn--notify"
+                        onClick={handleManualNotify}
+                        disabled={submitting || notifyActionState.loading}
+                      >
+                        {notifyActionState.loading ? 'Sending…' : '💬 Send Now'}
+                      </button>
+                      {notifyActionState.success && (
+                        <span className="pro-delivery-action-feedback pro-delivery-action-feedback--ok">
+                          ✓ {notifyActionState.success}
+                        </span>
+                      )}
+                      {notifyActionState.error && (
+                        <span className="pro-delivery-action-feedback pro-delivery-action-feedback--err">
+                          ✗ {notifyActionState.error}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Phone number + voice message for voice mode */}
+              {deliveryMode === 'voice' && (
+                <div className="pro-delivery-mode__config">
+                  <label className="reminderalert-field">
+                    <span>Phone number for {selectedContact.name}</span>
+                    <input
+                      type="tel"
+                      name="recipientPhoneNumber"
+                      value={voiceCallData.recipientPhoneNumber}
+                      onChange={onVoiceCallChange}
+                      placeholder={selectedContact.phoneNumber || '+91 98765 43210'}
+                      disabled={submitting}
+                    />
+                    <small className="reminderalert-inline-meta">
+                      A phone call will be placed with your spoken message when the reminder fires.
+                    </small>
+                  </label>
+
+                  <label className="reminderalert-field">
+                    <span>Message type</span>
+                    <select
+                      name="messageType"
+                      value={voiceCallData.messageType}
+                      onChange={onVoiceCallChange}
+                      disabled={submitting}
+                    >
+                      <option value="text">Text to speech</option>
+                      <option value="audio">Pre-recorded audio</option>
+                    </select>
+                  </label>
+
+                  {voiceCallData.messageType === 'text' && (
+                    <label className="reminderalert-field reminderalert-field-full">
+                      <span>Spoken message</span>
+                      <textarea
+                        name="voiceMessage"
+                        value={voiceCallData.voiceMessage}
+                        onChange={onVoiceCallChange}
+                        placeholder="Example: Please remember your appointment at 3 PM."
+                        rows="3"
+                        maxLength="500"
+                        disabled={submitting}
+                      />
+                      <small className="reminderalert-inline-meta">
+                        {voiceCallData.voiceMessage.length}/500 characters
+                      </small>
+                    </label>
+                  )}
+
+                  {voiceCallData.messageType === 'audio' && (
+                    <div className="reminderalert-field reminderalert-field-full">
+                      <span className="reminderalert-field-label">Record or upload voice note</span>
+                      <VoiceNoteRecorder
+                        module="reminder"
+                        contextId={editingTaskId || 'new'}
+                        recipientId={voiceCallData.recipientPhoneNumber}
+                        onSend={(voiceNote) => {
+                          const url = resolveVoiceNoteUrl(voiceNote);
+                          onVoiceNoteUpload({ voiceNoteUrl: url, voiceNotePreviewUrl: url });
+                        }}
+                      />
+                      {voiceCallData.voiceNoteUrl && (
+                        <div className="reminderalert-voice-note-preview">
+                          <p className="reminderalert-voice-note-label">✓ Voice note recorded</p>
+                          <audio controls preload="metadata"
+                            src={voiceCallData.voiceNotePreviewUrl || voiceCallData.voiceNoteUrl}>
+                            Your browser could not play this recording.
+                          </audio>
+                          <button type="button" className="reminderalert-filter-chip"
+                            onClick={() => onVoiceNoteUpload({ voiceNoteUrl: '', voiceNotePreviewUrl: '' })}
+                            disabled={submitting}>
+                            Clear
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Manual call button on existing reminders */}
+                  {editingTaskId && (
+                    <div className="pro-delivery-mode__action-row">
+                      <button
+                        type="button"
+                        className="pro-delivery-action-btn pro-delivery-action-btn--call"
+                        onClick={handleManualCall}
+                        disabled={submitting || callActionState.loading}
+                      >
+                        {callActionState.loading ? 'Calling…' : '📞 Call Now'}
+                      </button>
+                      {callActionState.success && (
+                        <span className="pro-delivery-action-feedback pro-delivery-action-feedback--ok">
+                          ✓ {callActionState.success}
+                        </span>
+                      )}
+                      {callActionState.error && (
+                        <span className="pro-delivery-action-feedback pro-delivery-action-feedback--err">
+                          ✗ {callActionState.error}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </fieldset>
 
         {/* Basic Fields */}
         <fieldset>
@@ -489,33 +745,8 @@ const ReminderForm = React.memo(({
           </fieldset>
         )}
 
-        {/* Voice Call Setup */}
-        {!formData.reminders.includes('Call') && (
-          <div className="reminderalert-alert reminderalert-alert-info" role="note">
-            <p style={{ marginBottom: '0.5rem' }}>
-              Looking for voice note? Enable the <strong>Voice call</strong> channel above, then choose
-              <strong> Pre-recorded audio</strong> in message type.
-            </p>
-            <button
-              type="button"
-              className="reminderalert-filter-chip"
-              onClick={() =>
-                onChange({
-                  target: {
-                    type: 'checkbox',
-                    name: 'reminders',
-                    value: 'Call',
-                    checked: true,
-                  },
-                })
-              }
-              disabled={submitting}
-            >
-              Enable voice call
-            </button>
-          </div>
-        )}
-        {formData.reminders.includes('Call') && (
+        {/* Voice Call — handled in the Recipient section when a contact is selected */}
+        {!selectedContact && formData.reminders.includes('Call') && (
           <fieldset className="reminderalert-section-block reminderalert-voice-block">
             <legend className="reminderalert-section-heading">
               <h3>Voice call setup</h3>
@@ -560,75 +791,107 @@ const ReminderForm = React.memo(({
                     aria-describedby="message-type-help"
                   >
                     <option value="text">Text to speech</option>
-                  <option value="audio">Pre-recorded audio</option>
-                </select>
-              </label>
-
-              {voiceCallData.messageType === 'text' && (
-                <label className="reminderalert-field reminderalert-field-full">
-                  <span>Spoken message {formErrors.voiceMessage && <span className="error-indicator">*</span>}</span>
-                  <textarea
-                    name="voiceMessage"
-                    value={voiceCallData.voiceMessage}
-                    onChange={onVoiceCallChange}
-                    placeholder="Example: Please remember to take your medicine at 2 PM."
-                    rows="4"
-                    maxLength="500"
-                    disabled={submitting}
-                    aria-invalid={!!formErrors.voiceMessage}
-                  />
-                  <small className="reminderalert-inline-meta">
-                    {voiceCallData.voiceMessage.length}/500 characters
-                  </small>
-                  {formErrors.voiceMessage && <small className="error-text">{formErrors.voiceMessage}</small>}
+                    <option value="audio">Pre-recorded audio</option>
+                  </select>
                 </label>
-              )}
 
-              {voiceCallData.messageType === 'audio' && (
-                <div className="reminderalert-field reminderalert-field-full">
-                  <span>Record or upload voice note</span>
-                  <div className="reminderalert-voice-recorder-section">
-                    <VoiceNoteRecorder
-                      module="reminder"
-                      contextId={editingTaskId || 'new'}
-                      recipientId={voiceCallData.recipientPhoneNumber}
-                      onSend={(voiceNote) => {
-                        const uploadedVoiceNoteUrl = resolveVoiceNoteUrl(voiceNote);
-                        onVoiceNoteUpload({
-                          voiceNoteUrl: uploadedVoiceNoteUrl,
-                          voiceNotePreviewUrl: voiceNote?.previewUrl || uploadedVoiceNoteUrl,
-                        });
-                      }}
+                {voiceCallData.messageType === 'text' && (
+                  <label className="reminderalert-field reminderalert-field-full">
+                    <span>Spoken message {formErrors.voiceMessage && <span className="error-indicator">*</span>}</span>
+                    <textarea
+                      name="voiceMessage"
+                      value={voiceCallData.voiceMessage}
+                      onChange={onVoiceCallChange}
+                      placeholder="Example: Please remember to take your medicine at 2 PM."
+                      rows="4"
+                      maxLength="500"
+                      disabled={submitting}
+                      aria-invalid={!!formErrors.voiceMessage}
                     />
-                    {voiceCallData.voiceNoteUrl && (
-                      <div className="reminderalert-voice-note-preview">
-                        <p className="reminderalert-voice-note-label">✓ Voice note recorded</p>
-                        <audio
-                          controls
-                          preload="metadata"
-                          src={voiceCallData.voiceNotePreviewUrl || voiceCallData.voiceNoteUrl}
-                        >
-                          Your browser could not play this recording.
-                        </audio>
-                        <button
-                          type="button"
-                          className="reminderalert-filter-chip"
-                          onClick={() => onVoiceNoteUpload({ voiceNoteUrl: '', voiceNotePreviewUrl: '' })}
-                          disabled={submitting}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    )}
-                    {formErrors.voiceNoteUrl && (
-                      <small className="error-text" role="alert">{formErrors.voiceNoteUrl}</small>
-                    )}
+                    <small className="reminderalert-inline-meta">
+                      {voiceCallData.voiceMessage.length}/500 characters
+                    </small>
+                    {formErrors.voiceMessage && <small className="error-text">{formErrors.voiceMessage}</small>}
+                  </label>
+                )}
+
+                {voiceCallData.messageType === 'audio' && (
+                  <div className="reminderalert-field reminderalert-field-full">
+                    <span>Record or upload voice note</span>
+                    <div className="reminderalert-voice-recorder-section">
+                      <VoiceNoteRecorder
+                        module="reminder"
+                        contextId={editingTaskId || 'new'}
+                        recipientId={voiceCallData.recipientPhoneNumber}
+                        onSend={(voiceNote) => {
+                          const uploadedVoiceNoteUrl = resolveVoiceNoteUrl(voiceNote);
+                          onVoiceNoteUpload({
+                            voiceNoteUrl: uploadedVoiceNoteUrl,
+                            voiceNotePreviewUrl: voiceNote?.previewUrl || uploadedVoiceNoteUrl,
+                          });
+                        }}
+                      />
+                      {voiceCallData.voiceNoteUrl && (
+                        <div className="reminderalert-voice-note-preview">
+                          <p className="reminderalert-voice-note-label">✓ Voice note recorded</p>
+                          <audio
+                            controls
+                            preload="metadata"
+                            src={voiceCallData.voiceNotePreviewUrl || voiceCallData.voiceNoteUrl}
+                          >
+                            Your browser could not play this recording.
+                          </audio>
+                          <button
+                            type="button"
+                            className="reminderalert-filter-chip"
+                            onClick={() => onVoiceNoteUpload({ voiceNoteUrl: '', voiceNotePreviewUrl: '' })}
+                            disabled={submitting}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      )}
+                      {formErrors.voiceNoteUrl && (
+                        <small className="error-text" role="alert">{formErrors.voiceNoteUrl}</small>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
             </fieldset>
           </fieldset>
+        )}
+
+        {!selectedContact && !formData.reminders.includes('Call') && (
+          <div className="reminderalert-alert reminderalert-alert-info" role="note">
+            <p style={{ marginBottom: '0.5rem' }}>
+              Looking for voice note? Enable the <strong>Voice call</strong> channel above, then choose
+              <strong> Pre-recorded audio</strong> in message type.
+            </p>
+            <button
+              type="button"
+              className="reminderalert-filter-chip"
+              onClick={() =>
+                onChange({
+                  target: {
+                    type: 'checkbox',
+                    name: 'reminders',
+                    value: 'Call',
+                    checked: true,
+                  },
+                })
+              }
+              disabled={submitting}
+            >
+              Enable voice call
+            </button>
+          </div>
+        )}
+
+        {selectedContact && (
+          <div className="reminderalert-alert reminderalert-alert-info" role="note">
+            📞 Voice call and WhatsApp delivery for <strong>{selectedContact.name}</strong> are configured in the <em>Recipient</em> section above.
+          </div>
         )}
 
         {/* Phase 2: SMS Setup */}

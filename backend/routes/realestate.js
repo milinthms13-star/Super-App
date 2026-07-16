@@ -34,7 +34,17 @@ router.get('/', redisCache.cacheList('realestate:list'), async (req, res) => {
       type,
       intent,
       location,
+      city,
       verified,
+      postingType,
+      readyToMove,
+      reraOnly,
+      bedrooms,
+      minPrice,
+      maxPrice,
+      maxPricePerSqft,
+      minSqft,
+      sortBy,
       limit = 50,
       skip = 0,
     } = req.query;
@@ -42,16 +52,102 @@ router.get('/', redisCache.cacheList('realestate:list'), async (req, res) => {
     const properties = await realEstateStore.listRealEstateProperties({
       type,
       intent,
-      location,
+      location: location || city,
       verified,
+      postingType,
+      readyToMove,
+      reraOnly,
+      bedrooms: bedrooms !== undefined ? parseInt(bedrooms, 10) : undefined,
+      minPrice: minPrice !== undefined ? parseFloat(minPrice) : undefined,
+      maxPrice: maxPrice !== undefined ? parseFloat(maxPrice) : undefined,
+      maxPricePerSqft: maxPricePerSqft !== undefined ? parseFloat(maxPricePerSqft) : undefined,
+      minSqft: minSqft !== undefined ? parseFloat(minSqft) : undefined,
+      sortBy,
       limit: parseInt(limit, 10),
       skip: parseInt(skip, 10),
     });
 
-    res.json({ success: true, data: properties, pagination: { limit, skip } });
+    res.json({
+      success: true,
+      data: properties,
+      pagination: { limit: parseInt(limit, 10), skip: parseInt(skip, 10), total: properties.length },
+    });
   } catch (error) {
     logger.error('RealEstate list:', error);
     res.status(500).json({ success: false, message: 'List failed' });
+  }
+});
+
+// ─── Platform stats endpoint ──────────────────────────────────────────────────
+router.get('/meta/stats', async (req, res) => {
+  try {
+    const all = await realEstateStore.listRealEstateProperties({ limit: 5000, skip: 0 });
+
+    const total = all.length;
+    const verified = all.filter((p) => p.verified).length;
+    const withRera = all.filter((p) => p.reraNumber).length;
+    const readyToMove = all.filter((p) => p.readyToMove).length;
+    const forSale = all.filter((p) => p.intent === 'sale').length;
+    const forRent = all.filter((p) => p.intent === 'rent').length;
+
+    const priceValues = all.filter((p) => p.priceValue > 0).map((p) => p.priceValue);
+    const avgPriceLakhs = priceValues.length
+      ? Math.round(priceValues.reduce((s, v) => s + v, 0) / priceValues.length)
+      : 0;
+
+    // Price per sqft across all listings
+    const ppsfValues = all
+      .filter((p) => p.priceValue > 0 && p.areaSqft > 0)
+      .map((p) => (p.priceValue * 100000) / p.areaSqft);
+    const avgPricePerSqft = ppsfValues.length
+      ? Math.round(ppsfValues.reduce((s, v) => s + v, 0) / ppsfValues.length)
+      : 0;
+
+    // Top cities by listing count
+    const cityMap = {};
+    all.forEach((p) => {
+      const city = (p.location || 'Unknown').trim();
+      cityMap[city] = (cityMap[city] || 0) + 1;
+    });
+    const topCities = Object.entries(cityMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([city, count]) => ({ city, count }));
+
+    // Total leads across all listings
+    const totalLeads = all.reduce((s, p) => s + (p.leads?.length || 0), 0);
+
+    // Listings by type
+    const typeMap = {};
+    all.forEach((p) => {
+      typeMap[p.type] = (typeMap[p.type] || 0) + 1;
+    });
+    const byType = Object.entries(typeMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count]) => ({ type, count }));
+
+    res.json({
+      success: true,
+      data: {
+        total,
+        verified,
+        verifiedPct: total > 0 ? Math.round((verified / total) * 100) : 0,
+        withRera,
+        reraPct: total > 0 ? Math.round((withRera / total) * 100) : 0,
+        readyToMove,
+        forSale,
+        forRent,
+        avgPriceLakhs,
+        avgPricePerSqft,
+        totalLeads,
+        topCities,
+        byType,
+        generatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    logger.error('RealEstate stats:', error);
+    res.status(500).json({ success: false, message: 'Stats failed' });
   }
 });
 
