@@ -1,0 +1,275 @@
+.message-pinner-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.message-pinner-container {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.pinner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+  color: white;
+  border-radius: 12px 12px 0 0;
+}
+
+.pinner-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.pinner-content {
+  padding: 20px;
+}
+
+.pins-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.pins-count {
+  font-weight: 600;
+  color: #666;
+}
+
+.btn-unpin-all {
+  background: white;
+  border: 1px solid #ff6b6b;
+  color: #ff6b6b;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.3s;
+}
+
+.btn-unpin-all:hover {
+  background: #ff6b6b;
+  color: white;
+}
+
+.pinned-messages-list {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.pinned-message-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+}
+
+.pinned-message-item:hover {
+  background: #e9ecef;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.pin-badge {
+  width: 28px;
+  height: 28px;
+  background: #ff6b6b;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.message-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.message-type-icon {
+  font-size: 1rem;
+}
+
+.sender-name {
+  font-weight: 600;
+  color: #333;
+  font-size: 0.9rem;
+}
+
+.message-date {
+  font-size: 0.75rem;
+  color: #999;
+  margin-left: auto;
+}
+
+.message-body p {
+  margin: 0;
+  color: #555;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.media-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.media-icon {
+  font-size: 1.5rem;
+}
+
+.media-type {
+  font-weight: 600;
+  color: #666;
+}
+
+.media-caption {
+  margin: 0;
+  color: #999;
+  font-size: 0.875rem;
+}
+
+.message-reactions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.reaction-emoji {
+  font-size: 1rem;
+}
+
+.reactions-more {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.message-actions {
+  margin-left: 10px;
+}
+
+.btn-unpin {
+  background: white;
+  border: 1px solid #ff6b6b;
+  color: #ff6b6b;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.btn-unpin:hover {
+  background: #ff6b6b;
+  color: white;
+  transform: rotate(90deg);
+}
+
+.pin-tip {
+  margin-top: 20px;
+  padding: 15px;
+  background: #fff3cd;
+  border-radius: 8px;
+  color: #856404;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  border-left: 4px solid #ffc107;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 15px;
+  opacity: 0.3;
+}
+
+.empty-state p {
+  margin: 5px 0;
+  color: #999;
+}
+
+.empty-subtitle {
+  font-size: 0.875rem;
+  color: #bbb;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+.error-message {
+  background: #ffe5e5;
+  color: #d32f2f;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+}
+
+@media (max-width: 768px) {
+  .message-pinner-container {
+    width: 95%;
+    max-height: 95vh;
+  }
+
+  .pinned-message-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .message-actions {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    margin-left: 0;
+  }
+}

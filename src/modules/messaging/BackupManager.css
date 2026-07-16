@@ -1,0 +1,280 @@
+.backup-manager-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.backup-manager-container {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 700px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.backup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.backup-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+.backup-tabs {
+  display: flex;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.backup-tabs .tab {
+  flex: 1;
+  padding: 15px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: #666;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s;
+}
+
+.backup-tabs .tab.active {
+  color: #28a745;
+  border-bottom-color: #28a745;
+}
+
+.backups-content,
+.settings-content {
+  padding: 20px;
+}
+
+.backup-actions-header {
+  margin-bottom: 20px;
+}
+
+.btn-create-backup {
+  width: 100%;
+  padding: 15px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.btn-create-backup:hover:not(:disabled) {
+  background: #218838;
+}
+
+.btn-create-backup:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.backup-progress {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #28a745;
+  transition: width 0.3s;
+}
+
+.progress-text {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.backups-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.backup-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.backup-info {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.backup-icon {
+  font-size: 2rem;
+  margin-right: 15px;
+}
+
+.backup-details h3 {
+  margin: 0 0 5px 0;
+  font-size: 1rem;
+  color: #333;
+}
+
+.backup-meta {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.backup-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background 0.3s;
+}
+
+.btn-icon:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.setting-group {
+  margin-bottom: 25px;
+}
+
+.setting-group h3 {
+  margin: 0 0 15px 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.setting-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #333;
+}
+
+.setting-group select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: normal;
+}
+
+.checkbox-label input {
+  width: auto;
+  margin-right: 8px;
+}
+
+.setting-note {
+  margin: 10px 0 0 0;
+  font-size: 0.875rem;
+  color: #999;
+}
+
+.settings-actions {
+  margin-top: 30px;
+}
+
+.btn-save {
+  width: 100%;
+  padding: 12px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.btn-save:hover:not(:disabled) {
+  background: #218838;
+}
+
+.btn-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+.empty-state p {
+  margin: 10px 0;
+}
+
+.sub-text {
+  font-size: 0.875rem;
+  color: #bbb;
+}
+
+.error-message {
+  background: #ffe5e5;
+  color: #d32f2f;
+  padding: 12px;
+  border-radius: 6px;
+  margin: 15px 20px;
+}
+
+@media (max-width: 768px) {
+  .backup-manager-container {
+    width: 95%;
+    max-height: 95vh;
+  }
+
+  .backup-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .backup-actions {
+    margin-top: 10px;
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

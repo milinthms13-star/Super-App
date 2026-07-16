@@ -419,3 +419,166 @@ Edit `src/locales/en.json`, `src/locales/es.json`, etc.:
 ---
 
 ### **Phase 4: Low Priority (Polish & Optimization)**
+
+#### Action 4.1: Create Database Models (Optional)
+Create `backend/models/VideoStudioProject.js`:
+```javascript
+const mongoose = require('mongoose');
+
+const VideoStudioProjectSchema = new mongoose.Schema({
+  projectId: { type: String, required: true, unique: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  title: String,
+  storyPrompt: String,
+  scenes: [{ sceneId: String, title: String, description: String }],
+  characters: Array,
+  status: { type: String, enum: ['draft', 'rendering', 'completed'], default: 'draft' },
+  videoUrl: String,
+  gridFsFileId: mongoose.Schema.Types.ObjectId,
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('VideoStudioProject', VideoStudioProjectSchema);
+```
+
+#### Action 4.2: Run E2E Tests
+```bash
+npm run cypress:open
+# Run kidsstoryvideomaker.cy.js test
+# Fix any failures
+```
+
+#### Action 4.3: Performance Testing
+- Test concurrent renders
+- Monitor memory usage
+- Verify VIDEO_STUDIO_MAX_RSS_MB limits work
+
+---
+
+## 📊 Summary Table
+
+| Component | Status | Priority | Estimated Effort |
+|-----------|--------|----------|------------------|
+| fluent-ffmpeg install | ❌ Missing | P0 Critical | 2 minutes |
+| Real cartoon renderer integration | ❌ Not integrated | P1 High | 1-2 hours |
+| TTS integration (Google/ElevenLabs) | ❌ Not connected | P1 High | 2-4 hours |
+| AI moderation/safety service | ❌ Not implemented | P2 Medium | 2-3 hours |
+| AI story generation (remove stub) | ⚠️ Fallback only | P2 Medium | 1-2 hours |
+| Translation keys | ❌ Not defined | P3 Low | 30 minutes |
+| Database models | ⚠️ Optional | P3 Low | 1-2 hours |
+| Patch file integration | ⚠️ Pending decision | P2 Medium | 2-4 hours |
+| E2E test verification | ✅ File exists | P3 Low | 1 hour |
+
+**Total Critical Path:** ~4-6 hours to get fully functional with TTS
+
+---
+
+## 🎯 Quick Start: Get It Working Now
+
+### Minimum Viable Implementation (30 minutes)
+
+```bash
+# 1. Install missing dependency (2 min)
+cd backend
+npm install fluent-ffmpeg --save
+
+# 2. Copy enhanced renderer (1 min)
+copy .tmp_kidsstory_patch\backend\videoStudioRealCartoonRenderer.js backend\services\
+
+# 3. Enable basic functionality in .env (1 min)
+echo VIDEO_STUDIO_REAL_CARTOON_MODE=true >> backend\.env
+echo VIDEO_STUDIO_ENABLE_GOOGLE_TTS=false >> backend\.env
+
+# 4. Restart backend (1 min)
+npm run dev
+
+# 5. Test frontend (25 min)
+# Open browser: http://localhost:3000/kids-story-video-maker
+# Try creating a story and rendering
+```
+
+**Note:** This gives you basic video generation without TTS (silent videos). To add voices, continue with Phase 1, Action 1.3.
+
+---
+
+## ✅ Validation Checklist
+
+Before marking this module as complete, verify:
+
+- [ ] `npm list fluent-ffmpeg` shows installed
+- [ ] Backend starts without errors
+- [ ] Frontend loads at `/kids-story-video-maker`
+- [ ] Can create a project from story text
+- [ ] Can edit characters and scenes
+- [ ] Can trigger video render
+- [ ] Render completes and video downloads
+- [ ] Video has animated characters (not just text slides)
+- [ ] Video has audio (music at minimum)
+- [ ] _(Optional)_ Video has spoken dialogue (TTS working)
+- [ ] _(Optional)_ AI story generator returns real stories (not fallback)
+- [ ] _(Optional)_ Content moderation blocks inappropriate content
+- [ ] Cypress E2E test passes
+
+---
+
+## 📞 Questions to Clarify
+
+1. **Patch folder intent:** Should I merge `.tmp_kidsstory_patch/` files into the main source?
+2. **TTS preference:** Google Cloud TTS or ElevenLabs?
+3. **AI provider:** Continue with Gemini or switch to OpenAI?
+4. **Database models:** Do you want persistent project storage or GridFS only?
+5. **Safety priority:** Is content moderation required before launch?
+
+---
+
+## 💡 Recommendations
+
+### For Immediate Launch (MVP)
+1. ✅ Install `fluent-ffmpeg`
+2. ✅ Integrate real cartoon renderer
+3. ✅ Enable Google TTS (already have the package)
+4. ⚠️ Launch with fallback AI stories (acceptable for MVP)
+5. ⚠️ Skip moderation initially (add in v2)
+
+### For Production-Ready (v1.0)
+1. ✅ All MVP items
+2. ✅ Real AI story generation
+3. ✅ Content moderation/safety
+4. ✅ Database models for history
+5. ✅ Translation keys for i18n
+6. ✅ Performance testing
+
+---
+
+## 🚀 Next Steps
+
+Choose one:
+
+**Option A: Quick MVP (Get it working today)**
+```bash
+# Follow "Quick Start: Get It Working Now" above
+# Total time: 30 minutes
+# Result: Working module with silent videos
+```
+
+**Option B: Production-Ready (Full features)**
+```bash
+# Follow Phase 1 + Phase 2 action items
+# Total time: ~6-8 hours
+# Result: Fully functional with TTS, AI, and safety
+```
+
+**Option C: Step-by-step assistance**
+> Say: "Help me with [specific action]" and I'll guide you through it.
+
+---
+
+Would you like me to:
+1. **Install fluent-ffmpeg and integrate the renderer** (30 min)?
+2. **Set up TTS (Google or ElevenLabs)** (2 hours)?
+3. **Implement AI story generation** (1 hour)?
+4. **Add content moderation** (2 hours)?
+5. **All of the above** (full production-ready, 6 hours)?
+
+Let me know your priority and I'll implement it!

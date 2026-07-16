@@ -1,0 +1,221 @@
+/**
+ * Internationalization Service
+ * Multi-language support for the matrimonial platform
+ */
+
+const translations = {
+  en: {
+    common: {
+      home: 'Home',
+      profile: 'Profile',
+      search: 'Search',
+      messages: 'Messages',
+      interests: 'Interests',
+      settings: 'Settings',
+      logout: 'Logout',
+      save: 'Save',
+      cancel: 'Cancel',
+      delete: 'Delete',
+      edit: 'Edit',
+      submit: 'Submit',
+      loading: 'Loading...',
+      success: 'Success!',
+      error: 'Error',
+    },
+    profile: {
+      createProfile: 'Create Profile',
+      editProfile: 'Edit Profile',
+      name: 'Name',
+      age: 'Age',
+      gender: 'Gender',
+      religion: 'Religion',
+      caste: 'Caste',
+      location: 'Location',
+      education: 'Education',
+      profession: 'Profession',
+      bio: 'About Me',
+    },
+    astrology: {
+      kundali: 'Kundali',
+      gunaMilan: 'Guna Milan',
+      compatibility: 'Compatibility',
+      nakshatra: 'Nakshatra',
+      moonSign: 'Moon Sign',
+      ascendant: 'Ascendant',
+      auspiciousDates: 'Auspicious Dates',
+    },
+  },
+  hi: {
+    common: {
+      home: 'होम',
+      profile: 'प्रोफाइल',
+      search: 'खोजें',
+      messages: 'संदेश',
+      interests: 'रुचियाँ',
+      settings: 'सेटिंग्स',
+      logout: 'लॉग आउट',
+      save: 'सहेजें',
+      cancel: 'रद्द करें',
+      delete: 'हटाएं',
+      edit: 'संपादित करें',
+      submit: 'जमा करें',
+      loading: 'लोड हो रहा है...',
+      success: 'सफल!',
+      error: 'त्रुटि',
+    },
+    profile: {
+      createProfile: 'प्रोफाइल बनाएं',
+      editProfile: 'प्रोफाइल संपादित करें',
+      name: 'नाम',
+      age: 'उम्र',
+      gender: 'लिंग',
+      religion: 'धर्म',
+      caste: 'जाति',
+      location: 'स्थान',
+      education: 'शिक्षा',
+      profession: 'पेशा',
+      bio: 'मेरे बारे में',
+    },
+    astrology: {
+      kundali: 'कुंडली',
+      gunaMilan: 'गुण मिलान',
+      compatibility: 'संगतता',
+      nakshatra: 'नक्षत्र',
+      moonSign: 'राशि',
+      ascendant: 'लग्न',
+      auspiciousDates: 'शुभ मुहूर्त',
+    },
+  },
+  ta: {
+    common: {
+      home: 'முகப்பு',
+      profile: 'சுயவிவரம்',
+      search: 'தேடு',
+      messages: 'செய்திகள்',
+      interests: 'ஆர்வங்கள்',
+      settings: 'அமைப்புகள்',
+      logout: 'வெளியேறு',
+      save: 'சேமி',
+      cancel: 'ரத்து',
+      delete: 'நீக்கு',
+      edit: 'திருத்து',
+      submit: 'சமர்ப்பி',
+      loading: 'ஏற்றுகிறது...',
+      success: 'வெற்றி!',
+      error: 'பிழை',
+    },
+    profile: {
+      createProfile: 'சுயவிவரத்தை உருவாக்கு',
+      editProfile: 'சுயவிவரத்தைத் திருத்து',
+      name: 'பெயர்',
+      age: 'வயது',
+      gender: 'பாலினம்',
+      religion: 'மதம்',
+      caste: 'சாதி',
+      location: 'இடம்',
+      education: 'கல்வி',
+      profession: 'தொழில்',
+      bio: 'என்னைப் பற்றி',
+    },
+    astrology: {
+      kundali: 'ஜாதகம்',
+      gunaMilan: 'பொருத்தம்',
+      compatibility: 'இணக்கம்',
+      nakshatra: 'நட்சத்திரம்',
+      moonSign: 'ராசி',
+      ascendant: 'லக்னம்',
+      auspiciousDates: 'நல்ல நாட்கள்',
+    },
+  },
+  te: {
+    common: {
+      home: 'హోమ్',
+      profile: 'ప్రొఫైల్',
+      search: 'వెతకండి',
+      messages: 'సందేశాలు',
+      interests: 'ఆసక్తులు',
+      settings: 'సెట్టింగులు',
+      logout: 'లాగ్ అవుట్',
+      save: 'సేవ్',
+      cancel: 'రద్దు',
+      delete: 'తొలగించు',
+      edit: 'సవరించు',
+      submit: 'సబ్మిట్',
+      loading: 'లోడ్ అవుతోంది...',
+      success: 'విజయం!',
+      error: 'లోపం',
+    },
+    profile: {
+      createProfile: 'ప్రొఫైల్ సృష్టించండి',
+      editProfile: 'ప్రొఫైల్ సవరించండి',
+      name: 'పేరు',
+      age: 'వయస్సు',
+      gender: 'లింగం',
+      religion: 'మతం',
+      caste: 'కులం',
+      location: 'స్థలం',
+      education: 'విద్య',
+      profession: 'వృత్తి',
+      bio: 'నా గురించి',
+    },
+    astrology: {
+      kundali: 'జాతకం',
+      gunaMilan: 'గుణ మిలన్',
+      compatibility: 'అనుకూలత',
+      nakshatra: 'నక్షత్రం',
+      moonSign: 'రాశి',
+      ascendant: 'లగ్నం',
+      auspiciousDates: 'శుభ తేదీలు',
+    },
+  },
+  bn: {
+    common: {
+      home: 'হোম',
+      profile: 'প্রোফাইল',
+      search: 'খুঁজুন',
+      messages: 'বার্তা',
+      interests: 'আগ্রহ',
+      settings: 'সেটিংস',
+      logout: 'লগ আউট',
+      save: 'সংরক্ষণ',
+      cancel: 'বাতিল',
+      delete: 'মুছুন',
+      edit: 'সম্পাদনা',
+      submit: 'জমা দিন',
+      loading: 'লোড হচ্ছে...',
+      success: 'সফল!',
+      error: 'ত্রুটি',
+    },
+  },
+};
+
+const getTranslation = (language, key) => {
+  const keys = key.split('.');
+  let value = translations[language] || translations.en;
+  
+  for (const k of keys) {
+    value = value[k];
+    if (!value) break;
+  }
+
+  return value || key;
+};
+
+const getSupportedLanguages = () => [
+  { code: 'en', name: 'English', nativeName: 'English' },
+  { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी' },
+  { code: 'ta', name: 'Tamil', nativeName: 'தமிழ்' },
+  { code: 'te', name: 'Telugu', nativeName: 'తెలుగు' },
+  { code: 'bn', name: 'Bengali', nativeName: 'বাংলা' },
+  { code: 'mr', name: 'Marathi', nativeName: 'मराठी' },
+  { code: 'gu', name: 'Gujarati', nativeName: 'ગુજરાતી' },
+  { code: 'kn', name: 'Kannada', nativeName: 'ಕನ್ನಡ' },
+  { code: 'ml', name: 'Malayalam', nativeName: 'മലയാളം' },
+  { code: 'pa', name: 'Punjabi', nativeName: 'ਪੰਜਾਬੀ' },
+];
+
+module.exports = {
+  getTranslation,
+  getSupportedLanguages,
+  translations,
+};

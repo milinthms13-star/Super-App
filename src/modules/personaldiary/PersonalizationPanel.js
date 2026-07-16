@@ -6,8 +6,16 @@
 
 import React, { useState, useEffect } from 'react';
 import './Phase7Components.css';
+import {
+  getUserPreferences,
+  updateUserPreferences,
+  getThemeConfig,
+  getWritingMode,
+  exportPreferences,
+  importPreferences
+} from '../../services/diaryService';
 
-const PersonalizationPanel = ({ token, apiUrl = 'http://localhost:5000', onError, onSuccess }) => {
+const PersonalizationPanel = ({ onClose, onError, onSuccess }) => {
   const [preferences, setPreferences] = useState(null);
   const [themeConfig, setThemeConfig] = useState(null);
   const [writingModes, setWritingModes] = useState({});
@@ -28,33 +36,27 @@ const PersonalizationPanel = ({ token, apiUrl = 'http://localhost:5000', onError
       setError(null);
 
       const [prefsRes, themeRes, modeRes] = await Promise.all([
-        fetch(`${apiUrl}/api/diary/phase7/preferences`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${apiUrl}/api/diary/phase7/theme`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${apiUrl}/api/diary/phase7/writing-mode`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
+        getUserPreferences(),
+        getThemeConfig(),
+        getWritingMode('full')
       ]);
 
-      if (!prefsRes.ok || !themeRes.ok || !modeRes.ok) {
-        throw new Error('Failed to fetch personalization data');
+      if (prefsRes.success) {
+        setPreferences(prefsRes.data);
+        setLocalPreferences(prefsRes.data);
       }
 
-      const prefsData = await prefsRes.json();
-      const themeData = await themeRes.json();
-      const modeData = await modeRes.json();
+      if (themeRes.success) {
+        setThemeConfig(themeRes.data);
+      }
 
-      setPreferences(prefsData.data);
-      setThemeConfig(themeData.data);
-      setWritingModes(modeData.data);
-      setLocalPreferences(prefsData.data);
+      if (modeRes.success) {
+        setWritingModes(modeRes.data);
+      }
     } catch (err) {
       const message = err.message || 'Failed to load preferences';
       setError(message);
-      onError?.(err);
+      if (onError) onError(err);
     } finally {
       setLoading(false);
     }
@@ -74,24 +76,58 @@ const PersonalizationPanel = ({ token, apiUrl = 'http://localhost:5000', onError
   const handleSavePreferences = async () => {
     try {
       setSaving(true);
-      const response = await fetch(`${apiUrl}/api/diary/phase7/preferences`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(localPreferences)
-      });
+      const response = await updateUserPreferences(localPreferences);
 
-      if (!response.ok) throw new Error('Failed to save preferences');
-
-      setPreferences(localPreferences);
-      setUnsavedChanges(false);
-      onSuccess?.('Preferences saved successfully');
+      if (response.success) {
+        setPreferences(localPreferences);
+        setUnsavedChanges(false);
+        if (onSuccess) onSuccess('Preferences saved successfully');
+      } else {
+        throw new Error(response.error || 'Failed to save');
+      }
     } catch (err) {
-      onError?.(err);
+      if (onError) onError(err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleExportPreferences = async () => {
+    try {
+      const response = await exportPreferences();
+      if (response.success) {
+        const dataStr = JSON.stringify(response.data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `diary-preferences-${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        if (onSuccess) onSuccess('Preferences exported!');
+      }
+    } catch (err) {
+      if (onError) onError(err);
+    }
+  };
+
+  const handleImportPreferences = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const imported = JSON.parse(text);
+      const response = await importPreferences(imported);
+      
+      if (response.success) {
+        setPreferences(response.data);
+        setLocalPreferences(response.data);
+        setUnsavedChanges(false);
+        if (onSuccess) onSuccess('Preferences imported!');
+      }
+    } catch (err) {
+      if (onError) onError(err);
     }
   };
 
@@ -375,9 +411,19 @@ const PersonalizationPanel = ({ token, apiUrl = 'http://localhost:5000', onError
       <div className="personalization-header">
         <h2>⚙️ Personalization Settings</h2>
         <p>Customize your diary experience</p>
+        {onClose && (
+          <button onClick={onClose} className="close-btn" title="Close">
+            ✕
+          </button>
+        )}
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          <span className="error-icon">⚠️</span>
+          {error}
+        </div>
+      )}
 
       <div className="personalization-sections">
         <div className="sections-nav">
@@ -404,14 +450,28 @@ const PersonalizationPanel = ({ token, apiUrl = 'http://localhost:5000', onError
       </div>
 
       <div className="personalization-footer">
-        {unsavedChanges && <span className="unsaved-indicator">⚠️ Unsaved changes</span>}
-        <button
-          onClick={handleSavePreferences}
-          disabled={!unsavedChanges || saving}
-          className="save-btn"
-        >
-          {saving ? '💾 Saving...' : '💾 Save Preferences'}
-        </button>
+        <div className="footer-actions">
+          <button onClick={handleExportPreferences} className="export-btn">
+            📤 Export
+          </button>
+          <label className="import-btn">
+            📥 Import
+            <input
+              type="file"
+              accept=".json"
+              onChange={handleImportPreferences}
+              style={{ display: 'none' }}
+            />
+          </label>
+          {unsavedChanges && <span className="unsaved-indicator">⚠️ Unsaved changes</span>}
+          <button
+            onClick={handleSavePreferences}
+            disabled={!unsavedChanges || saving}
+            className="save-btn"
+          >
+            {saving ? '💾 Saving...' : '💾 Save Preferences'}
+          </button>
+        </div>
       </div>
     </div>
   );

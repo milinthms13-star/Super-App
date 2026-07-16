@@ -123,11 +123,15 @@ const MAX_PRIMARY_CHARACTERS = Math.max(
   Math.min(4, Number(process.env.VIDEO_STUDIO_MAX_PRIMARY_CHARACTERS) || 2)
 );
 const UNSAFE_THEME_RULES = [
-  { code: 'self_harm', reason: 'self-harm or suicide', pattern: /suicide|self[-\s]?harm/i },
-  { code: 'weapons', reason: 'weapons', pattern: /weapon/i },
-  { code: 'graphic_violence', reason: 'graphic violence', pattern: /gore|kill|terror/i },
-  { code: 'abuse', reason: 'abuse', pattern: /abuse/i },
-  { code: 'adult', reason: 'adult content', pattern: /explicit|adult content/i },
+  { code: 'self_harm', reason: 'self-harm or suicide', pattern: /suicide|self[-\s]?harm|cut[-\s]?myself|hurt[-\s]?myself/i },
+  { code: 'weapons', reason: 'weapons or violence', pattern: /weapon|gun|knife|sword|bomb|explosive/i },
+  { code: 'graphic_violence', reason: 'graphic violence', pattern: /gore|kill|murder|terror|blood|death|torture/i },
+  { code: 'abuse', reason: 'abuse or bullying', pattern: /abuse|bully|hurt\s+someone|harm\s+others/i },
+  { code: 'adult', reason: 'adult content', pattern: /explicit|adult\s+content|sexual|porn|nude/i },
+  { code: 'drugs', reason: 'drugs or alcohol', pattern: /drug|alcohol|cigarette|smoking|marijuana|cocaine/i },
+  { code: 'hate_speech', reason: 'hate speech or discrimination', pattern: /hate|racist|sexist|discriminat/i },
+  { code: 'scary', reason: 'scary or frightening themes', pattern: /horror|nightmare|ghost|monster|demon|evil/i },
+  { code: 'inappropriate', reason: 'inappropriate language', pattern: /damn|hell|stupid|idiot|dumb|shut\s+up/i },
 ];
 
 const ensureUploadsRoot = async () => {

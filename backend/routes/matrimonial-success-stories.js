@@ -1,395 +1,260 @@
+/**
+ * Success Stories Routes
+ * Submit, approve, and display success stories
+ */
+
 const express = require('express');
-const router = express.Router();
+const multer = require('multer');
+const { authenticate } = require('../middleware/auth');
 const SuccessStory = require('../models/SuccessStory');
 const MatrimonialProfile = require('../models/MatrimonialProfile');
-const { s3Service } = require('../services/s3Service');
-const { errorTrackingService } = require('../services/errorTrackingService');
-const { cacheService } = require('../services/cacheService');
-const auth = require('../middleware/auth');
+const { uploadToS3 } = require('../config/s3');
+const logger = require('../utils/logger');
 
-// Get all published success stories (public)
+const router = express.Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+// Get published success stories (public)
 router.get('/public', async (req, res) => {
   try {
     const { page = 1, limit = 12, featured } = req.query;
     
-    const filter = { status: 'published' };
-    if (featured === 'true') {
-      filter.featured = true;
-      filter.featuredUntil = { $gte: new Date() };
-    }
-
-    const cacheKey = `stories:public:${page}:${limit}:${featured}`;
-    const cached = await cacheService.get(cacheKey);
-    if (cached) return res.json(cached);
-
-    const skip = (page - 1) * limit;
-    
-    const [stories, total] = await Promise.all([
-      SuccessStory.find(filter)
-        .sort({ featured: -1, publishedAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .select('-comments -moderationNotes -reviewedBy'),
-      SuccessStory.countDocuments(filter)
-    ]);
-
-    const result = {
-      stories,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
+    const query = { 
+      isPublished: true,
+      status: 'approved',
     };
-
-    await cacheService.set(cacheKey, result, 300);
-    res.json(result);
-  } catch (error) {
-    errorTrackingService.captureError(error, { context: 'get-public-stories' });
-    res.status(500).json({ error: 'Failed to fetch success stories' });
-  }
-});
-
-// Get single success story (public)
-router.get('/public/:storyId', async (req, res) => {
-  try {
-    const story = await SuccessStory.findById(req.params.storyId);
     
-    if (!story || story.status !== 'published') {
-      return res.status(404).json({ error: 'Story not found' });
+    if (featured === 'true') {
+      query.isFeatured = true;
     }
 
-    // Increment views
-    story.views += 1;
-    await story.save();
+    const stories = await SuccessStory.find(query)
+      .sort({ isFeatured: -1, views: -1, marriageDate: -1 })
+      .limit(Number(limit))
+      .skip((Number(page) - 1) * Number(limit))
+      .lean();
 
-    res.json(story);
+    const total = await SuccessStory.countDocuments(query);
+
+    res.json({
+      success: true,
+      data: stories,
+      meta: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit)),
+      },
+    });
   } catch (error) {
-    errorTrackingService.captureError(error, { storyId: req.params.storyId, context: 'get-story-detail' });
-    res.status(500).json({ error: 'Failed to fetch story' });
+    logger.error('Get success stories failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch success stories',
+    });
   }
 });
 
-// Submit a success story (authenticated users)
-router.post('/submit', auth, async (req, res) => {
+// Submit success story
+router.post('/submit', authenticate, upload.array('photos', 5), async (req, res) => {
   try {
-    const { coupleData, storyData, photos, testimonial, metadata } = req.body;
+    const {
+      groomProfileId,
+      brideProfileId,
+      groomName,
+      brideName,
+      title,
+      story,
+      marriageDate,
+      location,
+      testimonial,
+      howWeMet,
+      matchedOn,
+      engagementDate,
+      consentGiven,
+    } = req.body;
 
-    // Verify user owns at least one of the profiles
-    const userProfile = await MatrimonialProfile.findOne({ userId: req.user.id });
-    if (!userProfile) {
-      return res.status(403).json({ error: 'You must have a matrimonial profile to submit a story' });
+    if (!consentGiven || consentGiven !== 'true') {
+      return res.status(400).json({
+        success: false,
+        message: 'Consent is required to publish the story',
+      });
     }
 
-    const story = new SuccessStory({
-      couple: coupleData,
-      story: storyData,
+    // Verify user owns one of the profiles
+    const userProfile = await MatrimonialProfile.findOne({ 
+      userId: req.user._id,
+      _id: { $in: [groomProfileId, brideProfileId] },
+    });
+
+    if (!userProfile) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only submit stories for your own profile',
+      });
+    }
+
+    // Upload photos
+    const photos = [];
+    if (req.files && req.files.length > 0) {
+      for (let i = 0; i < req.files.length; i++) {
+        const file = req.files[i];
+        const photoUrl = await uploadToS3(
+          file.buffer,
+          `matrimonial/success-stories/${Date.now()}-${file.originalname}`,
+          file.mimetype
+        );
+        photos.push({
+          url: photoUrl,
+          caption: '',
+          order: i,
+        });
+      }
+    }
+
+    const story = await SuccessStory.create({
+      groomProfileId,
+      brideProfileId,
+      groomName,
+      brideName,
+      title,
+      story: story,
+      marriageDate,
+      location,
       photos,
       testimonial,
-      metadata,
-      status: 'pending'
+      howWeMet,
+      matchedOn,
+      engagementDate,
+      submittedBy: req.user._id,
+      consentGiven: true,
+      status: 'pending',
     });
 
-    await story.save();
-
-    await errorTrackingService.logAudit('success_story_submitted', {
-      userId: req.user.id,
-      storyId: story._id
-    });
-
-    res.status(201).json({ 
-      success: true, 
-      storyId: story._id,
-      message: 'Success story submitted for review'
+    res.json({
+      success: true,
+      message: 'Success story submitted for review',
+      data: story,
     });
   } catch (error) {
-    errorTrackingService.captureError(error, { userId: req.user.id, context: 'submit-story' });
-    res.status(500).json({ error: 'Failed to submit success story' });
+    logger.error('Submit success story failed:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to submit success story',
+    });
   }
 });
 
-// Get user's submitted stories (authenticated)
-router.get('/my-stories', auth, async (req, res) => {
+// Get user's submitted stories
+router.get('/my-stories', authenticate, async (req, res) => {
   try {
-    const userProfile = await MatrimonialProfile.findOne({ userId: req.user.id });
-    if (!userProfile) {
-      return res.json({ stories: [] });
-    }
+    const stories = await SuccessStory.find({ submittedBy: req.user._id })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const stories = await SuccessStory.find({
-      $or: [
-        { 'couple.groom.profileId': userProfile._id },
-        { 'couple.bride.profileId': userProfile._id }
-      ]
-    }).sort({ createdAt: -1 });
-
-    res.json({ stories });
-  } catch (error) {
-    errorTrackingService.captureError(error, { userId: req.user.id, context: 'get-my-stories' });
-    res.status(500).json({ error: 'Failed to fetch your stories' });
-  }
-});
-
-// Like/unlike a story (authenticated)
-router.post('/:storyId/like', auth, async (req, res) => {
-  try {
-    const story = await SuccessStory.findById(req.params.storyId);
-    
-    if (!story || story.status !== 'published') {
-      return res.status(404).json({ error: 'Story not found' });
-    }
-
-    const likedIndex = story.likedBy.indexOf(req.user.id);
-    
-    if (likedIndex > -1) {
-      // Unlike
-      story.likedBy.splice(likedIndex, 1);
-      story.likes = Math.max(0, story.likes - 1);
-    } else {
-      // Like
-      story.likedBy.push(req.user.id);
-      story.likes += 1;
-    }
-
-    await story.save();
-
-    res.json({ 
-      success: true, 
-      liked: likedIndex === -1,
-      likes: story.likes
+    res.json({
+      success: true,
+      data: stories,
     });
   } catch (error) {
-    errorTrackingService.captureError(error, { userId: req.user.id, storyId: req.params.storyId, context: 'like-story' });
-    res.status(500).json({ error: 'Failed to update like status' });
+    logger.error('Get my stories failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch your stories',
+    });
   }
 });
 
-// Add comment to story (authenticated)
-router.post('/:storyId/comment', auth, async (req, res) => {
+// Admin: Get pending stories
+router.get('/admin/pending', authenticate, async (req, res) => {
   try {
-    const { text } = req.body;
-    
-    if (!text || text.length > 500) {
-      return res.status(400).json({ error: 'Invalid comment text' });
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required',
+      });
     }
 
-    const story = await SuccessStory.findById(req.params.storyId);
-    
-    if (!story || story.status !== 'published') {
-      return res.status(404).json({ error: 'Story not found' });
+    const stories = await SuccessStory.find({ status: 'pending' })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({
+      success: true,
+      data: stories,
+    });
+  } catch (error) {
+    logger.error('Get pending stories failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch pending stories',
+    });
+  }
+});
+
+// Admin: Approve/reject story
+router.patch('/admin/:storyId/moderate', authenticate, async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required',
+      });
     }
 
-    const comment = {
-      userId: req.user.id,
-      name: req.user.name || 'Anonymous',
-      text,
-      createdAt: new Date()
+    const { action, rejectionReason, featured } = req.body;
+
+    const update = {
+      approvedBy: req.user._id,
+      approvedAt: new Date(),
     };
 
-    story.comments.push(comment);
-    await story.save();
-
-    res.status(201).json({ success: true, comment });
-  } catch (error) {
-    errorTrackingService.captureError(error, { userId: req.user.id, storyId: req.params.storyId, context: 'add-comment' });
-    res.status(500).json({ error: 'Failed to add comment' });
-  }
-});
-
-// Admin: Get all stories with filters
-router.get('/admin/all', auth, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    const { page = 1, limit = 20, status } = req.query;
-    
-    const filter = {};
-    if (status) filter.status = status;
-
-    const skip = (page - 1) * limit;
-    
-    const [stories, total] = await Promise.all([
-      SuccessStory.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .populate('couple.groom.profileId couple.bride.profileId', 'name age location'),
-      SuccessStory.countDocuments(filter)
-    ]);
-
-    res.json({
-      stories,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    errorTrackingService.captureError(error, { userId: req.user.id, context: 'admin-get-stories' });
-    res.status(500).json({ error: 'Failed to fetch stories' });
-  }
-});
-
-// Admin: Review story (approve/reject)
-router.patch('/admin/:storyId/review', auth, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    const { action, moderationNotes } = req.body;
-    
-    if (!['approve', 'reject'].includes(action)) {
-      return res.status(400).json({ error: 'Invalid action' });
-    }
-
-    const story = await SuccessStory.findById(req.params.storyId);
-    
-    if (!story) {
-      return res.status(404).json({ error: 'Story not found' });
-    }
-
-    story.status = action === 'approve' ? 'published' : 'rejected';
-    story.reviewedBy = req.user.id;
-    story.reviewedAt = new Date();
-    story.moderationNotes = moderationNotes;
-    
     if (action === 'approve') {
-      story.publishedAt = new Date();
+      update.status = featured ? 'featured' : 'approved';
+      update.isPublished = true;
+      update.isFeatured = featured || false;
+    } else if (action === 'reject') {
+      update.status = 'rejected';
+      update.rejectionReason = rejectionReason;
+      update.isPublished = false;
     }
 
-    await story.save();
-
-    await errorTrackingService.logAudit('success_story_reviewed', {
-      adminId: req.user.id,
-      storyId: story._id,
-      action
-    });
-
-    // Clear cache
-    await cacheService.delete('stories:public:*');
-
-    res.json({ success: true, story });
-  } catch (error) {
-    errorTrackingService.captureError(error, { userId: req.user.id, storyId: req.params.storyId, context: 'review-story' });
-    res.status(500).json({ error: 'Failed to review story' });
-  }
-});
-
-// Admin: Feature/unfeature story
-router.patch('/admin/:storyId/feature', auth, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    const { featured, featuredDays = 30 } = req.body;
-
-    const story = await SuccessStory.findById(req.params.storyId);
-    
-    if (!story || story.status !== 'published') {
-      return res.status(404).json({ error: 'Story not found or not published' });
-    }
-
-    story.featured = featured;
-    if (featured) {
-      const featuredUntil = new Date();
-      featuredUntil.setDate(featuredUntil.getDate() + parseInt(featuredDays));
-      story.featuredUntil = featuredUntil;
-    } else {
-      story.featuredUntil = null;
-    }
-
-    await story.save();
-
-    await errorTrackingService.logAudit('success_story_featured', {
-      adminId: req.user.id,
-      storyId: story._id,
-      featured
-    });
-
-    // Clear cache
-    await cacheService.delete('stories:public:*');
-
-    res.json({ success: true, story });
-  } catch (error) {
-    errorTrackingService.captureError(error, { userId: req.user.id, storyId: req.params.storyId, context: 'feature-story' });
-    res.status(500).json({ error: 'Failed to update featured status' });
-  }
-});
-
-// Admin: Delete story
-router.delete('/admin/:storyId', auth, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    const story = await SuccessStory.findByIdAndDelete(req.params.storyId);
-    
-    if (!story) {
-      return res.status(404).json({ error: 'Story not found' });
-    }
-
-    await errorTrackingService.logAudit('success_story_deleted', {
-      adminId: req.user.id,
-      storyId: req.params.storyId
-    });
-
-    // Clear cache
-    await cacheService.delete('stories:public:*');
-
-    res.json({ success: true, message: 'Story deleted successfully' });
-  } catch (error) {
-    errorTrackingService.captureError(error, { userId: req.user.id, storyId: req.params.storyId, context: 'delete-story' });
-    res.status(500).json({ error: 'Failed to delete story' });
-  }
-});
-
-// Get story statistics (admin)
-router.get('/admin/statistics', auth, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    const [
-      total,
-      pending,
-      approved,
-      published,
-      rejected,
-      featured,
-      totalViews,
-      totalLikes
-    ] = await Promise.all([
-      SuccessStory.countDocuments(),
-      SuccessStory.countDocuments({ status: 'pending' }),
-      SuccessStory.countDocuments({ status: 'approved' }),
-      SuccessStory.countDocuments({ status: 'published' }),
-      SuccessStory.countDocuments({ status: 'rejected' }),
-      SuccessStory.countDocuments({ featured: true, featuredUntil: { $gte: new Date() } }),
-      SuccessStory.aggregate([{ $group: { _id: null, total: { $sum: '$views' } } }]),
-      SuccessStory.aggregate([{ $group: { _id: null, total: { $sum: '$likes' } } }])
-    ]);
+    const story = await SuccessStory.findByIdAndUpdate(
+      req.params.storyId,
+      update,
+      { new: true }
+    );
 
     res.json({
-      total,
-      byStatus: { pending, approved, published, rejected },
-      featured,
-      engagement: {
-        totalViews: totalViews[0]?.total || 0,
-        totalLikes: totalLikes[0]?.total || 0
-      }
+      success: true,
+      message: `Story ${action}ed successfully`,
+      data: story,
     });
   } catch (error) {
-    errorTrackingService.captureError(error, { userId: req.user.id, context: 'story-statistics' });
-    res.status(500).json({ error: 'Failed to fetch statistics' });
+    logger.error('Moderate story failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to moderate story',
+    });
+  }
+});
+
+// Increment story views
+router.post('/:storyId/view', async (req, res) => {
+  try {
+    await SuccessStory.findByIdAndUpdate(
+      req.params.storyId,
+      { $inc: { views: 1 } }
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Increment story views failed:', error);
+    res.status(500).json({ success: false });
   }
 });
 

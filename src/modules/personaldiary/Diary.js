@@ -35,9 +35,10 @@ import AutosaveIndicator from "./AutosaveIndicator";
 // Phase 5.2 Components
 import AIInsights from "./AIInsights";
 import EncryptionBackupSettings from "./EncryptionBackupSettings";
-// Phase 4 Components
-import DiaryAnalyticsDashboard from "./DiaryAnalyticsDashboard";
-import DiaryAISummaryPanel from "./DiaryAISummaryPanel";
+// Phase 7 Components
+import RecommendationsPanel from "./RecommendationsPanel";
+import SharingPanel from "./SharingPanel";
+import PersonalizationPanel from "./PersonalizationPanel";
 // Phase 4.4 Components
 import AutosaveRecoveryModal from "./AutosaveRecoveryModal";
 import { io } from "socket.io-client";
@@ -100,6 +101,12 @@ const Diary = () => {
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
   const [draftEntries, setDraftEntries] = useState([]);
   const [loadingRecovery, setLoadingRecovery] = useState(false);
+
+  // Phase 7: Recommendations, Sharing, Personalization
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const [showSharingPanel, setShowSharingPanel] = useState(false);
+  const [showPersonalization, setShowPersonalization] = useState(false);
+  const [selectedEntryForSharing, setSelectedEntryForSharing] = useState(null);
 
   // PDF Export
   const [showExportModal, setShowExportModal] = useState(false);
@@ -644,6 +651,36 @@ const Diary = () => {
             >
               ✨ AI Summary
             </button>
+
+            {/* Phase 7: Recommendations Button */}
+            <button
+              type="button"
+              className="diary-secondary-btn"
+              onClick={() => setShowRecommendations(true)}
+              title="Get personalized recommendations"
+            >
+              💡 Recommendations
+            </button>
+
+            {/* Phase 7: Sharing Button */}
+            <button
+              type="button"
+              className="diary-secondary-btn"
+              onClick={() => setShowSharingPanel(true)}
+              title="Manage sharing and collaboration"
+            >
+              🤝 Sharing
+            </button>
+
+            {/* Phase 7: Personalization Button */}
+            <button
+              type="button"
+              className="diary-secondary-btn"
+              onClick={() => setShowPersonalization(true)}
+              title="Customize your diary experience"
+            >
+              ⚙️ Settings
+            </button>
           </div>
         </div>
       </section>
@@ -850,6 +887,54 @@ const Diary = () => {
             <div className="diary-modal-body diary-ai-summary-body">
               <DiaryAISummaryPanel userId={localStorage.getItem('userId')} dateRange={aiSummaryPeriod} />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 7: Recommendations Modal */}
+      {showRecommendations && (
+        <div className="diary-modal-overlay" onClick={() => setShowRecommendations(false)}>
+          <div className="diary-modal-content diary-recommendations-modal" onClick={(e) => e.stopPropagation()}>
+            <RecommendationsPanel
+              onClose={() => setShowRecommendations(false)}
+              onError={(err) => setError(err.message)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Phase 7: Sharing Panel Modal */}
+      {showSharingPanel && (
+        <div className="diary-modal-overlay" onClick={() => setShowSharingPanel(false)}>
+          <div className="diary-modal-content diary-sharing-modal" onClick={(e) => e.stopPropagation()}>
+            <SharingPanel
+              entryId={selectedEntryForSharing}
+              onClose={() => {
+                setShowSharingPanel(false);
+                setSelectedEntryForSharing(null);
+              }}
+              onError={(err) => setError(err.message)}
+              onSuccess={(msg) => {
+                setError(null);
+                // Show success message (you can add a success state)
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Phase 7: Personalization Modal */}
+      {showPersonalization && (
+        <div className="diary-modal-overlay" onClick={() => setShowPersonalization(false)}>
+          <div className="diary-modal-content diary-personalization-modal" onClick={(e) => e.stopPropagation()}>
+            <PersonalizationPanel
+              onClose={() => setShowPersonalization(false)}
+              onError={(err) => setError(err.message)}
+              onSuccess={(msg) => {
+                setError(null);
+                // Show success message
+              }}
+            />
           </div>
         </div>
       )}

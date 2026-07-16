@@ -6,8 +6,9 @@
 
 import React, { useState, useEffect } from 'react';
 import './Phase7Components.css';
+import { getRecommendations, getFocusAreas, getWellnessActions, getMotivationBoosts } from '../../services/diaryService';
 
-const RecommendationsPanel = ({ token, apiUrl = 'http://localhost:5000', onError }) => {
+const RecommendationsPanel = ({ onClose, onError }) => {
   const [recommendations, setRecommendations] = useState({
     focusAreas: [],
     wellnessActions: [],
@@ -30,100 +31,152 @@ const RecommendationsPanel = ({ token, apiUrl = 'http://localhost:5000', onError
       setLoading(true);
       setError(null);
 
-      const response = await fetch(
-        `${apiUrl}/api/diary/phase7/recommendations?daysBack=${daysBack}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+      const response = await getRecommendations(daysBack);
 
-      if (!response.ok) throw new Error('Failed to fetch recommendations');
-      const result = await response.json();
-
-      if (result.success) {
-        setRecommendations(result.data);
+      if (response.success) {
+        setRecommendations(response.data || {
+          focusAreas: [],
+          wellnessActions: [],
+          writingEnhancements: [],
+          moodInsights: [],
+          consistencyTips: [],
+          motivationBoosts: []
+        });
       } else {
-        throw new Error(result.error || 'Unknown error');
+        throw new Error(response.error || 'Unknown error');
       }
     } catch (err) {
       const message = err.message || 'Failed to load recommendations';
       setError(message);
-      onError?.(err);
+      if (onError) onError(err);
     } finally {
       setLoading(false);
     }
   };
 
   const renderFocusAreas = () => {
-    if (recommendations.focusAreas.length === 0) {
-      return <div className="empty-state">No focus areas identified. Keep writing!</div>;
+    if (!recommendations.focusAreas || recommendations.focusAreas.length === 0) {
+      return <div className="empty-state">✅ No focus areas identified. Keep up the great work!</div>;
     }
 
     return recommendations.focusAreas.map((area, idx) => (
-      <div key={idx} className={`recommendation-item priority-${area.priority}`}>
+      <div key={idx} className={`recommendation-item priority-${area.priority || 'medium'}`}>
         <div className="recommendation-header">
           <h4>{area.title}</h4>
-          <span className="priority-badge">{area.priority}</span>
+          <span className={`priority-badge priority-${area.priority || 'medium'}`}>
+            {area.priority || 'medium'}
+          </span>
         </div>
         <p className="description">{area.description}</p>
-        <div className="action-button">{area.action}</div>
+        {area.actions && area.actions.length > 0 && (
+          <div className="actions-list">
+            {area.actions.map((action, actionIdx) => (
+              <div key={actionIdx} className="action-item">
+                ✓ {action}
+              </div>
+            ))}
+          </div>
+        )}
+        {area.category && (
+          <span className="category-badge">{area.category}</span>
+        )}
       </div>
     ));
   };
 
   const renderWellnessActions = () => {
+    if (!recommendations.wellnessActions || recommendations.wellnessActions.length === 0) {
+      return <div className="empty-state">💪 Your wellness metrics look good!</div>;
+    }
+
     return recommendations.wellnessActions.map((action, idx) => (
       <div key={idx} className="wellness-action">
-        <div className="action-title">{action.title}</div>
+        <div className="action-title">
+          <span className="action-icon">💪</span>
+          {action.title}
+        </div>
         <div className="action-details">
           <p>{action.description}</p>
-          <div className="timeframe">⏱️ {action.timeframe}</div>
-          <div className="impact">📈 {action.estimatedImpact}</div>
-          <div className="difficulty">📊 {action.difficulty}</div>
+          {action.timeframe && (
+            <div className="timeframe">⏱️ Timeframe: {action.timeframe}</div>
+          )}
+          {action.impact !== undefined && (
+            <div className="impact">
+              📈 Impact: {action.impact}%
+            </div>
+          )}
         </div>
       </div>
     ));
   };
 
   const renderMotivationBoosts = () => {
+    if (!recommendations.motivationBoosts || recommendations.motivationBoosts.length === 0) {
+      return <div className="empty-state">🎉 Keep writing to unlock motivation boosts!</div>;
+    }
+
     return recommendations.motivationBoosts.map((boost, idx) => (
       <div key={idx} className="motivation-card">
-        <div className="motivation-title">{boost.title}</div>
-        <div className="motivation-message">{boost.message}</div>
-        <div className="celebration">{boost.celebration}</div>
+        <div className="motivation-emoji">{boost.emoji || '🎉'}</div>
+        <div className="motivation-content">
+          <div className="motivation-type">{boost.type || 'encouragement'}</div>
+          <div className="motivation-message">{boost.message}</div>
+        </div>
       </div>
     ));
   };
 
   if (loading) {
-    return <div className="loading-spinner">Loading recommendations...</div>;
+    return (
+      <div className="recommendations-panel loading">
+        <div className="loading-spinner">
+          <div className="spinner"></div>
+          <p>Loading recommendations...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="recommendations-panel">
       <div className="panel-header">
         <h2>✨ AI Recommendations</h2>
-        <div className="days-filter">
-          <select value={daysBack} onChange={(e) => setDaysBack(parseInt(e.target.value))}>
-            <option value={7}>Last 7 days</option>
-            <option value={30}>Last 30 days</option>
-            <option value={90}>Last 90 days</option>
-            <option value={180}>Last 6 months</option>
-          </select>
-          <button onClick={fetchRecommendations} className="refresh-btn">🔄 Refresh</button>
+        <div className="header-actions">
+          <div className="days-filter">
+            <label>Analysis Period:</label>
+            <select value={daysBack} onChange={(e) => setDaysBack(parseInt(e.target.value))}>
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+              <option value={180}>Last 6 months</option>
+            </select>
+          </div>
+          <button onClick={fetchRecommendations} className="refresh-btn" disabled={loading}>
+            🔄 Refresh
+          </button>
+          {onClose && (
+            <button onClick={onClose} className="close-btn" title="Close">
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          <span className="error-icon">⚠️</span>
+          {error}
+          <button onClick={fetchRecommendations} className="retry-btn">
+            Try Again
+          </button>
+        </div>
+      )}
 
       <div className="recommendations-tabs">
         {[
-          { key: 'focusAreas', label: '🎯 Focus Areas', count: recommendations.focusAreas.length },
-          { key: 'wellnessActions', label: '💪 Wellness', count: recommendations.wellnessActions.length },
-          { key: 'motivationBoosts', label: '🎉 Motivation', count: recommendations.motivationBoosts.length }
+          { key: 'focusAreas', label: '🎯 Focus Areas', count: recommendations.focusAreas?.length || 0 },
+          { key: 'wellnessActions', label: '💪 Wellness', count: recommendations.wellnessActions?.length || 0 },
+          { key: 'motivationBoosts', label: '🎉 Motivation', count: recommendations.motivationBoosts?.length || 0 }
         ].map(tab => (
           <button
             key={tab.key}
@@ -131,7 +184,7 @@ const RecommendationsPanel = ({ token, apiUrl = 'http://localhost:5000', onError
             onClick={() => setExpandedSection(tab.key)}
           >
             {tab.label}
-            {tab.count > 0 && <span className="count">{tab.count}</span>}
+            {tab.count > 0 && <span className="count-badge">{tab.count}</span>}
           </button>
         ))}
       </div>
@@ -142,8 +195,19 @@ const RecommendationsPanel = ({ token, apiUrl = 'http://localhost:5000', onError
         {expandedSection === 'motivationBoosts' && renderMotivationBoosts()}
       </div>
 
+      {recommendations.severity && (
+        <div className={`severity-indicator severity-${recommendations.severity}`}>
+          <span className="severity-label">Priority Level:</span>
+          <span className="severity-value">{recommendations.severity}</span>
+        </div>
+      )}
+
       <div className="panel-footer">
-        <p>Last updated: {new Date().toLocaleString()}</p>
+        <p className="update-time">
+          Last updated: {recommendations.timestamp 
+            ? new Date(recommendations.timestamp).toLocaleString() 
+            : new Date().toLocaleString()}
+        </p>
       </div>
     </div>
   );

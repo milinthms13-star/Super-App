@@ -1100,6 +1100,453 @@ export const exportEntriesAsPDF = (entries, options = {}) => {
   });
 };
 
+// ============================================================================
+// PHASE 7: COLLABORATION & SHARING
+// ============================================================================
+
+/**
+ * Create a shareable link for an entry
+ * @param {string} entryId - Entry ID
+ * @param {Object} options - Share options
+ * @param {Array} options.shareWith - User IDs or emails to share with
+ * @param {string} options.permission - 'view', 'comment', 'edit'
+ * @param {Date} options.expiresAt - Expiration date
+ * @param {boolean} options.isPublic - Public share
+ * @param {string} options.password - Optional password protection
+ * @returns {Promise<Object>} - Share link and configuration
+ */
+export const createShareLink = async (entryId, options = {}) => {
+  try {
+    const response = await axiosInstance.post(
+      `/diary/${entryId}/share`,
+      options
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error creating share link:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to create share link"
+    );
+  }
+};
+
+/**
+ * Get all active shares for an entry
+ * @param {string} entryId - Entry ID
+ * @returns {Promise<Object>} - List of shares
+ */
+export const getEntryShares = async (entryId) => {
+  try {
+    const response = await axiosInstance.get(`/diary/${entryId}/shares`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching entry shares:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch shares"
+    );
+  }
+};
+
+/**
+ * Update share permissions
+ * @param {string} shareId - Share ID
+ * @param {Object} updates - Permission updates
+ * @param {string} updates.permission - New permission level
+ * @param {boolean} updates.allowComments - Allow comments
+ * @param {boolean} updates.allowSharing - Allow resharing
+ * @returns {Promise<Object>} - Updated share
+ */
+export const updateSharePermissions = async (shareId, updates) => {
+  try {
+    const response = await axiosInstance.put(
+      `/diary/share/${shareId}/permissions`,
+      updates
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error updating share permissions:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to update permissions"
+    );
+  }
+};
+
+/**
+ * Revoke a share link
+ * @param {string} shareId - Share ID
+ * @param {string} reason - Reason for revocation
+ * @returns {Promise<Object>} - Revocation confirmation
+ */
+export const revokeShare = async (shareId, reason = null) => {
+  try {
+    const response = await axiosInstance.delete(`/diary/share/${shareId}`, {
+      data: { reason }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error revoking share:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to revoke share"
+    );
+  }
+};
+
+/**
+ * Add a comment to a shared entry
+ * @param {string} entryId - Entry ID
+ * @param {Object} comment - Comment data
+ * @param {string} comment.text - Comment text
+ * @param {string} comment.replyTo - Parent comment ID (for threads)
+ * @returns {Promise<Object>} - Created comment
+ */
+export const addCollaborationComment = async (entryId, comment) => {
+  try {
+    const response = await axiosInstance.post(
+      `/diary/${entryId}/comments`,
+      comment
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error adding comment:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to add comment"
+    );
+  }
+};
+
+/**
+ * Get comments for an entry
+ * @param {string} entryId - Entry ID
+ * @returns {Promise<Object>} - Comments list
+ */
+export const getEntryComments = async (entryId) => {
+  try {
+    const response = await axiosInstance.get(`/diary/${entryId}/comments`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching comments:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch comments"
+    );
+  }
+};
+
+/**
+ * Get collaboration summary for an entry
+ * @param {string} entryId - Entry ID
+ * @returns {Promise<Object>} - Collaboration metrics
+ */
+export const getCollaborationSummary = async (entryId) => {
+  try {
+    const response = await axiosInstance.get(
+      `/diary/${entryId}/collaboration/summary`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching collaboration summary:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch collaboration summary"
+    );
+  }
+};
+
+/**
+ * Get sharing statistics for user
+ * @returns {Promise<Object>} - Sharing stats
+ */
+export const getSharingStats = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/sharing/stats");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching sharing stats:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch sharing stats"
+    );
+  }
+};
+
+/**
+ * Get collaboration insights
+ * @returns {Promise<Object>} - Collaboration insights
+ */
+export const getCollaborationInsights = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/collaboration/insights");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching collaboration insights:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch insights"
+    );
+  }
+};
+
+// ============================================================================
+// PHASE 7: PERSONALIZATION
+// ============================================================================
+
+/**
+ * Get user personalization preferences
+ * @returns {Promise<Object>} - User preferences
+ */
+export const getUserPreferences = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/preferences");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching preferences:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch preferences"
+    );
+  }
+};
+
+/**
+ * Update user personalization preferences
+ * @param {Object} preferences - Preference updates
+ * @returns {Promise<Object>} - Updated preferences
+ */
+export const updateUserPreferences = async (preferences) => {
+  try {
+    const response = await axiosInstance.put(
+      "/diary/preferences",
+      preferences
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error updating preferences:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to update preferences"
+    );
+  }
+};
+
+/**
+ * Get personalized writing prompts
+ * @returns {Promise<Object>} - Personalized prompts
+ */
+export const getPersonalizedPrompts = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/prompts/personalized");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching personalized prompts:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch prompts"
+    );
+  }
+};
+
+/**
+ * Get writing mode configuration
+ * @param {string} mode - Writing mode name
+ * @returns {Promise<Object>} - Writing mode config
+ */
+export const getWritingMode = async (mode) => {
+  try {
+    const response = await axiosInstance.get(
+      `/diary/preferences/writing-mode/${mode}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching writing mode:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch writing mode"
+    );
+  }
+};
+
+/**
+ * Get theme configuration
+ * @returns {Promise<Object>} - Theme config
+ */
+export const getThemeConfig = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/preferences/theme");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching theme config:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch theme config"
+    );
+  }
+};
+
+/**
+ * Sync preferences across devices
+ * @param {string} deviceId - Device identifier
+ * @returns {Promise<Object>} - Sync result
+ */
+export const syncPreferences = async (deviceId) => {
+  try {
+    const response = await axiosInstance.post("/diary/preferences/sync", {
+      deviceId
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error syncing preferences:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to sync preferences"
+    );
+  }
+};
+
+/**
+ * Export preferences as JSON
+ * @returns {Promise<Object>} - Exported preferences
+ */
+export const exportPreferences = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/preferences/export");
+    return response.data;
+  } catch (error) {
+    console.error("Error exporting preferences:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to export preferences"
+    );
+  }
+};
+
+/**
+ * Import preferences from JSON
+ * @param {Object} preferences - Preferences to import
+ * @returns {Promise<Object>} - Import result
+ */
+export const importPreferences = async (preferences) => {
+  try {
+    const response = await axiosInstance.post(
+      "/diary/preferences/import",
+      preferences
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error importing preferences:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to import preferences"
+    );
+  }
+};
+
+// ============================================================================
+// PHASE 7: AI RECOMMENDATIONS
+// ============================================================================
+
+/**
+ * Get personalized recommendations
+ * @param {number} days - Days to analyze
+ * @returns {Promise<Object>} - Recommendations
+ */
+export const getRecommendations = async (days = 30) => {
+  try {
+    const response = await axiosInstance.get("/diary/recommendations", {
+      params: { days }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching recommendations:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch recommendations"
+    );
+  }
+};
+
+/**
+ * Get focus areas for improvement
+ * @returns {Promise<Object>} - Focus areas
+ */
+export const getFocusAreas = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/recommendations/focus-areas");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching focus areas:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch focus areas"
+    );
+  }
+};
+
+/**
+ * Get wellness action suggestions
+ * @returns {Promise<Object>} - Wellness actions
+ */
+export const getWellnessActions = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/recommendations/wellness-actions");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching wellness actions:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch wellness actions"
+    );
+  }
+};
+
+/**
+ * Get consistency tips based on streak
+ * @returns {Promise<Object>} - Consistency tips
+ */
+export const getConsistencyTips = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/recommendations/consistency-tips");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching consistency tips:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch consistency tips"
+    );
+  }
+};
+
+/**
+ * Get motivation boosts
+ * @returns {Promise<Object>} - Motivation boosts
+ */
+export const getMotivationBoosts = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/recommendations/motivation-boosts");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching motivation boosts:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch motivation boosts"
+    );
+  }
+};
+
+/**
+ * Get personalized writing prompts based on patterns
+ * @returns {Promise<Object>} - Writing prompts
+ */
+export const getWritingPrompts = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/recommendations/writing-prompts");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching writing prompts:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch writing prompts"
+    );
+  }
+};
+
+/**
+ * Get progress areas identification
+ * @returns {Promise<Object>} - Progress areas
+ */
+export const getProgressAreas = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/recommendations/progress-areas");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching progress areas:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch progress areas"
+    );
+  }
+};
+
 export default {
   buildLocalDateParam,
   buildTimezoneOffsetParam,
@@ -1145,4 +1592,31 @@ export default {
   // PDF Export
   exportEntryAsPDF,
   exportEntriesAsPDF,
+  // Phase 7: Collaboration & Sharing
+  createShareLink,
+  getEntryShares,
+  updateSharePermissions,
+  revokeShare,
+  addCollaborationComment,
+  getEntryComments,
+  getCollaborationSummary,
+  getSharingStats,
+  getCollaborationInsights,
+  // Phase 7: Personalization
+  getUserPreferences,
+  updateUserPreferences,
+  getPersonalizedPrompts,
+  getWritingMode,
+  getThemeConfig,
+  syncPreferences,
+  exportPreferences,
+  importPreferences,
+  // Phase 7: AI Recommendations
+  getRecommendations,
+  getFocusAreas,
+  getWellnessActions,
+  getConsistencyTips,
+  getMotivationBoosts,
+  getWritingPrompts,
+  getProgressAreas,
 };

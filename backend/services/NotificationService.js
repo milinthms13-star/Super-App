@@ -1,357 +1,325 @@
+/**
+ * Unified Notification Service
+ * Handles email, SMS, WhatsApp, and push notifications
+ */
+
+const nodemailer = require('nodemailer');
+const axios = require('axios');
 const logger = require('../utils/logger');
+const NotificationPreference = require('../models/NotificationPreference');
 
-// Twilio for SMS
-const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
-  ? require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-  : null;
-
-// SendGrid for Email
-const sgMail = process.env.SENDGRID_API_KEY
-  ? require('@sendgrid/mail')
-  : null;
-
-if (sgMail && process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-}
-
-// WhatsApp via Twilio
-const TWILIO_PHONE = process.env.TWILIO_PHONE_NUMBER || '';
-const TWILIO_WHATSAPP = process.env.TWILIO_WHATSAPP_NUMBER || '';
-const SENDGRID_FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'noreply@malabarbazaar.com';
-const SENDGRID_FROM_NAME = process.env.SENDGRID_FROM_NAME || 'Malabar Bazaar Finance';
-
-const NotificationTemplates = {
-  LEAD_RECEIVED: {
-    sms: (data) => `Dear ${data.name}, your loan application ${data.leadId} for ₹${data.amount} has been received. We'll contact you within 24 hours. - Malabar Bazaar`,
-    email: {
-      subject: (data) => `Loan Application Received - ${data.leadId}`,
-      html: (data) => `
-        <h2>Thank You for Your Application!</h2>
-        <p>Dear ${data.name},</p>
-        <p>Your loan application has been successfully received.</p>
-        <p><strong>Application Details:</strong></p>
-        <ul>
-          <li>Lead ID: ${data.leadId}</li>
-          <li>Loan Type: ${data.loanCategory}</li>
-          <li>Amount: ₹${data.amount}</li>
-          <li>Applied On: ${new Date(data.createdAt).toLocaleString()}</li>
-        </ul>
-        <p>Our consultant will contact you within 24 hours to proceed with your application.</p>
-        <p>You can track your application status anytime.</p>
-        <br>
-        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
-      `,
-    },
-    whatsapp: (data) => `🎉 Your loan application ${data.leadId} for ₹${data.amount} received!\n\nWe'll reach out within 24 hours.\n\nTrack status: [Link]\n\n- Malabar Bazaar`,
+// Email transporter (using Gmail SMTP, configure for your provider)
+const emailTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: process.env.SMTP_PORT || 587,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASSWORD,
   },
+});
 
-  DOCUMENTS_PENDING: {
-    sms: (data) => `Dear ${data.name}, please upload pending documents for ${data.leadId}. Upload now to process faster. - Malabar Bazaar`,
+// SMS Service (using Twilio, MSG91, or similar)
+const sendSMS = async (phoneNumber, message) => {
+  try {
+    if (!process.env.SMS_API_KEY || !process.env.SMS_SENDER_ID) {
+      logger.warn('SMS service not configured');
+      return { success: false, reason: 'not_configured' };
+    }
+
+    // Example using MSG91 (Indian SMS service)
+    const response = await axios.post(
+      'https://api.msg91.com/api/v5/flow/',
+      {
+        flow_id: process.env.MSG91_FLOW_ID,
+        sender: process.env.SMS_SENDER_ID,
+        mobiles: phoneNumber.replace(/\D/g, ''),
+        message: message,
+      },
+      {
+        headers: {
+          authkey: process.env.SMS_API_KEY,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return { success: true, response: response.data };
+  } catch (error) {
+    logger.error('SMS send failed:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+// WhatsApp Service (using WhatsApp Business API)
+const sendWhatsApp = async (phoneNumber, message, templateName = null) => {
+  try {
+    if (!process.env.WHATSAPP_BUSINESS_API_KEY) {
+      logger.warn('WhatsApp service not configured');
+      return { success: false, reason: 'not_configured' };
+    }
+
+    const whatsappService = require('./whatsappService');
+    
+    if (templateName) {
+      return await whatsappService.sendTemplateMessage(phoneNumber, templateName, {
+        message,
+      });
+    }
+    
+    return await whatsappService.sendMessage(phoneNumber, message);
+  } catch (error) {
+    logger.error('WhatsApp send failed:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+// Check if notification should be sent based on user preferences
+const shouldSendNotification = async (userId, channel, notificationType) => {
+  try {
+    const prefs = await NotificationPreference.findOne({ userId });
+    
+    if (!prefs) {
+      return true; // Default to sending if no preferences set
+    }
+
+    // Check if channel is enabled
+    if (!prefs[channel]?.enabled) {
+      return false;
+    }
+
+    // Check if specific notification type is enabled
+    if (prefs[channel][notificationType] === false) {
+      return false;
+    }
+
+    // Check quiet hours
+    if (prefs.quietHours?.enabled && (channel === 'sms' || channel === 'push')) {
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const { startTime, endTime } = prefs.quietHours;
+
+      if (startTime < endTime) {
+        if (currentTime >= startTime && currentTime < endTime) {
+          return false;
+        }
+      } else {
+        if (currentTime >= startTime || currentTime < endTime) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  } catch (error) {
+    logger.error('Error checking notification preferences:', error);
+    return true; // Default to sending on error
+  }
+};
+
+// Send Email Notification
+const sendEmailNotification = async (userId, email, subject, htmlContent, textContent) => {
+  try {
+    const shouldSend = await shouldSendNotification(userId, 'email', 'enabled');
+    
+    if (!shouldSend) {
+      logger.info(`Email notification skipped for user ${userId} due to preferences`);
+      return { success: false, reason: 'user_preference' };
+    }
+
+    const mailOptions = {
+      from: `${process.env.APP_NAME || 'SoulMatch'} <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: subject,
+      text: textContent,
+      html: htmlContent,
+    };
+
+    const info = await emailTransporter.sendMail(mailOptions);
+    
+    logger.info(`Email sent to ${email}: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logger.error(`Email send failed to ${email}:`, error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+// Notification Templates
+const templates = {
+  newMatch: {
     email: {
-      subject: (data) => `Action Required: Upload Documents - ${data.leadId}`,
+      subject: (data) => `🎉 New Match Found: ${data.matchName}`,
       html: (data) => `
-        <h2>Documents Required</h2>
-        <p>Dear ${data.name},</p>
-        <p>To proceed with your loan application ${data.leadId}, we need the following documents:</p>
-        <ul>
-          ${(data.pendingDocs || []).map(doc => `<li>${doc}</li>`).join('')}
-        </ul>
-        <p>Please upload these documents at your earliest convenience to avoid delays.</p>
-        <p><a href="${data.uploadLink}" style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Upload Documents</a></p>
-        <br>
-        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #e91e63;">You Have a New Match! 💕</h2>
+          <p>Hi ${data.userName},</p>
+          <p>We found someone special who matches your preferences!</p>
+          <div style="background: #f5f5f5; padding: 20px; margin: 20px 0; border-radius: 8px;">
+            <h3 style="margin: 0 0 10px 0;">${data.matchName}, ${data.matchAge}</h3>
+            <p style="margin: 5px 0;"><strong>Location:</strong> ${data.matchLocation}</p>
+            <p style="margin: 5px 0;"><strong>Profession:</strong> ${data.matchProfession}</p>
+            <p style="margin: 5px 0;"><strong>Education:</strong> ${data.matchEducation}</p>
+            <p style="margin: 5px 0;"><strong>Match Score:</strong> ${data.matchScore}%</p>
+          </div>
+          <a href="${data.profileUrl}" style="display: inline-block; background: #e91e63; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 0;">View Profile</a>
+          <p style="color: #666; font-size: 12px; margin-top: 30px;">
+            Not interested? <a href="${data.unsubscribeUrl}">Manage notification preferences</a>
+          </p>
+        </div>
       `,
+      text: (data) => `Hi ${data.userName}, you have a new match: ${data.matchName}, ${data.matchAge} from ${data.matchLocation}. Match score: ${data.matchScore}%. View profile: ${data.profileUrl}`,
     },
-    whatsapp: (data) => `📄 Action needed for ${data.leadId}!\n\nPlease upload:\n${(data.pendingDocs || []).join('\n')}\n\nUpload: [Link]\n\n- Malabar Bazaar`,
+    sms: (data) => `New match on SoulMatch! ${data.matchName}, ${data.matchAge} from ${data.matchLocation}. Match score: ${data.matchScore}%. View: ${data.profileUrl}`,
+    whatsapp: (data) => `🎉 *New Match Found!*\n\n${data.matchName}, ${data.matchAge}\n📍 ${data.matchLocation}\n💼 ${data.matchProfession}\n🎓 ${data.matchEducation}\n\n*Match Score:* ${data.matchScore}%\n\nView Profile: ${data.profileUrl}`,
   },
-
-  CONSULTANT_ASSIGNED: {
-    sms: (data) => `Dear ${data.name}, consultant ${data.consultantName} (${data.consultantPhone}) has been assigned to ${data.leadId}. Expect a call soon. - Malabar Bazaar`,
+  interestReceived: {
     email: {
-      subject: (data) => `Consultant Assigned - ${data.leadId}`,
+      subject: (data) => `💌 ${data.senderName} sent you an interest`,
       html: (data) => `
-        <h2>Consultant Assigned to Your Application</h2>
-        <p>Dear ${data.name},</p>
-        <p>Good news! Your loan application has been assigned to our expert consultant.</p>
-        <p><strong>Consultant Details:</strong></p>
-        <ul>
-          <li>Name: ${data.consultantName}</li>
-          <li>Phone: ${data.consultantPhone}</li>
-          <li>Application: ${data.leadId}</li>
-        </ul>
-        <p>Your consultant will reach out to you shortly to discuss your application and guide you through the next steps.</p>
-        <br>
-        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #e91e63;">Someone is Interested in You! 💌</h2>
+          <p>Hi ${data.receiverName},</p>
+          <p><strong>${data.senderName}</strong> has expressed interest in your profile!</p>
+          ${data.message ? `<div style="background: #f5f5f5; padding: 15px; margin: 20px 0; border-left: 4px solid #e91e63;">
+            <p style="margin: 0; font-style: italic;">"${data.message}"</p>
+          </div>` : ''}
+          <div style="margin: 20px 0;">
+            <a href="${data.profileUrl}" style="display: inline-block; background: #e91e63; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin-right: 10px;">View Profile</a>
+            <a href="${data.respondUrl}" style="display: inline-block; background: #4caf50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">Respond Now</a>
+          </div>
+        </div>
       `,
+      text: (data) => `${data.senderName} sent you an interest on SoulMatch! ${data.message ? `Message: "${data.message}". ` : ''}View profile: ${data.profileUrl}`,
     },
-    whatsapp: (data) => `👤 Consultant assigned to ${data.leadId}!\n\n${data.consultantName}\n📞 ${data.consultantPhone}\n\nExpect a call soon.\n\n- Malabar Bazaar`,
+    sms: (data) => `${data.senderName} sent you an interest on SoulMatch! View profile & respond: ${data.profileUrl}`,
+    whatsapp: (data) => `💌 *New Interest Received!*\n\n${data.senderName} is interested in your profile!\n\n${data.message ? `Message: "${data.message}"\n\n` : ''}View & Respond: ${data.profileUrl}`,
   },
-
-  STATUS_UPDATE: {
-    sms: (data) => `Dear ${data.name}, ${data.leadId} status: ${data.statusLabel}. ${data.note || ''} - Malabar Bazaar`,
+  interestAccepted: {
     email: {
-      subject: (data) => `Application Update - ${data.leadId}`,
+      subject: (data) => `✅ ${data.accepterName} accepted your interest!`,
       html: (data) => `
-        <h2>Application Status Update</h2>
-        <p>Dear ${data.name},</p>
-        <p>Your loan application ${data.leadId} has been updated.</p>
-        <p><strong>Current Status:</strong> ${data.statusLabel}</p>
-        ${data.note ? `<p><strong>Note:</strong> ${data.note}</p>` : ''}
-        <p>Track your application for more details.</p>
-        <br>
-        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #4caf50;">Great News! Your Interest was Accepted! ✅</h2>
+          <p>Hi ${data.senderName},</p>
+          <p><strong>${data.accepterName}</strong> has accepted your interest! You can now start chatting.</p>
+          <div style="margin: 20px 0;">
+            <a href="${data.chatUrl}" style="display: inline-block; background: #4caf50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">Start Chatting</a>
+          </div>
+          <p style="color: #666; font-size: 14px;">Tip: Start with a friendly greeting and ask about their interests!</p>
+        </div>
       `,
+      text: (data) => `Good news! ${data.accepterName} accepted your interest on SoulMatch. Start chatting: ${data.chatUrl}`,
     },
-    whatsapp: (data) => `📊 Update for ${data.leadId}\n\nStatus: ${data.statusLabel}\n${data.note ? `\nNote: ${data.note}` : ''}\n\n- Malabar Bazaar`,
+    sms: (data) => `${data.accepterName} accepted your interest! Start chatting on SoulMatch: ${data.chatUrl}`,
+    whatsapp: (data) => `✅ *Interest Accepted!*\n\n${data.accepterName} accepted your interest!\n\nYou can now start chatting: ${data.chatUrl}`,
   },
-
-  APPROVED: {
-    sms: (data) => `🎉 Congratulations ${data.name}! ${data.leadId} for ₹${data.amount} approved by ${data.institutionName}. Contact ${data.consultantName} for next steps. - Malabar Bazaar`,
+  messageReceived: {
     email: {
-      subject: (data) => `🎉 Loan Application Approved - ${data.leadId}`,
+      subject: (data) => `💬 New message from ${data.senderName}`,
       html: (data) => `
-        <h2 style="color: green;">🎉 Congratulations! Your Loan is Approved!</h2>
-        <p>Dear ${data.name},</p>
-        <p>We're delighted to inform you that your loan application has been approved!</p>
-        <p><strong>Approval Details:</strong></p>
-        <ul>
-          <li>Lead ID: ${data.leadId}</li>
-          <li>Amount: ₹${data.amount}</li>
-          <li>Approved By: ${data.institutionName}</li>
-          <li>Consultant: ${data.consultantName} (${data.consultantPhone})</li>
-        </ul>
-        <p>Please contact your consultant to proceed with the final documentation and disbursement process with ${data.institutionName}.</p>
-        <br>
-        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2196f3;">New Message! 💬</h2>
+          <p>Hi ${data.receiverName},</p>
+          <p><strong>${data.senderName}</strong> sent you a message:</p>
+          <div style="background: #f5f5f5; padding: 15px; margin: 20px 0; border-radius: 8px;">
+            <p style="margin: 0;">${data.messagePreview}</p>
+          </div>
+          <a href="${data.chatUrl}" style="display: inline-block; background: #2196f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">Reply Now</a>
+        </div>
       `,
+      text: (data) => `New message from ${data.senderName}: "${data.messagePreview}". Reply: ${data.chatUrl}`,
     },
-    whatsapp: (data) => `🎉 Congratulations!\n\n${data.leadId} APPROVED!\n\nAmount: ₹${data.amount}\nBy: ${data.institutionName}\n\nContact ${data.consultantName}\n📞 ${data.consultantPhone}\n\n- Malabar Bazaar`,
+    sms: (data) => `New message from ${data.senderName} on SoulMatch. Reply: ${data.chatUrl}`,
+    whatsapp: (data) => `💬 *New Message*\n\nFrom: ${data.senderName}\n"${data.messagePreview}"\n\nReply: ${data.chatUrl}`,
   },
-
-  REJECTED: {
-    sms: (data) => `Dear ${data.name}, ${data.leadId} could not be approved at this time. ${data.reason || 'Contact consultant for options.'} - Malabar Bazaar`,
+  dailyDigest: {
     email: {
-      subject: (data) => `Application Update - ${data.leadId}`,
+      subject: (data) => `Your Daily Match Digest - ${data.newMatchCount} new matches`,
       html: (data) => `
-        <h2>Application Update</h2>
-        <p>Dear ${data.name},</p>
-        <p>Thank you for your interest in our loan services.</p>
-        <p>After careful review, we regret to inform you that your application ${data.leadId} could not be approved at this time.</p>
-        ${data.reason ? `<p><strong>Reason:</strong> ${data.reason}</p>` : ''}
-        <p>Please don't be discouraged. You can:</p>
-        <ul>
-          <li>Improve your credit score and reapply</li>
-          <li>Consider alternative loan options</li>
-          <li>Contact our consultant for guidance</li>
-        </ul>
-        <p>We're here to help you find the right financial solution.</p>
-        <br>
-        <p>Best regards,<br>Malabar Bazaar Finance Team</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #e91e63;">Your Daily Match Digest 📊</h2>
+          <p>Hi ${data.userName},</p>
+          <p>Here's what happened in the last 24 hours:</p>
+          <div style="background: #f5f5f5; padding: 20px; margin: 20px 0; border-radius: 8px;">
+            <p><strong>🎯 New Matches:</strong> ${data.newMatchCount}</p>
+            <p><strong>👁️ Profile Views:</strong> ${data.profileViews}</p>
+            <p><strong>💌 Interests Received:</strong> ${data.interestsReceived}</p>
+            <p><strong>💬 New Messages:</strong> ${data.newMessages}</p>
+          </div>
+          ${data.topMatches && data.topMatches.length > 0 ? `
+            <h3>Top Matches for You:</h3>
+            ${data.topMatches.map(match => `
+              <div style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 8px;">
+                <h4 style="margin: 0 0 10px 0;">${match.name}, ${match.age}</h4>
+                <p style="margin: 5px 0;">${match.location} | ${match.profession}</p>
+                <p style="margin: 5px 0;"><strong>Match Score:</strong> ${match.matchScore}%</p>
+                <a href="${match.profileUrl}" style="color: #e91e63;">View Profile →</a>
+              </div>
+            `).join('')}
+          ` : ''}
+          <a href="${data.dashboardUrl}" style="display: inline-block; background: #e91e63; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 0;">View Dashboard</a>
+        </div>
       `,
-    },
-    whatsapp: (data) => `Dear ${data.name},\n\n${data.leadId} update:\n\n${data.reason || 'Could not be approved at this time.'}\n\nContact consultant for options.\n\n- Malabar Bazaar`,
-  },
-
-  SLA_REMINDER_CONSULTANT: {
-    sms: (data) => `⚠️ SLA Alert: ${data.overdueCount} overdue leads. Please take action. - Malabar Bazaar Admin`,
-    email: {
-      subject: (data) => `⚠️ SLA Alert: ${data.overdueCount} Overdue Leads`,
-      html: (data) => `
-        <h2 style="color: red;">⚠️ SLA Alert</h2>
-        <p>Dear Consultant,</p>
-        <p>You have <strong>${data.overdueCount}</strong> leads that are overdue for action.</p>
-        <ul>
-          <li>Overdue: ${data.overdueCount}</li>
-          <li>Due Soon: ${data.dueSoonCount}</li>
-          <li>Without SLA: ${data.withoutSlaCount}</li>
-        </ul>
-        <p>Please log in to the system and take necessary actions to maintain our service standards.</p>
-        <br>
-        <p>Malabar Bazaar Admin</p>
-      `,
+      text: (data) => `Daily Digest: ${data.newMatchCount} new matches, ${data.profileViews} profile views, ${data.interestsReceived} interests. View dashboard: ${data.dashboardUrl}`,
     },
   },
 };
 
-class NotificationService {
-  async sendSMS(phone, message) {
-    if (!twilioClient) {
-      logger.warn('Twilio not configured, skipping SMS');
-      return { success: false, reason: 'twilio-not-configured' };
-    }
+// Main notification function
+const sendNotification = async (userId, notificationType, data, channels = ['email', 'sms', 'whatsapp']) => {
+  const results = {};
 
-    try {
-      const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
-      const result = await twilioClient.messages.create({
-        body: message,
-        from: TWILIO_PHONE,
-        to: formattedPhone,
-      });
-
-      logger.info(`SMS sent to ${phone}: ${result.sid}`);
-      return { success: true, sid: result.sid };
-    } catch (error) {
-      logger.error(`SMS send failed to ${phone}: ${error.message}`);
-      return { success: false, error: error.message };
-    }
-  }
-
-  async sendEmail(to, subject, html, fromName = SENDGRID_FROM_NAME) {
-    if (!sgMail) {
-      logger.warn('SendGrid not configured, skipping email');
-      return { success: false, reason: 'sendgrid-not-configured' };
-    }
-
-    try {
-      const msg = {
-        to,
-        from: {
-          email: SENDGRID_FROM_EMAIL,
-          name: fromName,
-        },
-        subject,
-        html,
-      };
-
-      await sgMail.send(msg);
-      logger.info(`Email sent to ${to}: ${subject}`);
-      return { success: true };
-    } catch (error) {
-      logger.error(`Email send failed to ${to}: ${error.message}`);
-      return { success: false, error: error.message };
-    }
-  }
-
-  async sendWhatsApp(phone, message) {
-    if (!twilioClient || !TWILIO_WHATSAPP) {
-      logger.warn('Twilio WhatsApp not configured, skipping');
-      return { success: false, reason: 'whatsapp-not-configured' };
-    }
-
-    try {
-      const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
-      const result = await twilioClient.messages.create({
-        body: message,
-        from: `whatsapp:${TWILIO_WHATSAPP}`,
-        to: `whatsapp:${formattedPhone}`,
-      });
-
-      logger.info(`WhatsApp sent to ${phone}: ${result.sid}`);
-      return { success: true, sid: result.sid };
-    } catch (error) {
-      logger.error(`WhatsApp send failed to ${phone}: ${error.message}`);
-      return { success: false, error: error.message };
-    }
-  }
-
-  async sendNotification(type, channels, data) {
-    const template = NotificationTemplates[type];
+  try {
+    const template = templates[notificationType];
+    
     if (!template) {
-      logger.warn(`No template found for notification type: ${type}`);
-      return { success: false, reason: 'template-not-found' };
+      logger.error(`Unknown notification type: ${notificationType}`);
+      return { success: false, error: 'Unknown notification type' };
     }
 
-    const results = {};
-
-    if (channels.includes('sms') && data.phone && template.sms) {
-      results.sms = await this.sendSMS(data.phone, template.sms(data));
+    // Send email
+    if (channels.includes('email') && data.email) {
+      const shouldSend = await shouldSendNotification(userId, 'email', notificationType);
+      if (shouldSend && template.email) {
+        results.email = await sendEmailNotification(
+          userId,
+          data.email,
+          template.email.subject(data),
+          template.email.html(data),
+          template.email.text(data)
+        );
+      }
     }
 
-    if (channels.includes('email') && data.email && template.email) {
-      const { subject, html } = template.email;
-      results.email = await this.sendEmail(
-        data.email,
-        subject(data),
-        html(data)
-      );
+    // Send SMS
+    if (channels.includes('sms') && data.phone) {
+      const shouldSend = await shouldSendNotification(userId, 'sms', notificationType);
+      if (shouldSend && template.sms) {
+        results.sms = await sendSMS(data.phone, template.sms(data));
+      }
     }
 
-    if (channels.includes('whatsapp') && data.phone && data.whatsappOptIn && template.whatsapp) {
-      results.whatsapp = await this.sendWhatsApp(data.phone, template.whatsapp(data));
+    // Send WhatsApp
+    if (channels.includes('whatsapp') && data.phone) {
+      const shouldSend = await shouldSendNotification(userId, 'whatsapp', notificationType);
+      if (shouldSend && template.whatsapp) {
+        results.whatsapp = await sendWhatsApp(data.phone, template.whatsapp(data));
+      }
     }
 
-    return results;
+    return { success: true, results };
+  } catch (error) {
+    logger.error('Notification send failed:', error);
+    return { success: false, error: error.message, results };
   }
+};
 
-  async notifyLeadReceived(lead, userEmail = '') {
-    return this.sendNotification('LEAD_RECEIVED', ['sms', 'email'], {
-      name: lead.fullName,
-      phone: lead.phone,
-      email: userEmail,
-      leadId: lead.leadId,
-      amount: lead.amount,
-      loanCategory: lead.loanCategory,
-      createdAt: lead.createdAt,
-    });
-  }
-
-  async notifyDocumentsPending(lead, pendingDocs = [], userEmail = '') {
-    return this.sendNotification('DOCUMENTS_PENDING', ['sms', 'email', 'whatsapp'], {
-      name: lead.fullName,
-      phone: lead.phone,
-      email: userEmail,
-      leadId: lead.leadId,
-      pendingDocs,
-      whatsappOptIn: lead.whatsappOptIn,
-      uploadLink: `${process.env.APP_URL || 'https://malabarbazaar.com'}/finance#apply`,
-    });
-  }
-
-  async notifyConsultantAssigned(lead, userEmail = '') {
-    return this.sendNotification('CONSULTANT_ASSIGNED', ['sms', 'email', 'whatsapp'], {
-      name: lead.fullName,
-      phone: lead.phone,
-      email: userEmail,
-      leadId: lead.leadId,
-      consultantName: lead.consultant?.name || '',
-      consultantPhone: lead.consultant?.phone || '',
-      whatsappOptIn: lead.whatsappOptIn,
-    });
-  }
-
-  async notifyStatusUpdate(lead, statusLabel, note = '', userEmail = '') {
-    return this.sendNotification('STATUS_UPDATE', ['sms', 'email', 'whatsapp'], {
-      name: lead.fullName,
-      phone: lead.phone,
-      email: userEmail,
-      leadId: lead.leadId,
-      statusLabel,
-      note,
-      whatsappOptIn: lead.whatsappOptIn,
-    });
-  }
-
-  async notifyApproved(lead, userEmail = '') {
-    return this.sendNotification('APPROVED', ['sms', 'email', 'whatsapp'], {
-      name: lead.fullName,
-      phone: lead.phone,
-      email: userEmail,
-      leadId: lead.leadId,
-      amount: lead.amount,
-      institutionName: lead.institution?.name || 'Our partner',
-      consultantName: lead.consultant?.name || '',
-      consultantPhone: lead.consultant?.phone || '',
-      whatsappOptIn: lead.whatsappOptIn,
-    });
-  }
-
-  async notifyRejected(lead, reason = '', userEmail = '') {
-    return this.sendNotification('REJECTED', ['sms', 'email'], {
-      name: lead.fullName,
-      phone: lead.phone,
-      email: userEmail,
-      leadId: lead.leadId,
-      reason,
-      whatsappOptIn: lead.whatsappOptIn,
-    });
-  }
-
-  async notifySLAAlert(consultantEmail, slaData) {
-    return this.sendNotification('SLA_REMINDER_CONSULTANT', ['email'], {
-      email: consultantEmail,
-      ...slaData,
-    });
-  }
-}
-
-module.exports = new NotificationService();
+module.exports = {
+  sendNotification,
+  sendEmailNotification,
+  sendSMS,
+  sendWhatsApp,
+  shouldSendNotification,
+  templates,
+};

@@ -86,6 +86,20 @@ const chatSchema = new mongoose.Schema(
       },
     ],
 
+    // Unread count per user (Map for efficient lookups)
+    unreadCount: {
+      type: Map,
+      of: Number,
+      default: () => new Map()
+    },
+
+    // Last read message ID per user
+    lastReadMessageId: {
+      type: Map,
+      of: mongoose.Schema.Types.ObjectId,
+      default: () => new Map()
+    },
+
     // Chat settings
     settings: {
       allowFileSharing: {

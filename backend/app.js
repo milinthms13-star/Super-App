@@ -273,6 +273,7 @@ app.use('/api/export', rateLimiters.export, require('./routes/exportRoutes'));
 app.use('/api/video-studio', createLazyRouteMiddleware('./routes/videoStudio'));
 app.use('/api/kids-video-hf', createLazyRouteMiddleware('./routes/kidsVideoGeneratorHF'));
 app.use('/api/kids-story', createLazyRouteMiddleware('./routes/kidsStoryGeneratorRoutes'));
+app.use('/api/cartoon-video', createLazyRouteMiddleware('./routes/cartoonVideoGenerator'));
 app.use('/api/photo-studio', require('./routes/photoStudio'));
 app.use('/api/voice-input', require('./routes/voiceInput'));
 app.use('/api/ai-voice-friend', require('./routes/voiceFriendRoutes'));
@@ -328,6 +329,9 @@ app.use('/api/messaging/v5/smart-replies', require('./routes/smartRepliesRoutes'
 app.use('/api/messaging/v5/filters', require('./routes/messageFilterRoutes'));
 app.use('/api/messaging/v5/voice', require('./routes/voiceMessageRoutes'));
 app.use('/api/messaging/v5/backup', require('./routes/messageBackupRoutes'));
+
+// Advanced messaging features
+app.use('/api/messaging/advanced', require('./routes/messageAdvancedRoutes'));
 
 app.use('/api/bulkorders', require('./routes/bulkorders'));
 app.use('/api/diary', require('./routes/diary'));
@@ -417,6 +421,16 @@ app.use('/api/matrimonial/location', require('./routes/matrimonial-location'));
 app.use('/api/matrimonial/moderation', require('./routes/matrimonial-moderation'));
 app.use('/api/matrimonial/analytics', require('./routes/matrimonial-analytics'));
 app.use('/api/matrimonial/success-stories', require('./routes/matrimonial-success-stories'));
+app.use('/api/matrimonial/photos', require('./routes/matrimonial-photos'));
+app.use('/api/matrimonial/notifications', require('./routes/matrimonial-notifications'));
+app.use('/api/matrimonial/saved-searches', require('./routes/matrimonial-saved-searches'));
+app.use('/api/matrimonial/messages-enhanced', require('./routes/matrimonial-messages-enhanced'));
+app.use('/api/matrimonial/verification', require('./routes/matrimonial-verification'));
+app.use('/api/matrimonial/astrology', require('./routes/matrimonial-astrology'));
+app.use('/api/matrimonial/family', require('./routes/matrimonial-family'));
+app.use('/api/matrimonial/compatibility', require('./routes/matrimonial-compatibility'));
+app.use('/api/matrimonial/meetings', require('./routes/matrimonial-meetings'));
+app.use('/api/matrimonial/behavioral', require('./routes/matrimonial-behavioral'));
 app.use('/api/jobportal', require('./routes/jobportal'));
 app.use('/api/hotelbooking', require('./routes/hotelbooking'));
 app.use('/api/hotelbookings', require('./routes/hotelbooking'));

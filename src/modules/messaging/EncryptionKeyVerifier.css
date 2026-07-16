@@ -1,0 +1,292 @@
+.encryption-verifier-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.encryption-verifier-container {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.verifier-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px 12px 0 0;
+}
+
+.verifier-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  color: white;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+}
+
+.verified-badge {
+  background: #d4edda;
+  color: #155724;
+  padding: 12px 20px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.verifier-content {
+  padding: 20px;
+}
+
+.info-section {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.info-text {
+  margin: 0;
+  color: #555;
+  line-height: 1.6;
+}
+
+.verification-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 25px;
+}
+
+.method-btn {
+  padding: 12px;
+  border: 2px solid #e0e0e0;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.3s;
+}
+
+.method-btn.active {
+  border-color: #667eea;
+  background: #667eea;
+  color: white;
+}
+
+.method-btn:hover {
+  border-color: #667eea;
+}
+
+.qr-verification,
+.manual-verification {
+  margin-bottom: 25px;
+}
+
+.qr-verification h3,
+.manual-verification h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.2rem;
+  color: #333;
+}
+
+.method-description {
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.qr-code-display {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.qr-code-display img {
+  max-width: 100%;
+  height: auto;
+}
+
+.method-note {
+  text-align: center;
+  font-size: 0.875rem;
+  color: #999;
+  font-style: italic;
+}
+
+.fingerprint-box {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.fingerprint-box label {
+  display: block;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.fingerprint-display {
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  color: #667eea;
+  padding: 12px;
+  background: white;
+  border-radius: 6px;
+  word-break: break-all;
+  margin-bottom: 10px;
+  border: 1px solid #e0e0e0;
+}
+
+.btn-copy {
+  background: white;
+  border: 1px solid #667eea;
+  color: #667eea;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.3s;
+}
+
+.btn-copy:hover {
+  background: #667eea;
+  color: white;
+}
+
+.manual-input {
+  margin-top: 25px;
+}
+
+.manual-input label {
+  display: block;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.manual-input input {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 1rem;
+}
+
+.manual-input input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.verifier-actions {
+  margin-top: 20px;
+}
+
+.btn-verify {
+  width: 100%;
+  padding: 14px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.btn-verify:hover:not(:disabled) {
+  background: #218838;
+}
+
+.btn-verify:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.advanced-section {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+  text-align: center;
+}
+
+.btn-reset {
+  background: white;
+  border: 1px solid #dc3545;
+  color: #dc3545;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s;
+}
+
+.btn-reset:hover:not(:disabled) {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-reset:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.reset-note {
+  margin: 10px 0 0 0;
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.loading-state {
+  padding: 60px 20px;
+  text-align: center;
+  color: #999;
+}
+
+.error-message {
+  background: #ffe5e5;
+  color: #d32f2f;
+  padding: 12px;
+  border-radius: 6px;
+  margin: 15px 20px;
+}
+
+@media (max-width: 768px) {
+  .encryption-verifier-container {
+    width: 95%;
+    max-height: 95vh;
+  }
+
+  .verification-methods {
+    grid-template-columns: 1fr;
+  }
+}

@@ -183,6 +183,11 @@ const FRIENDLY_PIPELINE_STEPS = [
   { key: "render", label: "Rendering video" },
 ];
 
+const CARTOON_GENERATION_MODES = [
+  { id: "auto", label: "Auto (Analyze Story)", description: "AI analyzes your story and generates everything automatically" },
+  { id: "manual", label: "Manual (Custom Input)", description: "Provide your own script with character dialogue" },
+];
+
 const DEFAULT_STORY_PROMPT = STORY_TEMPLATES[0].prompt;
 const MAX_RENDER_CHARACTERS = 2;
 const TOPIC_PROMPT_MIN_LENGTH = 3;
@@ -639,6 +644,11 @@ const KidsStoryVideoMaker = () => {
     voice: false,
     music: false,
   });
+  const [cartoonMode, setCartoonMode] = useState("auto");
+  const [isCartoonGenerating, setIsCartoonGenerating] = useState(false);
+  const [cartoonVideoUrl, setCartoonVideoUrl] = useState("");
+  const [cartoonProgress, setCartoonProgress] = useState(0);
+  const [cartoonProgressLabel, setCartoonProgressLabel] = useState("");
 
   const languageLabel = useMemo(
     () => getLanguageOption(languageId)?.label || "English",
@@ -2746,6 +2756,75 @@ const KidsStoryVideoMaker = () => {
     setMessage("");
   };
 
+  const handleGenerateCartoonVideo = async () => {
+    const storyContent = sanitizeText(storyText);
+    if (!storyContent || storyContent.length < MIN_STORY_LENGTH) {
+      setError(`Please provide at least ${MIN_STORY_LENGTH} characters for cartoon video generation.`);
+      return;
+    }
+
+    setIsCartoonGenerating(true);
+    setCartoonProgress(0);
+    setCartoonProgressLabel("Starting cartoon video generation...");
+    setError("");
+    setMessage("Generating cartoon video with character animation and dialogue...");
+
+    try {
+      const response = await fetch('/api/cartoon-video/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          story: storyContent,
+          title: sanitizeText(storyTitle || "Cartoon Story"),
+          language: getLanguageCode(languageId),
+          style: styleId,
+          voiceEngine: 'auto',
+          videoSize: videoSizeId,
+          safeMode,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || data.message || "Cartoon video generation failed");
+      }
+
+      setCartoonProgress(100);
+      setCartoonProgressLabel("Cartoon video generated successfully!");
+      setCartoonVideoUrl(normalizeMediaUrl(data.videoUrl || data.videoPath));
+      setMessage("Cartoon video with character animation and dialogue is ready! Preview and download.");
+      setActiveTab("cartoon-preview");
+    } catch (err) {
+      setError(formatSafetyError(err) || err.message || "Failed to generate cartoon video");
+      setCartoonProgress(0);
+      setCartoonProgressLabel("");
+    } finally {
+      setIsCartoonGenerating(false);
+    }
+  };
+
+  const handleDownloadCartoonVideo = () => {
+    if (!cartoonVideoUrl) {
+      setError("Generate the cartoon video first to download it.");
+      return;
+    }
+
+    const baseTitle = sanitizeText(storyTitle || "cartoon_story")
+      .replace(/[^a-z0-9]/gi, "_")
+      .toLowerCase();
+
+    const link = document.createElement("a");
+    link.href = cartoonVideoUrl;
+    link.download = `${baseTitle}_cartoon.mp4`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    
+    setMessage("Cartoon video download started.");
+    setError("");
+  };
+
   return (
     <div className="kids-story-video-maker page-shell">
       <section className="kids-story-hero">
@@ -2802,6 +2881,7 @@ const KidsStoryVideoMaker = () => {
         {[
           { id: "story-generator", label: t("kidsstory.tabs.storyGenerator", { defaultValue: "Story Generator" }) },
           { id: "create", label: t("kidsstory.tabs.create", { defaultValue: "Create" }) },
+          { id: "cartoon-video", label: "Cartoon Video Generator" },
           { id: "scenes", label: t("kidsstory.tabs.scenes", { defaultValue: "Scenes" }) },
           { id: "export", label: t("kidsstory.tabs.export", { defaultValue: "Export" }) },
         ].map((tab) => (
@@ -2847,6 +2927,157 @@ const KidsStoryVideoMaker = () => {
         <main className="studio-main" ref={mainContentRef}>
           {activeTab === "story-generator" && (
             <KidsStoryGeneratorPanel onConvertToVideo={handleConvertStoryToVideo} />
+          )}
+
+          {activeTab === "cartoon-video" && (
+            <div className="studio-card create-card">
+              <h2>Cartoon Video Generator</h2>
+              <p>
+                Generate a complete cartoon video with character animations, dialogue, and scenes automatically from your story.
+                Characters will talk with moving mouths, emotions, and consistent designs across all scenes.
+              </p>
+
+              <div className="cartoon-mode-selector">
+                <label>Generation Mode</label>
+                <div className="mode-options">
+                  {CARTOON_GENERATION_MODES.map((mode) => (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      className={`mode-option ${cartoonMode === mode.id ? "active" : ""}`}
+                      onClick={() => setCartoonMode(mode.id)}
+                    >
+                      <strong>{mode.label}</strong>
+                      <small>{mode.description}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <label htmlFor="cartoonStoryTitle">Video Title</label>
+              <input
+                id="cartoonStoryTitle"
+                type="text"
+                value={storyTitle}
+                onChange={(event) => setStoryTitle(event.target.value)}
+                maxLength={120}
+                placeholder="Ex: The Magic Forest Adventure"
+              />
+
+              <label htmlFor="cartoonStoryText">Story Text</label>
+              <textarea
+                id="cartoonStoryText"
+                rows={12}
+                value={storyPrompt}
+                onChange={(event) => setStoryPrompt(event.target.value)}
+                placeholder="Enter your story here. AI will automatically extract characters, create dialogue, and generate animated scenes."
+              />
+              <p className={`char-counter ${storyLength > MAX_STORY_LENGTH ? "danger" : ""}`}>
+                {storyLength} / {MAX_STORY_LENGTH} characters
+              </p>
+
+              <div className="create-grid">
+                <div>
+                  <label>Language</label>
+                  <select value={languageId} onChange={(event) => setLanguageId(event.target.value)}>
+                    {LANGUAGE_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label>Animation Style</label>
+                  <select value={styleId} onChange={(event) => setStyleId(event.target.value)}>
+                    {STYLE_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="create-grid">
+                <div>
+                  <label>Video Size</label>
+                  <select value={videoSizeId} onChange={(event) => setVideoSizeId(event.target.value)}>
+                    {VIDEO_SIZE_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label>Story Mode</label>
+                  <select value={storyMode} onChange={(event) => setStoryMode(event.target.value)}>
+                    {STORY_MODES.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="safety-toggle">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={safeMode}
+                    onChange={(event) => setSafeMode(event.target.checked)}
+                  />
+                  Enable Safe Mode (Child-friendly content only)
+                </label>
+              </div>
+
+              <div className="cartoon-features-info">
+                <h3>What You'll Get:</h3>
+                <ul>
+                  <li>✨ Automatic character extraction from story</li>
+                  <li>🎭 Consistent character designs with unique appearances</li>
+                  <li>💬 Character dialogue with voice synthesis</li>
+                  <li>🎬 Animated scenes with character movements</li>
+                  <li>🎨 Scene images matching your story description</li>
+                  <li>🎵 Background music and sound effects</li>
+                  <li>📝 Subtitles for all dialogue</li>
+                </ul>
+              </div>
+
+              <div className="story-actions">
+                <button
+                  className="primary-button"
+                  onClick={handleGenerateCartoonVideo}
+                  disabled={isCartoonGenerating || storyLength < MIN_STORY_LENGTH}
+                >
+                  {isCartoonGenerating ? "Generating Cartoon Video..." : "Generate Cartoon Video"}
+                </button>
+              </div>
+
+              {(isCartoonGenerating || cartoonProgress > 0) && (
+                <div className="render-progress-card" aria-live="polite">
+                  <div className="render-progress-head">
+                    <strong>Generation Progress</strong>
+                    <span>{Math.min(100, Math.max(0, Math.round(cartoonProgress)))}%</span>
+                  </div>
+                  <div className="render-progress-track">
+                    <div className="render-progress-fill" style={{ width: `${Math.min(100, Math.max(0, cartoonProgress))}%` }} />
+                  </div>
+                  <p>{cartoonProgressLabel || "Processing your cartoon video..."}</p>
+                </div>
+              )}
+
+              {cartoonVideoUrl && (
+                <div className="video-preview-card" style={{ marginTop: 20 }}>
+                  <h3>Preview Your Cartoon Video</h3>
+                  <div className="video-preview-player">
+                    <video controls src={cartoonVideoUrl} className="story-video-player" />
+                  </div>
+                  <div className="project-actions export-actions">
+                    <button className="download-button" onClick={handleDownloadCartoonVideo}>
+                      Download Cartoon Video
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {error && <div className="message error">{error}</div>}
+              {message && !error && <div className="message success">{message}</div>}
+            </div>
           )}
 
           {activeTab === "dashboard" && (

@@ -882,3 +882,125 @@ select:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+/* Cartoon Video Generator Styles */
+.cartoon-mode-selector {
+  margin-bottom: 24px;
+}
+
+.cartoon-mode-selector label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #2d3b8e;
+}
+
+.mode-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.mode-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 20px;
+  border: 2px solid #e0e4f0;
+  border-radius: 12px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.mode-option:hover {
+  border-color: #6a46ff;
+  background: #f8f9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(106, 70, 255, 0.1);
+}
+
+.mode-option.active {
+  border-color: #6a46ff;
+  background: linear-gradient(135deg, #f8f9ff 0%, #eef3ff 100%);
+  box-shadow: 0 4px 16px rgba(106, 70, 255, 0.15);
+}
+
+.mode-option strong {
+  display: block;
+  font-size: 1.1rem;
+  color: #2d3b8e;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.mode-option small {
+  display: block;
+  font-size: 0.9rem;
+  color: #666;
+  line-height: 1.5;
+}
+
+.safety-toggle {
+  margin: 20px 0;
+  padding: 16px;
+  background: #f0f9ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+}
+
+.safety-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  color: #1e40af;
+  cursor: pointer;
+}
+
+.safety-toggle input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.cartoon-features-info {
+  margin: 24px 0;
+  padding: 20px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+  border-radius: 12px;
+  border: 2px solid #fbbf24;
+}
+
+.cartoon-features-info h3 {
+  margin: 0 0 16px 0;
+  color: #92400e;
+  font-size: 1.2rem;
+}
+
+.cartoon-features-info ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.cartoon-features-info li {
+  padding: 8px 0;
+  color: #78350f;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.char-counter {
+  text-align: right;
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 8px;
+}
+
+.char-counter.danger {
+  color: #dc2626;
+  font-weight: 700;
+}
