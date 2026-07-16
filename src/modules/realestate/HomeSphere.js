@@ -390,12 +390,13 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
   };
 
   const handleLoanEstimate = () => {
+    // calculateEMI(amountInLakhs, annualRatePct, tenureYears)
     const emi = calculateEMI(
-      Number(loanAmount) * 10,
-      Number(loanTenure) * 12,
-      Number(loanInterest) / 100 / 12
+      Number(loanAmount),
+      Number(loanInterest),
+      Number(loanTenure)
     );
-    setLoanEstimateResult(`₹${Math.round(emi).toLocaleString("en-IN")}/month`);
+    setLoanEstimateResult(`EMI: ₹${Math.round(emi).toLocaleString("en-IN")}/month`);
   };
 
   const bankComparison = useMemo(

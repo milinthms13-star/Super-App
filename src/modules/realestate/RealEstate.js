@@ -49,6 +49,10 @@ const initialFilters = {
   amenityFilter: "all",
   verifiedFilter: "all",
   sortBy: "featured",
+  // Professional upgrade filters
+  bedroomsFilter: "all",
+  reraFilter: "all",
+  maxPricePerSqft: "",
 };
 const buildDefaultFilters = (maxPriceValue = 500) => ({
   ...initialFilters,

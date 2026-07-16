@@ -43,6 +43,8 @@ const QuickFilters = ({
             <option value="newest">Newest first</option>
             <option value="price-asc">Price: Low to high</option>
             <option value="price-desc">Price: High to low</option>
+            <option value="ppsf-asc">Price/sqft: Low to high</option>
+            <option value="rating">Highest rated</option>
           </select>
         </div>
       </div>

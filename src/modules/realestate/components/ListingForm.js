@@ -1,5 +1,5 @@
-import React from "react";
-import { LISTING_TYPE_OPTIONS, TITLE_DEED_OPTIONS } from "../realEstateConstants";
+import React, { useState } from "react";
+import { AMENITIES_LIST, LISTING_TYPE_OPTIONS, TITLE_DEED_OPTIONS } from "../realEstateConstants";
 
 const ListingForm = ({
   activeRole,
