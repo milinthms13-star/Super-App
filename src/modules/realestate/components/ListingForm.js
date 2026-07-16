@@ -11,9 +11,27 @@ const ListingForm = ({
   onToggleChange,
   onSubmit,
 }) => {
+  const [showAmenitiesPicker, setShowAmenitiesPicker] = useState(false);
+
   if (!["owner", "agent", "builder"].includes(activeRole)) {
     return null;
   }
+
+  const amenitiesFieldName = listingForm.postingType === "property" ? "amenitiesInput" : "mustHaveAmenities";
+  const amenitiesValue = listingForm.postingType === "property" ? listingForm.amenitiesInput : listingForm.mustHaveAmenities;
+
+  const selectedAmenities = new Set(
+    amenitiesValue.split(",").map((a) => a.trim()).filter(Boolean)
+  );
+
+  const toggleAmenity = (amenity) => {
+    const current = [...selectedAmenities];
+    const next = current.includes(amenity)
+      ? current.filter((a) => a !== amenity)
+      : [...current, amenity];
+    // Synthesize a change event the parent handler expects
+    onInputChange({ target: { name: amenitiesFieldName, value: next.join(", ") } });
+  };
 
   return (
     <article className="realestate-surface-card">
