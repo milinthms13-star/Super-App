@@ -11,11 +11,29 @@ const getApiBaseUrl = () => {
   
   // Default to same domain in production, localhost in development
   if (process.env.NODE_ENV === 'production') {
-    return `${window.location.origin}/api`;
+    return window.location.origin;
   }
   
-  return 'http://localhost:5000/api';
+  return 'http://localhost:5000';
 };
+
+// Smart API URL builder - handles both formats
+const buildApiBaseUrl = () => {
+  const baseUrl = getApiBaseUrl();
+  
+  // If URL already ends with /api, don't add it again
+  if (baseUrl.endsWith('/api')) {
+    return baseUrl;
+  }
+  
+  // Otherwise, add /api
+  return `${baseUrl}/api`;
+};
+
+// Export base URL constants for backward compatibility
+export const BACKEND_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = buildApiBaseUrl();
+export const API_ORIGIN = getApiBaseUrl().replace(/\/api$/, ''); // Remove /api if present
 
 /**
  * Build full API URL from path

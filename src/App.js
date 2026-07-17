@@ -60,7 +60,7 @@ const GulfServices = React.lazy(() => import("./modules/gulfservices/GulfService
 const HotelBooking = React.lazy(() => import("./modules/hotelbooking/HotelBooking"));
 const Healthcare = React.lazy(() => import("./modules/healthcare/Healthcare"));
 const BusTrainBooking = React.lazy(() => import("./modules/bustrainbooking/BusTrainBooking"));
-const ResumeBuilder = React.lazy(() => import("./modules/resumebuilder/ResumeBuilder"));
+const ResumeBuilder = React.lazy(() => import("./modules/resumebuilder/ProfessionalResumeBuilder"));
 const PhotoStudioAIAR = React.lazy(() => import("./modules/photostudio/PhotoStudioAIAR"));
 const RemoteKaraokeDuet = React.lazy(() => import("./modules/karaokeduet/RemoteKaraokeDuet"));
 const AutoDanceDuet = React.lazy(() => import("./modules/danceduet/AutoDanceDuet"));

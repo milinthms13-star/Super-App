@@ -41,6 +41,10 @@ import SharingPanel from "./SharingPanel";
 import PersonalizationPanel from "./PersonalizationPanel";
 // Phase 4.4 Components
 import AutosaveRecoveryModal from "./AutosaveRecoveryModal";
+// Phase 4 Components
+import DiaryAnalyticsDashboard from "./DiaryAnalyticsDashboard";
+// Phase 4.3 Components
+import DiaryAISummaryPanel from "./DiaryAISummaryPanel";
 import { io } from "socket.io-client";
 import {
   stripHtml,

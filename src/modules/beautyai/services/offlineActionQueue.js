@@ -195,6 +195,9 @@ export const syncOfflineActions = async (onProgress) => {
 let autoSyncInterval = null;
 let isSyncing = false;
 
+// Reference to syncIfNeeded function for cleanup
+let syncIfNeededRef = null;
+
 export const startAutoSync = (intervalMs = 30000, onProgress) => {
   if (autoSyncInterval) {
     return;
@@ -217,6 +220,9 @@ export const startAutoSync = (intervalMs = 30000, onProgress) => {
     }
   };
 
+  // Store reference for cleanup
+  syncIfNeededRef = syncIfNeeded;
+
   // Initial sync
   syncIfNeeded();
 
@@ -235,8 +241,8 @@ export const stopAutoSync = () => {
     autoSyncInterval = null;
   }
 
-  if (typeof window !== "undefined") {
-    window.removeEventListener("online", syncIfNeeded);
+  if (typeof window !== "undefined" && syncIfNeededRef) {
+    window.removeEventListener("online", syncIfNeededRef);
   }
 };
 

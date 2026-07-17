@@ -311,7 +311,7 @@ export const INDIA_CITIES_BY_STATE = {
   "Uttar Pradesh": ["Lucknow", "Kanpur", "Agra", "Varanasi", "Meerut", "Prayagraj", "Ghaziabad", "Noida", "Aligarh"],
   Punjab: ["Chandigarh", "Ludhiana", "Amritsar", "Jalandhar", "Patiala", "Bathinda", "Mohali", "Hoshiarpur"],
   Haryana: ["Gurgaon", "Faridabad", "Panipat", "Ambala", "Rohtak", "Hisar", "Karnal", "Sonipat"],
-  Madhya Pradesh: ["Bhopal", "Indore", "Jabalpur", "Gwalior", "Ujjain", "Ratlam", "Satna", "Rewa"],
+  "Madhya Pradesh": ["Bhopal", "Indore", "Jabalpur", "Gwalior", "Ujjain", "Ratlam", "Satna", "Rewa"],
   Odisha: ["Bhubaneswar", "Cuttack", "Rourkela", "Brahmapur", "Sambalpur", "Puri", "Balasore"],
 };
 
