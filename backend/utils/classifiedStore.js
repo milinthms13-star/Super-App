@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const ClassifiedAd = require('../models/ClassifiedAd');
+const ClassifiedSubscription = require('../models/ClassifiedSubscription');
 const devAppDataStore = require('./devAppDataStore');
 const { generateSlug } = require('./slugGenerator');
 const { calculateSpamScore, detectSuspiciousFlags } = require('./spamDetector');
@@ -945,10 +946,291 @@ const unblockUser = async (listingId, userEmail) => {
   return updated ? serializeClassifiedAd(updated) : null;
 };
 
+/**
+ * Subscription validation functions
+ */
+
+/**
+ * Check if user can access contact information for an ad
+ * @param {string} userId - User ID
+ * @param {string} userEmail - User email
+ * @param {string} adId - Ad ID
+ * @returns {Promise<{hasAccess: boolean, reason: string, subscription?: object}>}
+ */
+const canAccessContact = async (userId, userEmail, adId) => {
+  try {
+    if (!useMongoClassifieds()) {
+      return { hasAccess: true, reason: 'dev_mode' };
+    }
+
+    const normalizedEmail = String(userEmail || '').trim().toLowerCase();
+
+    // Fetch ad
+    const ad = await ClassifiedAd.findById(adId);
+    if (!ad) {
+      return { hasAccess: false, reason: 'ad_not_found' };
+    }
+
+    // Check if user is ad owner
+    if (String(ad.sellerEmail || '').trim().toLowerCase() === normalizedEmail) {
+      return { hasAccess: true, reason: 'owner' };
+    }
+
+    // Check contact visibility setting
+    if (ad.contactVisibility === 'public') {
+      return { hasAccess: true, reason: 'public' };
+    }
+
+    if (ad.contactVisibility === 'hidden') {
+      return { hasAccess: false, reason: 'hidden' };
+    }
+
+    // Get user's subscription
+    const subscription = await ClassifiedSubscription.findOne({
+      $or: [{ userId }, { userEmail: normalizedEmail }],
+      isActive: true,
+    }).sort('-createdAt');
+
+    if (!subscription || subscription.tier === 'free') {
+      return {
+        hasAccess: false,
+        reason: 'subscription_required',
+        subscription: subscription || null,
+      };
+    }
+
+    // Check if already unlocked
+    if (subscription.isAdUnlocked(adId)) {
+      return {
+        hasAccess: true,
+        reason: 'already_unlocked',
+        subscription,
+      };
+    }
+
+    // Check if can unlock
+    if (subscription.canUnlockContact()) {
+      return {
+        hasAccess: true,
+        reason: 'can_unlock',
+        subscription,
+      };
+    }
+
+    // Limit reached
+    return {
+      hasAccess: false,
+      reason: 'limit_reached',
+      subscription,
+    };
+  } catch (error) {
+    console.error('Error checking contact access:', error);
+    return { hasAccess: false, reason: 'error', error: error.message };
+  }
+};
+
+/**
+ * Get user's active subscription
+ * @param {string} userId - User ID
+ * @param {string} userEmail - User email
+ * @returns {Promise<object|null>}
+ */
+const getUserSubscription = async (userId, userEmail) => {
+  try {
+    if (!useMongoClassifieds()) {
+      return null;
+    }
+
+    const normalizedEmail = String(userEmail || '').trim().toLowerCase();
+
+    const subscription = await ClassifiedSubscription.findOne({
+      $or: [{ userId }, { userEmail: normalizedEmail }],
+      isActive: true,
+    }).sort('-createdAt');
+
+    return subscription;
+  } catch (error) {
+    console.error('Error fetching user subscription:', error);
+    return null;
+  }
+};
+
+/**
+ * Check if user's subscription has a specific entitlement
+ * @param {string} userId - User ID
+ * @param {string} userEmail - User email
+ * @param {string} entitlement - Entitlement key
+ * @returns {Promise<boolean>}
+ */
+const hasEntitlement = async (userId, userEmail, entitlement) => {
+  try {
+    const subscription = await getUserSubscription(userId, userEmail);
+
+    if (!subscription) {
+      return false;
+    }
+
+    if (!subscription.isActive || subscription.isExpired) {
+      return false;
+    }
+
+    return Boolean(subscription.entitlements?.[entitlement]);
+  } catch (error) {
+    console.error('Error checking entitlement:', error);
+    return false;
+  }
+};
+
+/**
+ * Check if user can post a featured ad
+ * @param {string} userId - User ID
+ * @param {string} userEmail - User email
+ * @returns {Promise<{canPost: boolean, remaining: number, reason: string}>}
+ */
+const canPostFeaturedAd = async (userId, userEmail) => {
+  try {
+    const subscription = await getUserSubscription(userId, userEmail);
+
+    if (!subscription || subscription.tier === 'free') {
+      return { canPost: false, remaining: 0, reason: 'subscription_required' };
+    }
+
+    if (!subscription.isActive || subscription.isExpired) {
+      return { canPost: false, remaining: 0, reason: 'subscription_expired' };
+    }
+
+    const featuredSlots = subscription.entitlements?.featuredAdSlots || 0;
+
+    if (featuredSlots === 0) {
+      return { canPost: false, remaining: 0, reason: 'no_featured_slots' };
+    }
+
+    // Count current active featured ads by this user
+    const activeFeaturedCount = await ClassifiedAd.countDocuments({
+      sellerEmail: String(userEmail || '').trim().toLowerCase(),
+      featured: true,
+      moderationStatus: 'approved',
+      isDraft: false,
+    });
+
+    const remaining = Math.max(0, featuredSlots - activeFeaturedCount);
+
+    return {
+      canPost: remaining > 0,
+      remaining,
+      reason: remaining > 0 ? 'available' : 'limit_reached',
+    };
+  } catch (error) {
+    console.error('Error checking featured ad permission:', error);
+    return { canPost: false, remaining: 0, reason: 'error' };
+  }
+};
+
+/**
+ * Serialize ad with subscription-aware contact info filtering
+ * @param {object} record - Ad record
+ * @param {number} index - Index
+ * @param {string} viewerEmail - Viewer's email (optional)
+ * @returns {object}
+ */
+const serializeClassifiedAdWithContactFilter = async (record, index = 0, viewerEmail = null) => {
+  const serialized = serializeClassifiedAd(record, index);
+
+  // If no viewer email, remove contact details
+  if (!viewerEmail) {
+    return {
+      ...serialized,
+      contactPhone: undefined,
+      contactEmail: undefined,
+      contactWhatsApp: undefined,
+      contactVisibility: serialized.contactVisibility || 'subscribers-only',
+    };
+  }
+
+  const normalizedViewerEmail = String(viewerEmail || '').trim().toLowerCase();
+  const plainRecord = typeof record?.toObject === 'function' ? record.toObject() : { ...(record || {}) };
+
+  // Add contact fields to serialization
+  serialized.contactVisibility = plainRecord.contactVisibility || 'subscribers-only';
+  serialized.contactPhone = plainRecord.contactPhone || '';
+  serialized.contactEmail = plainRecord.contactEmail || plainRecord.sellerEmail || '';
+  serialized.contactWhatsApp = plainRecord.contactWhatsApp || plainRecord.contactPhone || '';
+  serialized.linkedChatIds = Array.isArray(plainRecord.linkedChatIds) ? plainRecord.linkedChatIds : [];
+  serialized.contactUnlocks = Number(plainRecord.contactUnlocks || 0);
+
+  // Check if viewer is owner
+  if (normalizedViewerEmail === String(plainRecord.sellerEmail || '').trim().toLowerCase()) {
+    return serialized;
+  }
+
+  // Check contact visibility setting
+  if (plainRecord.contactVisibility === 'public') {
+    return serialized;
+  }
+
+  if (plainRecord.contactVisibility === 'hidden') {
+    return {
+      ...serialized,
+      contactPhone: undefined,
+      contactEmail: undefined,
+      contactWhatsApp: undefined,
+    };
+  }
+
+  // Check if viewer has unlocked this ad
+  if (Array.isArray(plainRecord.unlockedByUsers)) {
+    const hasUnlocked = plainRecord.unlockedByUsers.some(
+      (unlock) => String(unlock.userEmail || '').trim().toLowerCase() === normalizedViewerEmail
+    );
+
+    if (hasUnlocked) {
+      return serialized;
+    }
+  }
+
+  // Default: hide contact details (requires subscription)
+  return {
+    ...serialized,
+    contactPhone: undefined,
+    contactEmail: undefined,
+    contactWhatsApp: undefined,
+  };
+};
+
+/**
+ * Update ad's seller subscription tier when user subscription changes
+ * @param {string} userEmail - User email
+ * @param {string} newTier - New subscription tier
+ * @returns {Promise<number>} - Number of ads updated
+ */
+const updateSellerSubscriptionTier = async (userEmail, newTier) => {
+  try {
+    if (!useMongoClassifieds()) {
+      return 0;
+    }
+
+    const normalizedEmail = String(userEmail || '').trim().toLowerCase();
+
+    const result = await ClassifiedAd.updateMany(
+      { sellerEmail: normalizedEmail },
+      {
+        sellerSubscriptionTier: newTier,
+        sellerSubscriptionExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days default
+      }
+    );
+
+    return result.modifiedCount || 0;
+  } catch (error) {
+    console.error('Error updating seller subscription tier:', error);
+    return 0;
+  }
+};
+
 module.exports = {
   useMongoClassifieds,
   buildClassifiedPlanLabel,
   serializeClassifiedAd,
+  serializeClassifiedAdWithContactFilter,
   listClassifiedModuleData,
   createClassifiedAd,
   updateClassifiedAd,
@@ -966,4 +1248,10 @@ module.exports = {
   blockUser,
   unblockUser,
   updateClassifiedFavoriteCount,
+  // Subscription functions
+  canAccessContact,
+  getUserSubscription,
+  hasEntitlement,
+  canPostFeaturedAd,
+  updateSellerSubscriptionTier,
 };

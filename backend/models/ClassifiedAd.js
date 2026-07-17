@@ -314,6 +314,45 @@ const ClassifiedAdSchema = new mongoose.Schema(
       enum: ['Chat', 'Call', 'Email', 'WhatsApp'],
       default: ['Chat'],
     },
+    contactVisibility: {
+      type: String,
+      enum: ['public', 'subscribers-only', 'hidden'],
+      default: 'subscribers-only',
+      index: true,
+    },
+    contactPhone: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    contactEmail: {
+      type: String,
+      default: '',
+      lowercase: true,
+      trim: true,
+    },
+    contactWhatsApp: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    linkedChatIds: {
+      type: [String],
+      default: [],
+    },
+    contactUnlocks: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    unlockedByUsers: {
+      type: [{
+        userId: String,
+        userEmail: String,
+        unlockedAt: { type: Date, default: Date.now },
+      }],
+      default: [],
+    },
     mediaGallery: {
       type: [MediaItemSchema],
       default: [],
@@ -324,12 +363,13 @@ const ClassifiedAdSchema = new mongoose.Schema(
       default: 'Free',
     },
     promotionPlanExpiry: Date,
-    subscriptionTier: {
+    sellerSubscriptionTier: {
       type: String,
-      enum: ['none', 'starter', 'pro', 'enterprise'],
-      default: 'none',
+      enum: ['free', 'basic', 'pro', 'business'],
+      default: 'free',
+      index: true,
     },
-    subscriptionExpiryDate: Date,
+    sellerSubscriptionExpiry: Date,
     listedDate: {
       type: Date,
       default: Date.now,
@@ -460,5 +500,7 @@ ClassifiedAdSchema.index({ searchableText: 'text', title: 'text', description: '
 ClassifiedAdSchema.index({ category: 1, location: 1, moderationStatus: 1 });
 ClassifiedAdSchema.index({ sellerEmail: 1, createdAt: -1 });
 ClassifiedAdSchema.index({ featured: 1, urgent: 1, createdAt: -1 });
+ClassifiedAdSchema.index({ sellerSubscriptionTier: 1, featured: 1 });
+ClassifiedAdSchema.index({ contactVisibility: 1, moderationStatus: 1 });
 
 module.exports = mongoose.model('ClassifiedAd', ClassifiedAdSchema);

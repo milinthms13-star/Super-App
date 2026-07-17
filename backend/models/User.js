@@ -256,6 +256,14 @@ const UserSchema = new mongoose.Schema(
       type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+    wishlist: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product'
+    }],
+    recentlyViewed: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product'
+    }],
     classifiedsSavedSearches: {
       type: [mongoose.Schema.Types.Mixed],
       default: [],
@@ -284,6 +292,26 @@ const UserSchema = new mongoose.Schema(
       type: Number,
       min: 0,
       default: 0
+    },
+    classifiedsSubscriptionTier: {
+      type: String,
+      enum: ['free', 'basic', 'pro', 'business'],
+      default: 'free',
+      index: true,
+    },
+    classifiedsSubscriptionExpiry: {
+      type: Date,
+      default: null,
+    },
+    classifiedsContactUnlocksRemaining: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    classifiedsContactUnlocksUsed: {
+      type: Number,
+      min: 0,
+      default: 0,
     },
     matrimonialTotalRating: {
       type: Number,
@@ -354,6 +382,7 @@ const UserSchema = new mongoose.Schema(
 
 UserSchema.index({ classifiedsTotalRating: -1 });
 UserSchema.index({ classifiedsReviewCount: 1 });
+UserSchema.index({ classifiedsSubscriptionTier: 1, classifiedsSubscriptionExpiry: 1 });
 
 UserSchema.pre('validate', function ensureUsername(next) {
   if (!this.username || String(this.username).trim().length === 0) {

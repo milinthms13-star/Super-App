@@ -1,5 +1,5 @@
-import DanceDuetQuickStudio from "./DanceDuetQuickStudio";
+import DanceDuetMerger from "./DanceDuetMerger";
 
-const AutoDanceDuet = () => <DanceDuetQuickStudio />;
+const AutoDanceDuet = () => <DanceDuetMerger />;
 
 export default AutoDanceDuet;

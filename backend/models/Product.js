@@ -265,6 +265,16 @@ const ProductSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    sellerProfileId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'EcommerceSellerProfile',
+      index: true,
+    },
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'EcommerceCategory',
+      index: true,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -336,6 +346,39 @@ const ProductSchema = new mongoose.Schema(
     buyerGSTIN: {
       type: String,
       default: null,
+    },
+    // NEW: Multiple Images Support
+    images: [
+      {
+        url: String,
+        altText: String,
+        isPrimary: {
+          type: Boolean,
+          default: false,
+        },
+        displayOrder: {
+          type: Number,
+          default: 0,
+        },
+      },
+    ],
+    // NEW: Product Variants (size, color combinations)
+    variants: [
+      {
+        sku: String,
+        name: String,
+        attributes: mongoose.Schema.Types.Mixed,
+        price: Number,
+        stock: Number,
+        image: String,
+      },
+    ],
+    // NEW: SEO Fields
+    seo: {
+      metaTitle: String,
+      metaDescription: String,
+      keywords: [String],
+      slug: String,
     },
   },
   {
