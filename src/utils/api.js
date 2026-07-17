@@ -11,11 +11,16 @@ const getApiBaseUrl = () => {
   
   // Default to same domain in production, localhost in development
   if (process.env.NODE_ENV === 'production') {
-    return `${window.location.origin}/api`;
+    return window.location.origin;
   }
   
-  return 'http://localhost:5000/api';
+  return 'http://localhost:5000';
 };
+
+// Export base URL constants for backward compatibility
+export const BACKEND_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = `${getApiBaseUrl()}/api`;
+export const API_ORIGIN = getApiBaseUrl();
 
 /**
  * Build full API URL from path

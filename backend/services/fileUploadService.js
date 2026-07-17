@@ -2,13 +2,16 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const sharp = require('sharp');
-const AWS = require('aws-sdk');
+const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl: getSignedUrlV3 } = require('@aws-sdk/s3-request-presigner');
 const { v4: uuidv4 } = require('uuid');
 
-// Configure AWS S3
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+// Configure AWS S3 Client (SDK v3)
+const s3Client = new S3Client({
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
   region: process.env.AWS_REGION || 'us-east-1',
 });
 
@@ -169,8 +172,8 @@ async function uploadToS3(fileData, fileName, contentType, folder = 'business-bu
     ACL: 'public-read',
   };
 
-  const result = await s3.upload(params).promise();
-  return result.Location;
+  await s3Client.send(new PutObjectCommand(params));
+  return `https://${BUCKET_NAME}.s3.amazonaws.com/${folder}/${fileName}`;
 }
 
 /**
@@ -203,7 +206,7 @@ async function deleteFromS3(fileUrl) {
     Key: key,
   };
 
-  await s3.deleteObject(params).promise();
+  await s3Client.send(new DeleteObjectCommand(params));
 }
 
 /**
@@ -307,16 +310,15 @@ async function uploadInvoiceAttachment(filePath, invoiceId) {
  * Get signed URL for private file access
  * @param {string} fileKey - S3 file key
  * @param {number} expiresIn - Expiration time in seconds (default: 1 hour)
- * @returns {string} - Signed URL
+ * @returns {Promise<string>} - Signed URL
  */
-function getSignedUrl(fileKey, expiresIn = 3600) {
+async function getSignedUrl(fileKey, expiresIn = 3600) {
   const params = {
     Bucket: BUCKET_NAME,
     Key: fileKey,
-    Expires: expiresIn,
   };
 
-  return s3.getSignedUrl('getObject', params);
+  return await getSignedUrlV3(s3Client, new GetObjectCommand(params), { expiresIn });
 }
 
 /**
