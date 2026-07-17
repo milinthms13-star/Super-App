@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const paymentService = require('../services/paymentService');
+const paymentService = require('../services/PaymentService');
 const auditLogService = require('../services/auditLogService');
 const { authenticate } = require('../middleware/auth');
 
