@@ -10,6 +10,7 @@ import ListingForm from "./components/ListingForm";
 import AdminPanel from "./components/AdminPanel";
 import LoanCalculator from "./components/LoanCalculator";
 import PropertyDetailTabs from "./components/PropertyDetailTabs";
+import PropertyComparePanel from "./components/PropertyComparePanel";
 import HomeSphere from "./HomeSphere";
 
 
@@ -102,6 +103,7 @@ const RealEstate = () => {
   const [filters, setFilters] = useState(initialFilters);
   const [draftFilters, setDraftFilters] = useState(initialFilters);
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
+  const [compareIds, setCompareIds] = useState([]);
   const [enquiryMessage, setEnquiryMessage] = useState("");
   const [chatInput, setChatInput] = useState("");
   const [reviewComment, setReviewComment] = useState("");
@@ -451,6 +453,17 @@ const RealEstate = () => {
     setDraftFilters(defaults);
     setFilters(defaults);
     pushToast("Filters reset to default.");
+  };
+
+  const handleCompareToggle = (id) => {
+    setCompareIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 3) {
+        pushToast("Compare up to 3 properties at a time.", "info");
+        return prev;
+      }
+      return [...prev, id];
+    });
   };
 
   const handleFavoriteToggle = (property) => {
@@ -1125,10 +1138,12 @@ const RealEstate = () => {
                         property={property}
                         isActive={selectedProperty?.id === property.id}
                         isFavorite={favoriteIds.has(`realestate-${property.id}`)}
+                        isCompared={compareIds.includes(property.id)}
                         canManage={canManageProperty(property)}
                         onSelect={setSelectedPropertyId}
                         onEdit={handleEditListing}
                         onFavoriteToggle={handleFavoriteToggle}
+                        onCompareToggle={handleCompareToggle}
                         hasSubscription={currentUser?.subscriptionStatus === "active" || currentUser?.isPremium}
                         onSubscribeClick={() => {
                           pushToast("Subscribe to view contact details of property posters!", "info");
@@ -1448,6 +1463,57 @@ const RealEstate = () => {
         ) : null}
       </section>
       ) : null}
+
+      {/* FLOATING COMPARE BAR */}
+      {compareIds.length > 0 && (
+        <div className="re-compare-float-bar">
+          <span>{compareIds.length} propert{compareIds.length === 1 ? "y" : "ies"} selected</span>
+          <div className="re-compare-float-chips">
+            {compareIds.map((id) => {
+              const p = filteredProperties.find((x) => x.id === id);
+              return p ? (
+                <span key={id} className="re-compare-float-chip">
+                  {p.title.slice(0, 22)}{p.title.length > 22 ? "…" : ""}
+                  <button
+                    type="button"
+                    className="re-compare-float-remove"
+                    onClick={() => handleCompareToggle(id)}
+                    aria-label={`Remove ${p.title}`}
+                  >✕</button>
+                </span>
+              ) : null;
+            })}
+          </div>
+          <div className="re-compare-float-actions">
+            {compareIds.length >= 2 && (
+              <button
+                type="button"
+                className="realestate-primary-button"
+                onClick={() => document.querySelector(".re-compare-panel")?.scrollIntoView({ behavior: "smooth" })}
+              >
+                View comparison
+              </button>
+            )}
+            <button
+              type="button"
+              className="realestate-secondary-button"
+              onClick={() => setCompareIds([])}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* COMPARE PANEL */}
+      {compareIds.length >= 2 && (
+        <PropertyComparePanel
+          properties={filteredProperties}
+          compareIds={compareIds}
+          onRemove={handleCompareToggle}
+          onClose={() => setCompareIds([])}
+        />
+      )}
 
       {toasts.length ? (
         <div className="realestate-toast-stack" aria-live="polite">

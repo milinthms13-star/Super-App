@@ -49,6 +49,8 @@ const PropertyCard = ({
   hasSubscription = false,
   onSubscribeClick,
   loading = false,
+  isCompared = false,
+  onCompareToggle,
 }) => {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -188,6 +190,17 @@ const PropertyCard = ({
             >
               🔗
             </button>
+            {typeof onCompareToggle === "function" && (
+              <button
+                type="button"
+                className={`re-card-compare-btn ${isCompared ? "active" : ""}`}
+                onClick={(e) => { e.stopPropagation(); onCompareToggle(property.id); }}
+                aria-label={isCompared ? "Remove from comparison" : "Add to comparison"}
+                title={isCompared ? "Remove from comparison" : "Compare"}
+              >
+                {isCompared ? "⊠" : "⊞"}
+              </button>
+            )}
           </div>
 
           {/* MEDIA COUNT */}

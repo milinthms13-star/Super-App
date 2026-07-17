@@ -125,6 +125,9 @@ const ReminderAlert = () => {
   const [trustedContacts, setTrustedContacts] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedWorkspaceIndex, setSelectedWorkspaceIndex] = useState(0);
+  // Pro Reminder state
+  const [selectedContact, setSelectedContact] = useState(null);   // { userId, name, phoneNumber, … }
+  const [deliveryMode, setDeliveryMode] = useState('text');        // 'text' | 'voice'
 
   // Load trusted contacts
   useEffect(() => {
@@ -233,6 +236,8 @@ const ReminderAlert = () => {
     setVoiceCallData(INITIAL_VOICE_CALL_FORM);
     setEditingTaskId('');
     setSubmitError(null);
+    setSelectedContact(null);
+    setDeliveryMode('text');
   }, []);
 
   const closeEditor = useCallback(() => {
@@ -429,6 +434,23 @@ const ReminderAlert = () => {
       voiceNoteUrl: task.voiceNoteUrl || '',
       voiceNotePreviewUrl: task.voiceNoteUrl || '',
     });
+    // Restore pro-reminder state
+    setDeliveryMode(task.deliveryMode || 'text');
+    if (task.recipientContactId) {
+      // Set a minimal contact object so the picker shows the right selection.
+      // Full details will be fetched inside the picker on open.
+      setSelectedContact({
+        userId: typeof task.recipientContactId === 'object'
+          ? String(task.recipientContactId._id || task.recipientContactId)
+          : String(task.recipientContactId),
+        name: task.recipientContactName || 'Contact',
+        phoneNumber: task.recipientPhoneNumber || '',
+        email: '',
+        avatar: '',
+      });
+    } else {
+      setSelectedContact(null);
+    }
     setSubmitError(null);
     setShowAddForm(true);
   }, []);
@@ -517,6 +539,13 @@ const ReminderAlert = () => {
         voiceNoteUrl: formData.reminders.includes('Call') && voiceCallData.messageType === 'audio'
           ? voiceCallData.voiceNoteUrl
           : '',
+        // Pro Reminder fields
+        recipientContactId: selectedContact?.userId || null,
+        deliveryMode,
+        // If voice delivery mode, also ensure Call channel is included
+        reminders: deliveryMode === 'voice' && selectedContact
+          ? [...new Set([...formData.reminders, 'Call'])]
+          : formData.reminders,
       };
 
       let savedTask = null;
@@ -924,6 +953,10 @@ const ReminderAlert = () => {
               onApplyCurrentDateTime={handleApplyCurrentDateTime}
               currentDateLabel={currentDateLabel}
               currentClockLabel={currentClockLabel}
+              selectedContact={selectedContact}
+              onContactSelect={setSelectedContact}
+              deliveryMode={deliveryMode}
+              onDeliveryModeChange={setDeliveryMode}
             />
           )}
 

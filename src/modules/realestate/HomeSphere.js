@@ -6,6 +6,7 @@ import QuickFilters from "./components/QuickFilters";
 import LoanCalculator from "./components/LoanCalculator";
 import PopularLocations from "./components/PopularLocations";
 import PropertyCategories from "./components/PropertyCategories";
+import PropertyComparePanel from "./components/PropertyComparePanel";
 import {
   ALL_SEED_PROPERTIES,
   HOME_LOAN_PARTNERS,
@@ -68,6 +69,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [sortBy, setSortBy] = useState("featured");
   const [selectedWorkspaceIndex, setSelectedWorkspaceIndex] = useState(0);
+  const [compareIds, setCompareIds] = useState([]);
 
   // Property detail state
   const [enquiryMessage, setEnquiryMessage] = useState("");
@@ -305,6 +307,17 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
       });
       pushToast("Added to favorites");
     }
+  };
+
+  const handleCompareToggle = (id) => {
+    setCompareIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 3) {
+        pushToast("You can compare up to 3 properties at a time.", "info");
+        return prev;
+      }
+      return [...prev, id];
+    });
   };
 
   const handleEnquirySubmit = async () => {
@@ -720,8 +733,10 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                     property={property}
                     isActive={selectedProperty?.id === property.id}
                     isFavorite={favoriteIds.has(`realestate-${property.id}`)}
+                    isCompared={compareIds.includes(property.id)}
                     onSelect={setSelectedPropertyId}
                     onFavoriteToggle={handleFavoriteToggle}
+                    onCompareToggle={handleCompareToggle}
                     hasSubscription={currentUser?.subscriptionStatus === "active" || currentUser?.isPremium}
                     onSubscribeClick={() => {
                       pushToast("Subscribe to view contact details of property posters!", "info");
@@ -988,6 +1003,57 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
         </aside>
       </div>
 
+      {/* FLOATING COMPARE BAR */}
+      {compareIds.length > 0 && (
+        <div className="re-compare-float-bar">
+          <span>{compareIds.length} propert{compareIds.length === 1 ? "y" : "ies"} selected</span>
+          <div className="re-compare-float-chips">
+            {compareIds.map((id) => {
+              const p = properties.find((x) => x.id === id);
+              return p ? (
+                <span key={id} className="re-compare-float-chip">
+                  {p.title.slice(0, 22)}{p.title.length > 22 ? "…" : ""}
+                  <button
+                    type="button"
+                    className="re-compare-float-remove"
+                    onClick={() => handleCompareToggle(id)}
+                    aria-label={`Remove ${p.title}`}
+                  >✕</button>
+                </span>
+              ) : null;
+            })}
+          </div>
+          <div className="re-compare-float-actions">
+            {compareIds.length >= 2 && (
+              <button
+                type="button"
+                className="realestate-primary-button"
+                onClick={() => document.querySelector(".re-compare-panel")?.scrollIntoView({ behavior: "smooth" })}
+              >
+                View comparison
+              </button>
+            )}
+            <button
+              type="button"
+              className="realestate-secondary-button"
+              onClick={() => setCompareIds([])}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* COMPARE PANEL */}
+      {compareIds.length >= 2 && (
+        <PropertyComparePanel
+          properties={properties}
+          compareIds={compareIds}
+          onRemove={handleCompareToggle}
+          onClose={() => setCompareIds([])}
+        />
+      )}
+
       {/* TOAST NOTIFICATIONS */}
       <div className="homesphere-toast-stack">
         {toasts.map((toast) => (
@@ -1003,6 +1069,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
       {/* POPULAR LOCATIONS SECTION */}
       <PopularLocations
         locations={locations}
+        properties={properties}
         onLocationClick={(location) => setLocationFilter(location)}
       />
 

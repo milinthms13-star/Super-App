@@ -1263,6 +1263,54 @@ export const installLibraryTemplate = async (libraryTemplateId, customName = nul
   }
 };
 
+// ==================== PRO REMINDER: CONTACT DELIVERY ====================
+
+/**
+ * Send a reminder notification to the recipient contact
+ * (WhatsApp WABA → Telegram → in-app, all free)
+ * @param {string} reminderId
+ */
+export const notifyContact = async (reminderId) => {
+  try {
+    const response = await axiosInstance.post(`/reminders/${reminderId}/notify-contact`);
+    return response.data;
+  } catch (error) {
+    console.error('Error notifying contact:', error);
+    throw new Error(error.response?.data?.message || 'Failed to notify contact');
+  }
+};
+
+/**
+ * Initiate a call to the reminder's recipient contact.
+ * Returns { callMethod: 'twilio' | 'tel-uri', data: { telUri?, callSid? } }
+ * @param {string} reminderId
+ */
+export const callContact = async (reminderId) => {
+  try {
+    const response = await axiosInstance.post(`/reminders/${reminderId}/call-contact`);
+    return response.data;
+  } catch (error) {
+    console.error('Error calling contact:', error);
+    throw new Error(error.response?.data?.message || 'Failed to initiate call');
+  }
+};
+
+/**
+ * Search non-blocked app contacts for the reminder recipient picker
+ * @param {string} query  Optional search term
+ */
+export const searchReminderContacts = async (query = '') => {
+  try {
+    const response = await axiosInstance.get('/reminders/contacts/search', {
+      params: { q: query },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error searching contacts:', error);
+    throw new Error(error.response?.data?.message || 'Failed to search contacts');
+  }
+};
+
 // ==================== PHASE 5: WHATSAPP GROUPS ====================
 
 /**
@@ -1365,6 +1413,9 @@ const remindersService = {
   installLibraryTemplate,
   configureWhatsAppGroup,
   getWhatsAppGroupStatus,
+  notifyContact,
+  callContact,
+  searchReminderContacts,
 };
 
 export default remindersService;

@@ -300,6 +300,7 @@ app.use('/api/freelancer', freelancerRoutes);
 const educationRoutes = require('./routes/education');
 const skillLearningRoutes = require('./routes/skilllearning');
 const tuitionRoutes = require('./routes/tuition');
+const personalTutorRoutes = require('./routes/personalTutor');
 const { educationRateLimiter } = require('./middleware/rateLimiters');
 app.use('/api/education', educationRateLimiter, educationRoutes);
 app.use('/api/skilllearning', educationRateLimiter, skillLearningRoutes);
@@ -307,6 +308,7 @@ app.use('/api/app-data/skilllearning', educationRateLimiter, skillLearningRoutes
 app.use('/api/education/tuition', educationRateLimiter, tuitionRoutes);
 app.use('/api/app-data/education', educationRateLimiter, educationRoutes);
 app.use('/api/app-data/education/tuition', educationRateLimiter, tuitionRoutes);
+app.use('/api/tutor', educationRateLimiter, personalTutorRoutes);
 
 app.use('/api/strategic-modules', require('./routes/strategicModules'));
 

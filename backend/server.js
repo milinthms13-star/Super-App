@@ -95,6 +95,8 @@ const startBackgroundServices = () => {
   const DiaryReminderScheduler = require('./services/diaryReminderScheduler');
   const { io } = require('./config/websocket');
   const websocketIo = io();
+  // Expose socket.io globally for in-app notification utility
+  global._socketio = websocketIo;
   const diaryReminderScheduler = new DiaryReminderScheduler(websocketIo);
   const OrderTrackingWebSocket = require('./websocket/orderTrackingWebSocket');
   new OrderTrackingWebSocket(websocketIo);
@@ -103,6 +105,7 @@ const startBackgroundServices = () => {
   const emailReminderScheduler = require('./services/emailReminderScheduler');
   const whatsappReminderScheduler = require('./services/whatsappReminderScheduler');
   const telegramReminderScheduler = require('./services/telegramReminderScheduler');
+  const contactReminderScheduler = require('./services/contactReminderScheduler');
   const schedulingService = require('./services/schedulingService');
   const dataManagementService = require('./services/dataManagementService');
   const pushNotificationScheduler = require('./services/pushNotificationScheduler');
@@ -144,6 +147,7 @@ const startBackgroundServices = () => {
   emailReminderScheduler.start();
   whatsappReminderScheduler.startWhatsAppReminderScheduler();
   telegramReminderScheduler.startTelegramReminderScheduler();
+  contactReminderScheduler.startContactReminderScheduler();
   schedulingService.startSchedulingJobs();
   dataManagementService.startDataManagementJobs();
   pushNotificationScheduler.startPushNotificationScheduler();
@@ -175,6 +179,7 @@ const stopBackgroundServices = async () => {
     const emailReminderScheduler = require('./services/emailReminderScheduler');
     const whatsappReminderScheduler = require('./services/whatsappReminderScheduler');
     const telegramReminderScheduler = require('./services/telegramReminderScheduler');
+    const contactReminderScheduler = require('./services/contactReminderScheduler');
     const pushNotificationScheduler = require('./services/pushNotificationScheduler');
     const whatsappGroupReminderScheduler = require('./services/whatsappGroupReminderScheduler');
     const { stopHealthcareRetentionScheduler } = require('./jobs/healthcareRetentionScheduler');
@@ -188,6 +193,7 @@ const stopBackgroundServices = async () => {
     emailReminderScheduler.stop();
     whatsappReminderScheduler.stopWhatsAppReminderScheduler();
     telegramReminderScheduler.stopTelegramReminderScheduler();
+    contactReminderScheduler.stopContactReminderScheduler();
     pushNotificationScheduler.stopPushNotificationScheduler();
     whatsappGroupReminderScheduler.stopWhatsAppGroupReminderScheduler();
     stopHealthcareRetentionScheduler();

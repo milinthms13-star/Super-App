@@ -2,7 +2,6 @@ import React, { useState, useMemo } from "react";
 import LeadBoard from "./components/LeadBoard";
 import VisitBoard from "./components/VisitBoard";
 import ListingForm from "./components/ListingForm";
-import LoanCalculator from "./components/LoanCalculator";
 import {
   CONSTRUCTION_SERVICES,
   DEFAULT_LISTING_FORM,
