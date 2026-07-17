@@ -104,7 +104,7 @@ const WearablesIntegration = () => {
   };
 
   const disconnectDevice = async (deviceId) => {
-    if (!confirm(`Disconnect ${deviceId}?`)) return;
+    if (!window.confirm(`Disconnect ${deviceId}?`)) return;
 
     try {
       await healthcareApi.disconnectWearable(deviceId);
