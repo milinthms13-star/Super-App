@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as tutorService from '../../services/tutorService';
+import VoiceAndVideoControls from './VoiceAndVideoControls';
 import './PersonalTutor.css';
 
 const SUBJECTS = [
@@ -42,6 +43,13 @@ const PersonalTutor = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  
+  // Voice narration states
+  const [isNarrating, setIsNarrating] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState(null);
+  const [availableVoices, setAvailableVoices] = useState([]);
+  const [narrationSpeed, setNarrationSpeed] = useState(0.9);
 
   // Dashboard state
   const [dashboardData, setDashboardData] = useState(null);
@@ -482,6 +490,13 @@ const PersonalTutor = () => {
                 <p>{currentSession.lessonContent.introduction}</p>
               </div>
             )}
+
+            {/* Voice and Video Controls */}
+            <VoiceAndVideoControls 
+              lessonContent={currentSession.lessonContent}
+              subject={currentSession.subject}
+              topic={currentSession.topic}
+            />
 
             {currentSession.lessonContent.prerequisites && currentSession.lessonContent.prerequisites.length > 0 && (
               <div className="prerequisites">

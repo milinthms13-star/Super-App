@@ -7,7 +7,37 @@ Your Personal Tutor now supports:
 ✅ **CA (Chartered Accountancy)** - Foundation, Intermediate, Final  
 ✅ **Civil Services** - Class 5th to UPSC Mains  
 ✅ **360+ Questions** across all subjects  
+✅ **🎙️ Voice Narration** - Listen to lessons with text-to-speech (FREE!)  
+✅ **🎥 Video Demonstrations** - Watch educational videos  
 ✅ **FREE Forever** - No subscriptions!
+
+---
+
+## 🎙️ Voice & Video Features
+
+### Voice Narration (Text-to-Speech)
+- **100% FREE** - Uses your browser's built-in speech API
+- **No API Keys** - Works offline after initial setup
+- **Adjustable Speed** - 0.5x to 1.5x playback
+- **Multiple Voices** - Choose from English voices
+- **Play/Pause/Stop** - Full control over narration
+
+**How to Use:**
+1. Start a learning session
+2. Toggle "Voice Narration" ON
+3. Click "▶️ Play Lesson"
+4. Adjust speed and voice as needed
+
+### Video Demonstrations
+- **YouTube Integration** - Embedded educational videos
+- **Topic-Specific** - Videos matched to your lesson
+- **Free Educational Content** - Curated from YouTube
+- **Watch In-App** - No need to leave the tutor
+
+**How to Use:**
+1. Videos appear below lesson content (if available)
+2. Click any video card to watch
+3. Close modal when done
 
 ---
 
